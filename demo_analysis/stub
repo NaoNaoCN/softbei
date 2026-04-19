@@ -1,0 +1,35 @@
+● Stub 是指"桩代码"——只有函数签名和基本结构，实际业务逻辑还未实现，调用时会抛出异常或返回空值。
+
+  在项目中具体表现为：
+
+  以 main.py 中 /profile 接口为例：
+
+  @app.get("/profile", response_model=StudentProfileOut, tags=["profile"])
+  async def get_profile(user_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
+      result = await profile_svc.get_profile(user_id, db)  # 调用了 service
+      if not result:
+          raise HTTPException(status_code=404, detail="Profile not found")
+      return result
+
+  这个接口存在且有完整的类型签名，但 profile_svc.get_profile() 的具体实现可能只是：
+
+  # backend/services/profile.py
+  async def get_profile(user_id: uuid.UUID, db: AsyncSession) -> StudentProfileOut | None:
+      raise NotImplementedError("Profile CRUD not implemented yet.")
+
+  这就是 Stub——接口定义了、签名写好了，但内部是空的或只抛异常。
+
+  再看 main.py 里大量的 TODO 注释：
+
+  @app.post("/auth/register", ...)
+  async def register(...):
+      # TODO: 检查用户名唯一性，哈希密码，INSERT INTO user
+      raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)  # 直接抛501
+
+  @app.get("/kg/graph", ...)
+  async def get_kg_graph(...):
+      # TODO: 从 kg_node + kg_edge 表构建子图
+      raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
+
+  总结：项目搭好了完整的代码框架（类型定义、目录结构、接口签名、Agent
+  拓扑），但具体读写数据库的逻辑还没有实现——这就是"stub"的含义。
