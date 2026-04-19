@@ -34,6 +34,12 @@ class Base(DeclarativeBase):
     pass
 
 
+# 导入所有模型，确保 Base.metadata 在 create_all 前已注册全部表
+# 注意：必须在 Base 定义之后、init_db() 调用之前完成导入
+def _import_models() -> None:
+    from backend.db import models  # noqa: F401
+
+
 # ----------------------------------------------------------
 # Engine & Session factory（模块级单例，应用启动时初始化）
 # ----------------------------------------------------------
@@ -67,6 +73,7 @@ async def init_db() -> None:
     )
     # 开发/测试时自动建表
     if "sqlite" in DATABASE_URL:
+        _import_models()
         async with _engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
