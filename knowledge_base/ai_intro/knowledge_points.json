@@ -1,0 +1,119 @@
+{
+  "course_id": "ai_intro",
+  "course_name": "人工智能导论",
+  "version": "1.0.0",
+  "nodes": [
+    {
+      "id": "ai_intro",
+      "type": "Course",
+      "name": "人工智能导论",
+      "difficulty": 2,
+      "is_core": true
+    },
+    {
+      "id": "ch_01",
+      "type": "Chapter",
+      "name": "第一章：人工智能概述",
+      "difficulty": 1,
+      "is_core": true
+    },
+    {
+      "id": "ch_02",
+      "type": "Chapter",
+      "name": "第二章：机器学习基础",
+      "difficulty": 3,
+      "is_core": true
+    },
+    {
+      "id": "ch_03",
+      "type": "Chapter",
+      "name": "第三章：深度学习",
+      "difficulty": 4,
+      "is_core": true
+    },
+    {
+      "id": "kp_01_01",
+      "type": "KnowledgePoint",
+      "name": "AI 定义与发展历史",
+      "difficulty": 1,
+      "is_core": true
+    },
+    {
+      "id": "kp_01_02",
+      "type": "KnowledgePoint",
+      "name": "AI 主要流派与方法论",
+      "difficulty": 2,
+      "is_core": false
+    },
+    {
+      "id": "kp_02_01",
+      "type": "KnowledgePoint",
+      "name": "监督学习",
+      "difficulty": 3,
+      "is_core": true
+    },
+    {
+      "id": "kp_02_02",
+      "type": "KnowledgePoint",
+      "name": "无监督学习",
+      "difficulty": 3,
+      "is_core": true
+    },
+    {
+      "id": "kp_02_03",
+      "type": "KnowledgePoint",
+      "name": "梯度下降与优化",
+      "difficulty": 4,
+      "is_core": true
+    },
+    {
+      "id": "kp_03_01",
+      "type": "KnowledgePoint",
+      "name": "神经网络基础",
+      "difficulty": 3,
+      "is_core": true
+    },
+    {
+      "id": "kp_03_02",
+      "type": "KnowledgePoint",
+      "name": "卷积神经网络（CNN）",
+      "difficulty": 4,
+      "is_core": true
+    },
+    {
+      "id": "kp_03_03",
+      "type": "KnowledgePoint",
+      "name": "Transformer 与注意力机制",
+      "difficulty": 5,
+      "is_core": true
+    },
+    {
+      "id": "sp_02_03_01",
+      "type": "SubPoint",
+      "name": "学习率调度策略",
+      "difficulty": 4,
+      "is_core": false
+    },
+    {
+      "id": "sp_02_03_02",
+      "type": "SubPoint",
+      "name": "正则化方法（L1/L2/Dropout）",
+      "difficulty": 4,
+      "is_core": false
+    },
+    {
+      "id": "concept_backprop",
+      "type": "Concept",
+      "name": "反向传播算法",
+      "difficulty": 4,
+      "is_core": true
+    },
+    {
+      "id": "concept_attention",
+      "type": "Concept",
+      "name": "自注意力（Self-Attention）",
+      "difficulty": 5,
+      "is_core": true
+    }
+  ]
+}

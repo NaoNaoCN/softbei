@@ -1,0 +1,34 @@
+{
+  "course_id": "ai_intro",
+  "description": "知识点依赖关系（边列表）",
+  "edges": [
+    {"source": "ch_01", "target": "ai_intro", "relation": "IS_PART_OF"},
+    {"source": "ch_02", "target": "ai_intro", "relation": "IS_PART_OF"},
+    {"source": "ch_03", "target": "ai_intro", "relation": "IS_PART_OF"},
+
+    {"source": "kp_01_01", "target": "ch_01", "relation": "IS_PART_OF"},
+    {"source": "kp_01_02", "target": "ch_01", "relation": "IS_PART_OF"},
+
+    {"source": "kp_02_01", "target": "ch_02", "relation": "IS_PART_OF"},
+    {"source": "kp_02_02", "target": "ch_02", "relation": "IS_PART_OF"},
+    {"source": "kp_02_03", "target": "ch_02", "relation": "IS_PART_OF"},
+
+    {"source": "kp_03_01", "target": "ch_03", "relation": "IS_PART_OF"},
+    {"source": "kp_03_02", "target": "ch_03", "relation": "IS_PART_OF"},
+    {"source": "kp_03_03", "target": "ch_03", "relation": "IS_PART_OF"},
+
+    {"source": "sp_02_03_01", "target": "kp_02_03", "relation": "IS_PART_OF"},
+    {"source": "sp_02_03_02", "target": "kp_02_03", "relation": "IS_PART_OF"},
+
+    {"source": "concept_backprop", "target": "kp_03_01", "relation": "CONTAINS"},
+    {"source": "concept_attention", "target": "kp_03_03", "relation": "CONTAINS"},
+
+    {"source": "kp_02_03", "target": "kp_02_01", "relation": "REQUIRES"},
+    {"source": "kp_03_01", "target": "kp_02_03", "relation": "REQUIRES"},
+    {"source": "kp_03_02", "target": "kp_03_01", "relation": "REQUIRES"},
+    {"source": "kp_03_03", "target": "kp_03_01", "relation": "REQUIRES"},
+
+    {"source": "kp_02_01", "target": "kp_02_02", "relation": "RELATED_TO"},
+    {"source": "kp_03_02", "target": "kp_03_03", "relation": "RELATED_TO"}
+  ]
+}
