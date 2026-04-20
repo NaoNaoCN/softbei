@@ -25,8 +25,9 @@ sentence-transformers>=3.0.0  # BGE-M3 embedding
 
 # ---- 数据库 ----
 sqlalchemy>=2.0.0
-asyncpg>=0.29.0         # PostgreSQL 异步驱动
+aiomysql>=0.2.0         # MySQL 异步驱动
 aiosqlite>=0.20.0       # SQLite 开发模式
+PyYAML>=6.0             # YAML 配置文件解析
 
 # ---- 数据处理 ----
 networkx>=3.3           # 知识图谱计算

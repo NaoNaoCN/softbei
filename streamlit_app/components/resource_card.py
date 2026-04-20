@@ -88,7 +88,7 @@ def _render_content(resource: dict[str, Any]) -> None:
             for item in items[:3]:   # 预览前 3 道
                 render_quiz_card(item, show_answer=False)
             if len(items) > 3:
-                st.caption(f"（共 {len(items)} 道题，前往"学习评估"页面完整作答）")
+                st.caption(f"（共 {len(items)} 道题，前往'学习评估'页面完整作答）")
         else:
             st.info("暂无题目")
 

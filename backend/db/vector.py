@@ -6,19 +6,20 @@ backend/db/vector.py
 
 from __future__ import annotations
 
-import os
 from typing import Optional
 
 import chromadb
 from chromadb import Collection
 from chromadb.config import Settings
 
+from backend.config import config
+
 # ----------------------------------------------------------
 # 配置
 # ----------------------------------------------------------
 
-CHROMA_PERSIST_DIR: str = os.getenv("CHROMA_PERSIST_DIR", "./chroma_data")
-COLLECTION_NAME: str = os.getenv("CHROMA_COLLECTION", "knowledge_base")
+CHROMA_PERSIST_DIR: str = config.vector_db.persist_dir
+COLLECTION_NAME: str = config.vector_db.collection
 
 _client: chromadb.ClientAPI | None = None
 _collection: Collection | None = None

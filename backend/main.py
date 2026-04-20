@@ -15,7 +15,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agents.graph import get_graph, invoke, stream_invoke
-from backend.db.postgres import close_db, get_session, health_check as db_health, init_db
+from backend.db.database import close_db, get_session, health_check as db_health, init_db
 from backend.db.vector import health_check as vec_health, init_vector_db
 from backend.models.schemas import (
     ChatMessageIn,

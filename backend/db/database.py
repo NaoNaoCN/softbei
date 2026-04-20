@@ -1,11 +1,10 @@
 """
-backend/db/postgres.py
-PostgreSQL / SQLite 数据库连接池与基础 CRUD 助手（异步 SQLAlchemy 2.x）。
+backend/db/database.py
+MySQL / SQLite 数据库连接池与基础 CRUD 助手（异步 SQLAlchemy 2.x）。
 """
 
 from __future__ import annotations
 
-import os
 from typing import AsyncGenerator
 
 from sqlalchemy import text
@@ -17,13 +16,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 
-# ----------------------------------------------------------
-# 配置：优先读取环境变量，回退到 SQLite（开发模式）
-# ----------------------------------------------------------
-DATABASE_URL: str = os.getenv(
-    "DATABASE_URL",
-    "sqlite+aiosqlite:///./dev.db",
-)
+from backend.config import config
 
 # ----------------------------------------------------------
 # ORM Base
@@ -62,9 +55,13 @@ async def init_db() -> None:
     """
     global _engine, _session_factory
     _engine = create_async_engine(
-        DATABASE_URL,
-        echo=bool(os.getenv("DB_ECHO", False)),
+        config.url,
+        echo=config.echo,
         pool_pre_ping=True,
+        pool_size=config.pool_size,
+        max_overflow=config.max_overflow,
+        pool_timeout=config.pool_timeout,
+        pool_recycle=config.pool_recycle,
     )
     _session_factory = async_sessionmaker(
         _engine,
@@ -72,7 +69,7 @@ async def init_db() -> None:
         class_=AsyncSession,
     )
     # 开发/测试时自动建表
-    if "sqlite" in DATABASE_URL:
+    if "sqlite" in config.url:
         _import_models()
         async with _engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)

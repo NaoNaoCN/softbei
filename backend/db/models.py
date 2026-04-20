@@ -23,7 +23,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.db.postgres import Base
+from backend.db.database import Base
 from backend.models.schemas import (
     CognitiveStyle,
     KGNodeType,
