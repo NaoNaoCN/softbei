@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.auth.hash_utils import hash_password, verify_password
 from backend.agents.graph import get_graph, invoke, stream_invoke
 from backend.db.database import close_db, get_session, health_check as db_health, init_db
 from backend.db.vector import health_check as vec_health, init_vector_db
@@ -39,7 +40,8 @@ from backend.models.schemas import (
 )
 from backend.services import profile as profile_svc
 from backend.services import resource as resource_svc
-
+from sqlalchemy import select
+from backend.db.models import User
 
 # ===========================================================
 # Lifespan（应用启动 / 关闭）
@@ -94,8 +96,17 @@ async def health():
 @app.post("/auth/register", response_model=UserOut, tags=["auth"])
 async def register(body: UserCreate, db: AsyncSession = Depends(get_session)):
     """注册新用户。"""
-    # TODO: 检查用户名唯一性，哈希密码，INSERT INTO user
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED)
+    
+
+    existing = await db.scalar(select(User).where(User.username == body.username))
+    if existing:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already exists")
+
+    user = User(username=body.username, hashed_password=hash_password(body.password))
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
 
 
 @app.post("/auth/login", response_model=TokenOut, tags=["auth"])
