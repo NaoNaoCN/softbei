@@ -7,6 +7,7 @@ backend/rag/loader.py
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -24,6 +25,7 @@ from backend.config import config
 # 数据结构
 # ----------------------------------------------------------
 
+@dataclass
 class TextChunk:
     """单个文本块，携带来源元数据。"""
     chunk_id: str               # 唯一标识，格式：{doc_id}_{chunk_index}
@@ -32,7 +34,7 @@ class TextChunk:
     source_path: str            # 原始文件路径
     page: Optional[int] = None  # 页码（PDF）
     section: Optional[str] = None  # 章节标题
-    metadata: dict = {}         # 额外元数据
+    metadata: dict = field(default_factory=dict)  # 额外元数据
 
     def to_langchain_doc(self) -> Document:
         """转换为 LangChain Document。"""
@@ -141,8 +143,11 @@ def split_text(
     chunk_size = chunk_size or config.rag.chunk_size
     overlap = overlap or config.rag.chunk_overlap
 
-    if len(text) <= chunk_size:
-        return [text]
+    if not text or len(text) <= chunk_size:
+        return [text] if text else []
+
+    # overlap 不能超过 chunk_size，否则会导致无限循环
+    overlap = min(overlap, chunk_size - 1)
 
     chunks: list[str] = []
     start = 0
