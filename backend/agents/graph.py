@@ -29,15 +29,15 @@ def build_graph() -> StateGraph:
     构建并返回编译后的 LangGraph 状态机。
 
     节点拓扑：
-    ┌─ profile_agent ─┐
-    │                 ↓
-    │          planner_agent
-    │         ↙  ↙  ↙  ↘  ↘
-    │     doc  mindmap quiz code summary
-    │         ↘  ↘  ↘  ↙  ↙
-    │          safety_agent
-    │               ↓
-    └──────── recommend_agent → END
+    profile_agent
+      ├─ (画像不足) → END          ← 情况A/B：追问，本轮结束
+      └─ (画像足够) → planner_agent ← 情况C：正常生成流程
+                    ↙  ↙  ↙  ↘  ↘
+                doc mindmap quiz code summary
+                    ↘  ↘  ↘  ↙  ↙
+                     safety_agent
+                          ↓
+                   recommend_agent → END
     """
     graph = StateGraph(AgentState)
 
@@ -55,8 +55,15 @@ def build_graph() -> StateGraph:
     # -- 起始节点 --
     graph.set_entry_point("profile_agent")
 
-    # profile → planner（始终执行）
-    graph.add_edge("profile_agent", "planner_agent")
+    # profile → 条件路由（画像不足则直接 END，足够则进 planner）
+    graph.add_conditional_edges(
+        "profile_agent",
+        profile_agent.route_after_profile,
+        {
+            "planner_agent": "planner_agent",
+            END: END,
+        },
+    )
 
     # planner → 条件路由（按 resource_type）
     graph.add_conditional_edges(

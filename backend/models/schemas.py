@@ -290,3 +290,7 @@ class AgentState(BaseModel):
     safety_passed: bool = True
     error: Optional[str] = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    # 画像初始化 / 追问流程控制
+    is_onboarding: bool = False          # 前端标记：当前是否处于画像初始化阶段
+    profile_complete: bool = False       # profile_agent 判断后写入，供条件路由使用
+    clarify_message: Optional[str] = None  # 追问内容，情况A/B时写入，透传给前端
