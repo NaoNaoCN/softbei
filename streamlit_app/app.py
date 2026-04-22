@@ -35,6 +35,7 @@ def init_session_state() -> None:
         "chat_history": [],       # [{"role": "user"/"assistant", "content": "..."}]
         "current_kp_id": None,    # 当前选中的知识点 ID
         "is_onboarding": False,   # 是否处于画像初始化引导阶段
+        "current_kp_name": None,  # 当前选中的知识点名称
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -102,9 +103,33 @@ with st.sidebar:
             st.rerun()
     else:
         st.warning("请先登录")
+        if st.button("🔐 登录 / 注册"):
+            st.switch_page("pages/0_auth.py")
 
     st.markdown("---")
-    st.caption("v0.1.0 | A3 软件杯项目")
+
+    # 导航菜单
+    st.markdown("### 📌 功能导航")
+
+    nav_pages = [
+        ("🏠 首页", "app"),
+        ("🧠 我的画像", "pages/1_profile.py"),
+        ("✨ 生成资源", "pages/2_generate.py"),
+        ("🗺️ 学习路径", "pages/3_pathway.py"),
+        ("📚 资源库", "pages/4_library.py"),
+        ("📝 学习评估", "pages/5_evaluate.py"),
+    ]
+
+    for label, page in nav_pages:
+        if st.button(label, use_container_width=True):
+            st.switch_page(page)
+
+    st.markdown("---")
+    st.caption("v0.2.0 | 第十五届中国软件杯 A3 赛题")
+
+# ----------------------------------------------------------
+# 主页内容
+# ----------------------------------------------------------
 
 # ----------------------------------------------------------
 # 主页内容
@@ -115,30 +140,56 @@ with st.sidebar:
 # ----------------------------------------------------------
 
 st.title("欢迎使用个性化学习助手")
+st.markdown(
+    """
+    本系统基于多智能体技术，为您提供：
+
+    - 🧠 **智能学习资源生成**（文档 / 思维导图 / 代码 / 测验 / 总结）
+    - 📊 **个性化画像分析**，精准匹配学习内容
+    - 🗺️ **知识图谱可视化**，掌握知识全貌
+    - 📚 **学习路径规划**，高效达成学习目标
+
+    请通过左侧导航栏选择功能页面。
+    """
+)
 
 if not st.session_state.user_id:
-    st.markdown(
-        """
-        本系统基于多智能体技术，为您提供：
-        - 🧠 **智能学习资源生成**（文档 / 思维导图 / 代码 / 测验 / 总结）
-        - 📊 **个性化画像分析**，精准匹配学习内容
-        - 🗺️ **知识图谱可视化**，掌握知识全貌
-        - 📚 **学习路径规划**，高效达成学习目标
-
-        请通过左侧导航栏选择功能页面。
-        """
-    )
-    st.info("请先在侧边栏登录以使用完整功能。")
+    st.info("请先登录以使用完整功能。")
+    st.markdown("""
+        <style>
+        .stButton > button:first-child {
+            background-color: #4CAF50;
+            color: white;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 else:
-    # 渲染对话历史（onboarding 引导消息或普通对话）
-    for msg in st.session_state.chat_history:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+    # 显示快速入口
+    st.markdown("### 🚀 快速入口")
+    col_q1, col_q2, col_q3 = st.columns(3)
+    with col_q1:
+        if st.button("✨ 生成资源", use_container_width=True):
+            st.switch_page("pages/2_generate.py")
+    with col_q2:
+        if st.button("📚 资源库", use_container_width=True):
+            st.switch_page("pages/4_library.py")
+    with col_q3:
+        if st.button("📝 开始测验", use_container_width=True):
+            st.switch_page("pages/5_evaluate.py")
 
-    user_input = st.chat_input("输入消息…")
-    if user_input:
-        st.session_state.chat_history.append({"role": "user", "content": user_input})
-        with st.chat_message("user"):
-            st.markdown(user_input)
-        # 实际调用由各功能页面处理；主页仅作 onboarding 入口展示
-        st.info("请前往对话页面继续交互，或使用左侧导航栏选择功能。")
+    # 显示当前画像摘要
+    if st.session_state.get("profile"):
+        st.markdown("---")
+        st.subheader("📊 您的学习画像摘要")
+        profile = st.session_state["profile"]
+        col_p1, col_p2, col_p3 = st.columns(3)
+        with col_p1:
+            st.metric("专业", profile.get("major", "未设置"))
+        with col_p2:
+            st.metric("每日学习时间", f"{profile.get('daily_time_minutes', 0)} 分钟")
+        with col_p3:
+            st.metric("认知风格", profile.get("cognitive_style", "未设置"))
+
+        mastered = profile.get("knowledge_mastered", [])
+        if mastered:
+            st.markdown(f"**已掌握知识点**：{', '.join(mastered[:5])}{'...' if len(mastered) > 5 else ''}")
