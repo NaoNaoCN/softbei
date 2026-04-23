@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Sequence, TypeVar
 
-from sqlalchemy import select, delete, update, func
+from sqlalchemy import select as sa_select, delete as sa_delete, update as sa_update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -91,11 +91,17 @@ async def select(
     Returns:
         模型实例序列
     """
-    stmt = select(model)
+    stmt = sa_select(model)
 
     if loadRelations:
         for rel in loadRelations:
-            stmt = stmt.options(selectinload(getattr(model, rel)))
+            # 支持嵌套路径如 "items.kp"，也支持普通关系名
+            rel_path = rel.split(".")
+            if len(rel_path) == 1:
+                stmt = stmt.options(selectinload(getattr(model, rel)))
+            else:
+                # 多层嵌套：items.kp -> items，然后 items.kp
+                stmt = stmt.options(selectinload(rel_path[0]).selectinload(rel_path[1]))
 
     if filters:
         for key, value in filters.items():
@@ -180,7 +186,7 @@ async def count(
     Returns:
         记录数量
     """
-    stmt = select(func.count()).select_from(model)
+    stmt = sa_select(func.count()).select_from(model)
 
     if filters:
         for key, value in filters.items():
@@ -213,7 +219,7 @@ async def update_(
     Returns:
         实际更新的记录数
     """
-    stmt = update(model)
+    stmt = sa_update(model)
     for key, value in filters.items():
         if value is None:
             stmt = stmt.where(getattr(model, key).is_(None))
@@ -269,7 +275,7 @@ async def delete(
     Returns:
         实际删除的记录数
     """
-    stmt = delete(model)
+    stmt = sa_delete(model)
     for key, value in filters.items():
         if value is None:
             stmt = stmt.where(getattr(model, key).is_(None))

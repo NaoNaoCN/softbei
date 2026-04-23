@@ -80,6 +80,7 @@ class UserOut(BaseModel):
 
 
 class TokenOut(BaseModel):
+    user_id: uuid.UUID
     access_token: str
     token_type: str = "bearer"
 

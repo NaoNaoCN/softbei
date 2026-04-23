@@ -8,7 +8,7 @@ from backend.db.crud import (
     select,
     select_by_id,
     select_one,
-    update as update_,
+    update_,
     update_by_id,
     count,
 )
