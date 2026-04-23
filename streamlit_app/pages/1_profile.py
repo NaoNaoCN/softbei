@@ -81,7 +81,8 @@ with tab_edit:
         cognitive_style = st.selectbox(
             "认知风格",
             ["visual", "text", "practice"],
-            index=["visual", "text", "practice"].index(profile.get("cognitive_style", "text")),
+            index=["visual", "text", "practice"].index(profile.get("cognitive_style", "text"))
+            if profile.get("cognitive_style") in ("visual", "text", "practice") else 1,
         )
         daily_time = st.slider("每日学习时间（分钟）", 10, 480, profile.get("daily_time_minutes", 60))
         mastered_input = st.text_input(

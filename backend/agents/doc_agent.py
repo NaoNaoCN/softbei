@@ -5,7 +5,11 @@ DocAgent：基于 RAG 生成结构化学习文档（Markdown 格式）。
 
 from __future__ import annotations
 
+import json
+
 from backend.models.schemas import AgentState
+from backend.rag.retriever import retrieve_by_kp, format_context
+from backend.services.llm import chat_completion
 
 
 SYSTEM_PROMPT = """你是一位专业的教学资料撰写专家。
@@ -23,7 +27,7 @@ SYSTEM_PROMPT = """你是一位专业的教学资料撰写专家。
 """
 
 
-async def run(state: AgentState) -> AgentState:
+async def run(state: AgentState, config: dict | None = None) -> AgentState:
     """
     DocAgent 节点入口。
 
@@ -31,14 +35,33 @@ async def run(state: AgentState) -> AgentState:
     1. 调用 retriever 检索知识点相关文档片段
     2. 构造 RAG prompt，调用 LLM 生成 Markdown 文档
     3. 将 draft_content 写入 state
-
-    :param state: 当前状态（含 kp_id, profile）
-    :return:      更新后的状态（含 draft_content）
     """
-    # TODO:
-    # 1. chunks = await retrieve_by_kp(state.kp_id)
-    # 2. context = format_context(chunks)
-    # 3. state.retrieved_docs = [c.text for c in chunks]
-    # 4. prompt = SYSTEM_PROMPT.format(context=context, kp_name=...)
-    # 5. state.draft_content = await chat_completion([system, user])
-    raise NotImplementedError
+    # 获取 kp_name（从 retrieved_docs 元数据或直接用 kp_id）
+    kp_name = state.kp_id or "未知知识点"
+
+    # 检索相关文档
+    try:
+        chunks = await retrieve_by_kp(kp_name, n_results=5)
+        context = format_context(chunks, max_tokens=3000)
+        retrieved_texts = [c.text for c in chunks]
+    except Exception:
+        context = "（暂无参考资料）"
+        retrieved_texts = []
+
+    # 更新 retrieved_docs
+    state = state.model_copy(update={"retrieved_docs": retrieved_texts})
+
+    # 构造 prompt
+    prompt = SYSTEM_PROMPT.format(context=context, kp_name=kp_name)
+
+    try:
+        draft = await chat_completion(
+            [{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=4000,
+        )
+        state = state.model_copy(update={"draft_content": draft})
+    except Exception as e:
+        state = state.model_copy(update={"draft_content": f"文档生成失败：{e}"})
+
+    return state

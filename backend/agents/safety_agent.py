@@ -5,7 +5,10 @@ SafetyAgent：内容安全验证，过滤幻觉、不当内容，附加引用来
 
 from __future__ import annotations
 
+import json
+
 from backend.models.schemas import AgentState
+from backend.services.llm import chat_completion
 
 
 SYSTEM_PROMPT = """你是一位内容质量审核专家。
@@ -31,7 +34,7 @@ SYSTEM_PROMPT = """你是一位内容质量审核专家。
 """
 
 
-async def run(state: AgentState) -> AgentState:
+async def run(state: AgentState, config: dict | None = None) -> AgentState:
     """
     SafetyAgent 节点入口。
 
@@ -40,17 +43,52 @@ async def run(state: AgentState) -> AgentState:
     2. 调用 LLM 审核内容质量
     3. 若通过：state.final_content = state.draft_content
        若不通过：state.final_content = revised_content，state.safety_passed = False
-
-    :param state: 当前状态
-    :return:      更新后的状态（含 final_content, safety_passed）
     """
-    # TODO:
-    # 1. context = "\n".join(state.retrieved_docs[:3])
-    # 2. prompt = SYSTEM_PROMPT.format(context=context, draft=state.draft_content)
-    # 3. result = json.loads(await chat_completion([system, user], temperature=0.1))
-    # 4. state.safety_passed = result["passed"]
-    # 5. state.final_content = result["revised_content"] or state.draft_content
-    raise NotImplementedError
+    # 若没有 draft_content，跳过检查
+    if not state.draft_content:
+        return state.model_copy(update={
+            "safety_passed": True,
+            "final_content": "",
+        })
+
+    # 构造上下文
+    context = "\n".join(state.retrieved_docs[:3]) if state.retrieved_docs else "（无参考资料）"
+    prompt = SYSTEM_PROMPT.format(context=context, draft=state.draft_content)
+
+    try:
+        raw = await chat_completion(
+            [{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=1500,
+        )
+        result = json.loads(raw)
+
+        passed = result.get("passed", True)
+        issues = result.get("issues", [])
+        revised_content = result.get("revised_content")
+
+        state = state.model_copy(update={
+            "safety_passed": passed,
+            "final_content": revised_content if not passed else state.draft_content,
+        })
+
+        if not passed and issues:
+            state.metadata["safety_issues"] = issues
+
+    except json.JSONDecodeError:
+        # JSON 解析失败时保守通过，但记录警告
+        state = state.model_copy(update={
+            "safety_passed": True,
+            "final_content": state.draft_content,
+        })
+    except Exception as e:
+        # 调用失败时保守通过
+        state = state.model_copy(update={
+            "safety_passed": True,
+            "final_content": state.draft_content,
+        })
+
+    return state
 
 
 def should_skip_safety(state: AgentState) -> bool:

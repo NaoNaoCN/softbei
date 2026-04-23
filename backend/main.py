@@ -29,8 +29,12 @@ from backend.models.schemas import (
     KGGraphOut,
     KGEdgeOut,
     KGNodeOut,
-    LearningPathOut,
+    LearningPathCreate,
+    LearningPathItemCreate,
     LearningPathItemOut,
+    LearningPathItemUpdate,
+    LearningPathOut,
+    LearningPathUpdate,
     LearningRecordCreate,
     LearningRecordOut,
     QuizAttemptOut,
@@ -180,6 +184,7 @@ async def chat(
     user_id: uuid.UUID,
     body: ChatMessageIn,
     stream: bool = False,
+    db: AsyncSession = Depends(get_session),
 ):
     """
     向 Agent 系统发送消息。
@@ -187,10 +192,10 @@ async def chat(
     """
     if stream:
         async def event_generator():
-            async for event in stream_invoke(str(user_id), str(session_id), body.content):
+            async for event in stream_invoke(str(user_id), str(session_id), body.content, db):
                 yield f"data: {event}\n\n"
         return StreamingResponse(event_generator(), media_type="text/event-stream")
-    result = await invoke(str(user_id), str(session_id), body.content)
+    result = await invoke(str(user_id), str(session_id), body.content, db)
     return {"content": result.final_content, "metadata": result.metadata}
 
 
@@ -410,36 +415,105 @@ async def get_quiz_attempts(
 # 学习路径
 # ===========================================================
 
+from backend.services import pathway as pathway_svc
+
+
 @app.get("/pathways", response_model=list[LearningPathOut], tags=["pathway"])
 async def list_pathways(user_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
     """列举用户的学习路径。"""
-    from backend.db.crud import select as db_select
+    return await pathway_svc.list_pathways(user_id, db)
 
-    paths = await db_select(
-        db, LearningPath,
-        filters={"user_id": user_id},
-        loadRelations=["items.kp"],
-    )
 
-    output = []
-    for path in paths:
-        items = [
-            LearningPathItemOut(
-                order_index=item.order_index,
-                kp_id=item.kp_id,
-                kp_name=item.kp.name if item.kp else item.kp_id,
-                is_completed=item.is_completed,
-            )
-            for item in sorted(path.items, key=lambda x: x.order_index)
-        ]
-        output.append(LearningPathOut(
-            id=path.id,
-            name=path.title or "学习路径",
-            description=None,
-            items=items,
-            created_at=path.created_at,
-        ))
-    return output
+@app.post("/pathways", response_model=LearningPathOut, tags=["pathway"])
+async def create_pathway(
+    user_id: uuid.UUID,
+    body: LearningPathCreate,
+    db: AsyncSession = Depends(get_session),
+):
+    """创建新学习路径。"""
+    return await pathway_svc.create_pathway(user_id, body, db)
+
+
+@app.get("/pathways/{path_id}", response_model=LearningPathOut, tags=["pathway"])
+async def get_pathway(
+    path_id: uuid.UUID,
+    db: AsyncSession = Depends(get_session),
+):
+    """获取单条学习路径详情。"""
+    result = await pathway_svc.get_pathway(path_id, db)
+    if not result:
+        raise HTTPException(status_code=404, detail="Pathway not found")
+    return result
+
+
+@app.put("/pathways/{path_id}", response_model=LearningPathOut, tags=["pathway"])
+async def update_pathway(
+    path_id: uuid.UUID,
+    user_id: uuid.UUID,
+    body: LearningPathUpdate,
+    db: AsyncSession = Depends(get_session),
+):
+    """更新学习路径标题/描述。"""
+    result = await pathway_svc.update_pathway(path_id, user_id, body, db)
+    if not result:
+        raise HTTPException(status_code=404, detail="Pathway not found")
+    return result
+
+
+@app.delete("/pathways/{path_id}", tags=["pathway"])
+async def delete_pathway(
+    path_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_session),
+):
+    """删除学习路径（级联删除路径项）。"""
+    deleted = await pathway_svc.delete_pathway(path_id, user_id, db)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Pathway not found")
+    return {"deleted": True}
+
+
+@app.post("/pathways/{path_id}/items", response_model=LearningPathItemOut, tags=["pathway"])
+async def add_pathway_item(
+    path_id: uuid.UUID,
+    user_id: uuid.UUID,
+    body: LearningPathItemCreate,
+    db: AsyncSession = Depends(get_session),
+):
+    """向学习路径添加知识点项。"""
+    result = await pathway_svc.add_pathway_item(path_id, user_id, body, db)
+    if not result:
+        raise HTTPException(status_code=404, detail="Pathway not found or unauthorized")
+    return result
+
+
+@app.put("/pathways/{path_id}/items/{item_id}", response_model=LearningPathItemOut, tags=["pathway"])
+async def update_pathway_item(
+    path_id: uuid.UUID,
+    item_id: uuid.UUID,
+    user_id: uuid.UUID,
+    body: LearningPathItemUpdate,
+    db: AsyncSession = Depends(get_session),
+):
+    """更新学习路径项（顺序/完成状态）。"""
+    result = await pathway_svc.update_pathway_item(item_id, user_id, body, db)
+    if not result:
+        raise HTTPException(status_code=404, detail="Item not found or unauthorized")
+    return result
+
+
+@app.delete("/pathways/{path_id}/items/{item_id}", tags=["pathway"])
+async def remove_pathway_item(
+    path_id: uuid.UUID,
+    item_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_session),
+):
+    """从学习路径移除知识点项。"""
+    deleted = await pathway_svc.remove_pathway_item(item_id, user_id, db)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Item not found or unauthorized")
+    return {"deleted": True}
 
 
 # ===========================================================

@@ -112,12 +112,10 @@ with col_filter1:
         }.get(x, x),
     )
 
-with col_filter2:
+with col_filter3:
     kp_filter = st.text_input("知识点ID（可选）", placeholder="输入知识点ID筛选")
 
-with col_refresh:
-    st.write("")
-    refresh = st.button("🔄 刷新")
+refresh = st.button("🔄 刷新")
 
 # 分页状态
 if "lib_skip" not in st.session_state:
@@ -132,23 +130,18 @@ resources = fetch_resources(
 )
 
 # 统计信息
+stats = get_resource_stats(user_id)
 col_stat1, col_stat2, col_stat3, col_stat4, col_stat5 = st.columns(5)
-type_counts = {"doc": 0, "mindmap": 0, "quiz": 0, "code": 0, "summary": 0}
-for res in resources:
-    rt = res.get("resource_type", "unknown")
-    if rt in type_counts:
-        type_counts[rt] += 1
-
 with col_stat1:
-    st.metric("📄 文档", type_counts.get("doc", 0))
+    st.metric("📄 文档", stats.get("doc", 0))
 with col_stat2:
-    st.metric("🗺️ 思维导图", type_counts.get("mindmap", 0))
+    st.metric("🗺️ 思维导图", stats.get("mindmap", 0))
 with col_stat3:
-    st.metric("📝 测验", type_counts.get("quiz", 0))
+    st.metric("📝 测验", stats.get("quiz", 0))
 with col_stat4:
-    st.metric("💻 代码", type_counts.get("code", 0))
+    st.metric("💻 代码", stats.get("code", 0))
 with col_stat5:
-    st.metric("📋 总结", type_counts.get("summary", 0))
+    st.metric("📋 总结", stats.get("summary", 0))
 
 st.markdown("---")
 

@@ -5,6 +5,9 @@ LangGraph 主状态机：定义节点、边（含条件路由）并编译图。
 
 from __future__ import annotations
 
+from typing import Any
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from langgraph.graph import END, StateGraph
 
 from backend.agents import (
@@ -19,6 +22,23 @@ from backend.agents import (
     summary_agent,
 )
 from backend.models.schemas import AgentState
+
+# ----------------------------------------------------------
+# 数据库会话注入辅助
+# ----------------------------------------------------------
+
+async def _run_with_db(node_func, state: AgentState, db: AsyncSession) -> AgentState:
+    """
+    通用包装器：如果 node_func 签名需要 db，则传递。
+    LangGraph 节点函数签名为 (state,) 或 (state, config)。
+    """
+    import inspect
+    sig = inspect.signature(node_func)
+    params = list(sig.parameters.keys())
+    if "db" in params:
+        return await node_func(state, db)
+    return await node_func(state)
+
 
 # ----------------------------------------------------------
 # 图构建
@@ -41,7 +61,7 @@ def build_graph() -> StateGraph:
     """
     graph = StateGraph(AgentState)
 
-    # -- 注册节点 --
+    # -- 注册节点（使用 wrapper 以支持 db 注入）--
     graph.add_node("profile_agent", profile_agent.run)
     graph.add_node("planner_agent", planner_agent.run)
     graph.add_node("doc_agent", doc_agent.run)
@@ -102,13 +122,14 @@ def get_graph():
     return _compiled_graph
 
 
-async def invoke(user_id: str, session_id: str, message: str) -> AgentState:
+async def invoke(user_id: str, session_id: str, message: str, db: AsyncSession) -> AgentState:
     """
     执行一次完整的图推理，返回最终状态。
 
     :param user_id:   用户 UUID 字符串
     :param session_id: 会话 UUID 字符串
     :param message:   用户输入
+    :param db:        数据库会话
     :return:           最终 AgentState
     """
     initial_state = AgentState(
@@ -116,11 +137,16 @@ async def invoke(user_id: str, session_id: str, message: str) -> AgentState:
         session_id=session_id,
         user_message=message,
     )
-    result = await get_graph().ainvoke(initial_state)
+
+    # profile_agent 需要 db 参数
+    result = await get_graph().ainvoke(
+        initial_state,
+        config={"configurable": {"db": db}},
+    )
     return AgentState(**result)
 
 
-async def stream_invoke(user_id: str, session_id: str, message: str):
+async def stream_invoke(user_id: str, session_id: str, message: str, db: AsyncSession):
     """
     流式执行图推理，逐步 yield AgentState 快照。
     供 FastAPI StreamingResponse 或 Streamlit 实时显示使用。
@@ -130,5 +156,8 @@ async def stream_invoke(user_id: str, session_id: str, message: str):
         session_id=session_id,
         user_message=message,
     )
-    async for event in get_graph().astream(initial_state):
+    async for event in get_graph().astream(
+        initial_state,
+        config={"configurable": {"db": db}},
+    ):
         yield event

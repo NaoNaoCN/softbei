@@ -168,12 +168,23 @@ class KGGraphOut(BaseModel):
 # ===========================================================
 
 class LearningPathItemOut(BaseModel):
+    id: uuid.UUID
     order_index: int
     kp_id: str
     kp_name: str
     is_completed: bool
 
     model_config = {"from_attributes": True}
+
+
+class LearningPathItemCreate(BaseModel):
+    kp_id: str
+    order_index: int
+
+
+class LearningPathItemUpdate(BaseModel):
+    order_index: Optional[int] = None
+    is_completed: Optional[bool] = None
 
 
 class LearningPathOut(BaseModel):
@@ -184,6 +195,16 @@ class LearningPathOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class LearningPathCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=256)
+    description: Optional[str] = None
+
+
+class LearningPathUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=256)
+    description: Optional[str] = None
 
 
 # ===========================================================
