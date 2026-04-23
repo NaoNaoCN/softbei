@@ -5,9 +5,8 @@
 .env
 .env.*
 
-# 配置文件（含敏感信息）
-config.yaml
-config.yml
+# 配置文件
+# (configs/config.yaml 已纳入 git，敏感值通过 ${ENV_VAR} 引用 .env)
 
 # Python
 __pycache__/

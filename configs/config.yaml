@@ -21,12 +21,17 @@ llm:
   api_key: "${LLM_API_KEY}"
   base_url: "https://spark-api-open.xf-yun.com/v3"
   model: "generalv3.5"
+  provider: "spark"
+
+# Embedding 配置
+embedding:
+  model: "BAAI/bge-m3"
+  use_spark: false
 
 # RAG 配置
 rag:
   chunk_size: 500
   chunk_overlap: 50
-  embedding_model: "BAAI/bge-m3"
 
 # JWT 配置
 jwt:
