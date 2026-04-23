@@ -27,3 +27,9 @@ rag:
   chunk_size: 500
   chunk_overlap: 50
   embedding_model: "BAAI/bge-m3"
+
+# JWT 配置
+jwt:
+  secret: "${JWT_SECRET}"
+  algorithm: "HS256"
+  expire_hours: 24

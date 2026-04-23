@@ -53,10 +53,14 @@ from backend.services import profile as profile_svc
 from backend.services import resource as resource_svc
 from backend.db.models import User, ChatSession, ChatMessage, KGNode, KGEdge, QuizItem, QuizAttempt, LearningPath, LearningPathItem
 
-# JWT 配置
-JWT_SECRET = "your-secret-key-change-in-production"
-JWT_ALGORITHM = "HS256"
-JWT_EXPIRE_HOURS = 24
+# ===========================================================
+# JWT 配置（从 configs/config.yaml 读取）
+# ===========================================================
+from backend.config import config as app_config
+
+JWT_SECRET = app_config.jwt.secret
+JWT_ALGORITHM = app_config.jwt.algorithm
+JWT_EXPIRE_HOURS = app_config.jwt.expire_hours
 
 # ===========================================================
 # Lifespan（应用启动 / 关闭）
@@ -268,8 +272,20 @@ async def start_generation(
     触发异步资源生成任务。
     返回 task_id 供前端轮询 /generate/{task_id}/status。
     """
+    from backend.services.generation import run_generation
     task = await resource_svc.create_generation_task(user_id, body, db)
-    # TODO: background_tasks.add_task(run_generation, task.task_id, body)
+
+    # 获取或创建会话 ID
+    session_id = str(uuid.uuid4())
+
+    background_tasks.add_task(
+        run_generation,
+        task.task_id,
+        str(user_id),
+        session_id,
+        body,
+        db,
+    )
     return task
 
 

@@ -48,12 +48,21 @@ class RAGConfig:
 
 
 @dataclass
+class JWTConfig:
+    """JWT 配置"""
+    secret: str = ""
+    algorithm: str = "HS256"
+    expire_hours: int = 24
+
+
+@dataclass
 class Config:
     """全局配置"""
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     vector_db: VectorDBConfig = field(default_factory=VectorDBConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     rag: RAGConfig = field(default_factory=RAGConfig)
+    jwt: JWTConfig = field(default_factory=JWTConfig)
 
 
 def _resolve_env_vars(value: Any) -> Any:
@@ -92,6 +101,7 @@ def _build_config() -> Config:
     vector_data = yaml_config.get("vector_db", {})
     llm_data = yaml_config.get("llm", {})
     rag_data = yaml_config.get("rag", {})
+    jwt_data = yaml_config.get("jwt", {})
 
     return Config(
         database=DatabaseConfig(
@@ -115,6 +125,11 @@ def _build_config() -> Config:
             chunk_size=rag_data.get("chunk_size", 500),
             chunk_overlap=rag_data.get("chunk_overlap", 50),
             embedding_model=rag_data.get("embedding_model", "BAAI/bge-m3"),
+        ),
+        jwt=JWTConfig(
+            secret=jwt_data.get("secret", ""),
+            algorithm=jwt_data.get("algorithm", "HS256"),
+            expire_hours=jwt_data.get("expire_hours", 24),
         ),
     )
 
