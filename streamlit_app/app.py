@@ -92,7 +92,7 @@ with st.sidebar:
                             "学习目标，以及目前对哪些知识点比较熟悉？"
                         ),
                     }]
-                st.switch_page("app.py")
+                st.switch_page("pages/6_chat.py")
         else:
             st.session_state.is_onboarding = False
 
@@ -113,6 +113,7 @@ with st.sidebar:
 
     nav_pages = [
         ("🏠 首页", "app"),
+        ("💬 智能对话", "pages/6_chat.py"),
         ("🧠 我的画像", "pages/1_profile.py"),
         ("✨ 生成资源", "pages/2_generate.py"),
         ("🗺️ 学习路径", "pages/3_pathway.py"),

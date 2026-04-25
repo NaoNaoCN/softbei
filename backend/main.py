@@ -51,7 +51,7 @@ from backend.models.schemas import (
 )
 from backend.services import profile as profile_svc
 from backend.services import resource as resource_svc
-from backend.db.models import User, ChatSession, ChatMessage, KGNode, KGEdge, QuizItem, QuizAttempt, LearningPath, LearningPathItem
+from backend.db.models import User, ChatSession, ChatMessage, KGNode, KGEdge, QuizItem, QuizAttempt, LearningPath, LearningPathItem, ResourceMeta
 
 # ===========================================================
 # JWT 配置（从 configs/config.yaml 读取）
@@ -200,7 +200,11 @@ async def chat(
                 yield f"data: {event}\n\n"
         return StreamingResponse(event_generator(), media_type="text/event-stream")
     result = await invoke(str(user_id), str(session_id), body.content, db)
-    return {"content": result.final_content, "metadata": result.metadata}
+    return {
+        "content": result.final_content,
+        "metadata": result.metadata,
+        "profile_complete": result.profile_complete,
+    }
 
 
 @app.get("/chat/sessions", response_model=list[ChatSessionOut], tags=["chat"])
