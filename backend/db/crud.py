@@ -100,8 +100,16 @@ async def select(
             if len(rel_path) == 1:
                 stmt = stmt.options(selectinload(getattr(model, rel)))
             else:
-                # 多层嵌套：items.kp -> items，然后 items.kp
-                stmt = stmt.options(selectinload(rel_path[0]).selectinload(rel_path[1]))
+                # 多层嵌套：items.kp -> selectinload(model.items).selectinload(ChildModel.kp)
+                loader = selectinload(getattr(model, rel_path[0]))
+                # 获取第一层关系的目标模型
+                parent_rel = getattr(model, rel_path[0]).property
+                child_model = parent_rel.mapper.class_
+                for part in rel_path[1:]:
+                    loader = loader.selectinload(getattr(child_model, part))
+                    child_rel = getattr(child_model, part).property
+                    child_model = child_rel.mapper.class_
+                stmt = stmt.options(loader)
 
     if filters:
         for key, value in filters.items():

@@ -109,6 +109,7 @@ async def create_generation_task(
         },
         commit=False,
     )
+    await db.flush()  # 确保 resource.id 已生成
 
     # 创建任务记录
     task = await insert(
