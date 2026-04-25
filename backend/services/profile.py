@@ -45,7 +45,7 @@ async def create_or_update_profile(
 
     # 序列化当前数据为快照
     if existing:
-        snapshot = StudentProfileOut.model_validate(existing).model_dump()
+        snapshot = StudentProfileOut.model_validate(existing).model_dump(mode="json")
         await insert(db, ProfileHistory, {"profile_id": existing.id, "snapshot": snapshot}, commit=False)
 
         await update_by_id(
@@ -80,7 +80,7 @@ async def create_or_update_profile(
             }
         )
         # 初始化历史
-        snapshot = StudentProfileOut.model_validate(new_profile).model_dump()
+        snapshot = StudentProfileOut.model_validate(new_profile).model_dump(mode="json")
         await insert(db, ProfileHistory, {"profile_id": new_profile.id, "snapshot": snapshot})
         return StudentProfileOut.model_validate(new_profile)
 
@@ -135,7 +135,7 @@ async def merge_chat_updates(
         )
 
     # 快照当前状态
-    snapshot = StudentProfileOut.model_validate(existing).model_dump()
+    snapshot = StudentProfileOut.model_validate(existing).model_dump(mode="json")
     await insert(db, ProfileHistory, {"profile_id": existing.id, "snapshot": snapshot}, commit=False)
 
     # 只更新非 None 的字段
