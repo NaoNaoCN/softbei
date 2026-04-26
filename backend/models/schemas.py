@@ -73,7 +73,7 @@ class UserCreate(BaseModel):
 class UserOut(BaseModel):
     id: uuid.UUID
     username: str
-    email: Optional[str]
+    email: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -303,7 +303,7 @@ class AgentState(BaseModel):
     user_id: str
     session_id: str
     user_message: str
-    profile: Optional[StudentProfileOut] = None
+    profile: Optional[StudentProfileIn] = None
     kp_id: Optional[str] = None
     resource_type: Optional[ResourceType] = None
     retrieved_docs: list[str] = Field(default_factory=list)

@@ -58,7 +58,7 @@ def login(username: str, password: str) -> tuple[bool, str]:
 # ----------------------------------------------------------
 
 if st.session_state.get("user_id"):
-    st.success(f"当前已登录：{st.session_state['user_id'][:8]}...")
+    st.success(f"当前已登录：{st.session_state.get('username') or st.session_state['user_id'][:8]}")
     if st.button("退出登录"):
         for key in ["user_id", "access_token", "session_id", "profile", "chat_history"]:
             st.session_state[key] = None
@@ -81,6 +81,7 @@ with tab_login:
                 success, result = login(login_username, login_password)
                 if success:
                     st.session_state["user_id"] = result
+                    st.session_state["username"] = login_username
                     st.success("登录成功！")
                     st.rerun()
                 else:

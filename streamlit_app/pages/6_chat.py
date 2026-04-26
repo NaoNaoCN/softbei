@@ -38,8 +38,10 @@ def create_chat_session() -> str | None:
         )
         if resp.status_code == 200:
             return resp.json().get("id")
-    except Exception:
-        pass
+        else:
+            st.error(f"创建会话失败: {resp.status_code} - {resp.text}")
+    except Exception as e:
+        st.error(f"请求异常: {e}")
     return None
 
 
@@ -49,12 +51,14 @@ def send_message(session_id: str, message: str) -> dict | None:
             f"{API_BASE_URL}/chat/{session_id}",
             params={"user_id": user_id, "stream": False},
             json={"content": message},
-            timeout=60.0,
+            timeout=120.0,
         )
         if resp.status_code == 200:
             return resp.json()
-    except Exception:
-        pass
+        else:
+            st.error(f"后端返回错误: {resp.status_code} - {resp.text[:200]}")
+    except Exception as e:
+        st.error(f"请求异常: {e}")
     return None
 
 

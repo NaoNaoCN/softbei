@@ -41,15 +41,19 @@ async def retrieve(
 ) -> list[RetrievedChunk]:
     """
     语义检索：将 query 嵌入后查询向量库，过滤低相似度结果。
-
-    :param query:           用户问题或知识点名称
-    :param n_results:       返回的候选数量（检索前 K）
-    :param score_threshold: 最低相似度阈值（ChromaDB 距离转换后）
-    :param where:           元数据过滤条件（如 {"doc_id": "chapter_01"}）
-    :param collection_name: 指定集合，None 使用默认集合
-    :return:                按相似度降序排列的文本块列表
+    向量库未初始化或为空时返回空列表（优雅降级）。
     """
+    try:
+        from backend.db.vector import get_collection
+        col = get_collection()
+        if col.count() == 0:
+            return []
+    except Exception:
+        return []
+
     embedding = await get_embedding(query)
+    if not embedding:
+        return []
     raw = query_documents(
         query_embedding=embedding,
         n_results=n_results,

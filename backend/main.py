@@ -182,6 +182,22 @@ async def get_profile_history(
 # 对话（Agent 入口）
 # ===========================================================
 
+@app.get("/chat/sessions", response_model=list[ChatSessionOut], tags=["chat"])
+async def list_sessions(user_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
+    """列举用户的所有对话会话。"""
+    from backend.db.crud import select as db_select
+    sessions = await db_select(db, ChatSession, filters={"user_id": user_id})
+    return [ChatSessionOut.model_validate(s) for s in sessions]
+
+
+@app.post("/chat/sessions", response_model=ChatSessionOut, tags=["chat"])
+async def create_chat_session(user_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
+    """创建新的对话会话。"""
+    from backend.db.crud import insert
+    session = await insert(db, ChatSession, data={"user_id": user_id})
+    return ChatSessionOut.model_validate(session)
+
+
 @app.post("/chat/{session_id}", tags=["chat"])
 async def chat(
     session_id: uuid.UUID,
@@ -200,27 +216,27 @@ async def chat(
                 yield f"data: {event}\n\n"
         return StreamingResponse(event_generator(), media_type="text/event-stream")
     result = await invoke(str(user_id), str(session_id), body.content, db)
+
+    # 如果生成了资源，持久化到 resource_meta 表
+    if result.resource_type and result.draft_content:
+        try:
+            from backend.db.crud import insert
+            await insert(db, ResourceMeta, data={
+                "user_id": user_id,
+                "kp_id": result.kp_id or "unknown",
+                "resource_type": result.resource_type.value,
+                "title": f"{result.kp_id or '学习资源'} - {result.resource_type.value}",
+                "content": result.draft_content,
+            })
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"资源保存失败: {e}")
+
     return {
         "content": result.final_content,
         "metadata": result.metadata,
         "profile_complete": result.profile_complete,
     }
-
-
-@app.get("/chat/sessions", response_model=list[ChatSessionOut], tags=["chat"])
-async def list_sessions(user_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
-    """列举用户的所有对话会话。"""
-    from backend.db.crud import select as db_select
-    sessions = await db_select(db, ChatSession, filters={"user_id": user_id})
-    return [ChatSessionOut.model_validate(s) for s in sessions]
-
-
-@app.post("/chat/sessions", response_model=ChatSessionOut, tags=["chat"])
-async def create_chat_session(user_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
-    """创建新的对话会话。"""
-    from backend.db.crud import insert
-    session = await insert(db, ChatSession, data={"user_id": user_id})
-    return ChatSessionOut.model_validate(session)
 
 
 # ===========================================================

@@ -72,7 +72,7 @@ with tab_view:
         weak = profile.get("knowledge_weak", [])
         st.write(", ".join(weak) if weak else "暂无")
     else:
-        st.info("尚未建立画像，请在"编辑画像"标签页填写信息。")
+        st.info("尚未建立画像，请在'编辑画像'标签页填写信息。")
 
 with tab_edit:
     with st.form("profile_form"):

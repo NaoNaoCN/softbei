@@ -184,8 +184,12 @@ async def get_embedding(text: str) -> list[float]:
 
 async def _local_embedding(text: str) -> list[float]:
     """使用 sentence-transformers BGE-M3 本地嵌入。"""
-    model = _get_embedding_model()
-    return model.encode(text).tolist()
+    try:
+        model = _get_embedding_model()
+        return model.encode(text).tolist()
+    except Exception:
+        # 模型未就绪时返回空向量，让 RAG 检索优雅降级
+        return []
 
 
 async def _spark_embedding(text: str) -> list[float]:

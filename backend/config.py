@@ -12,6 +12,10 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from dotenv import load_dotenv
+
+# 加载项目根目录的 .env 文件
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 
 # ===========================================================
@@ -123,7 +127,7 @@ def _build_config() -> Config:
 
     return Config(
         database=DatabaseConfig(
-            url=db.get("url", ""),
+            url=db.get("url", "") or "sqlite+aiosqlite:///dev.db",
             echo=db.get("echo", False),
             pool_size=db.get("pool_size", 10),
             max_overflow=db.get("max_overflow", 20),

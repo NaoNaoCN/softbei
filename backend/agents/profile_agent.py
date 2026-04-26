@@ -9,9 +9,10 @@ import json
 import uuid
 
 from langgraph.graph import END
+from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.schemas import AgentState
+from backend.models.schemas import AgentState, StudentProfileIn, StudentProfileOut
 from backend.services import profile as profile_svc
 from backend.services.llm import chat_completion
 
@@ -68,8 +69,12 @@ def _merge_profile_in_memory(state: AgentState, updates: dict) -> AgentState:
                     existing[k] = list(set(existing[k] + v))
                 else:
                     existing[k] = v
-        from backend.models.schemas import StudentProfileOut
-        state = state.model_copy(update={"profile": StudentProfileOut(**existing)})
+        state = state.model_copy(update={"profile": StudentProfileIn(**existing)})
+    else:
+        # profile 为 None 时，从 updates 创建新画像
+        profile_data = {k: v for k, v in updates.items() if v is not None}
+        if profile_data:
+            state = state.model_copy(update={"profile": StudentProfileIn(**profile_data)})
     return state
 
 
@@ -88,7 +93,7 @@ def _check_profile_complete(state: AgentState) -> bool:
     return has_goal or has_weak or has_mastered
 
 
-async def run(state: AgentState, config: dict | None = None) -> AgentState:
+async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     """
     ProfileAgent 节点入口。
 
@@ -108,16 +113,27 @@ async def run(state: AgentState, config: dict | None = None) -> AgentState:
     ]
     try:
         raw = await chat_completion(extract_messages, temperature=0.1)
-        updates = json.loads(raw)
-    except (json.JSONDecodeError, Exception):
+        # 处理 markdown 代码块包裹的 JSON
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
+            cleaned = cleaned.rsplit("```", 1)[0].strip()
+        updates = json.loads(cleaned)
+    except (json.JSONDecodeError, Exception) as e:
+        import logging
+        logging.getLogger(__name__).error(f"画像提取失败: {e}, raw={raw if 'raw' in dir() else 'N/A'}")
         updates = {}
 
     # -- 2. 合并到数据库 --
     user_uuid = uuid.UUID(state.user_id)
+    import logging
+    _logger = logging.getLogger(__name__)
+    _logger.warning(f"[ProfileAgent] db={db}, config_keys={list(config.keys()) if config else 'None'}")
     if db is not None:
         try:
             state = state.model_copy(update={"profile": await profile_svc.merge_chat_updates(user_uuid, updates, db)})
-        except Exception:
+        except Exception as e:
+            _logger.error(f"DB 合并画像失败: {e}")
             # 数据库更新失败时，回退到内存级别合并
             state = _merge_profile_in_memory(state, updates)
     else:
@@ -138,6 +154,12 @@ async def run(state: AgentState, config: dict | None = None) -> AgentState:
     # -- 4. 判断画像完整性 --
     complete = _check_profile_complete(state)
     state = state.model_copy(update={"profile_complete": complete})
+
+    import logging
+    _log = logging.getLogger(__name__)
+    _log.warning(f"[ProfileAgent] updates={updates}")
+    _log.warning(f"[ProfileAgent] profile={state.profile}")
+    _log.warning(f"[ProfileAgent] complete={complete}, is_resource_request={is_resource_request}")
 
     # -- 5. 若需要追问，生成 clarify_message --
     if not complete or (is_resource_request and not complete):
@@ -168,7 +190,9 @@ async def run(state: AgentState, config: dict | None = None) -> AgentState:
             clarify_msg = await chat_completion(
                 [{"role": "user", "content": clarify_prompt}], temperature=0.7
             )
-        except Exception:
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"LLM 调用失败: {e}")
             clarify_msg = "能告诉我你的学习目标和目前的知识基础吗？"
 
         state = state.model_copy(update={

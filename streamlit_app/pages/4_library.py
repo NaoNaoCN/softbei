@@ -6,10 +6,12 @@ streamlit_app/pages/4_library.py
 import httpx
 import streamlit as st
 
-from streamlit_app.app import API_BASE_URL
+from streamlit_app.app import API_BASE_URL, init_session_state
 from streamlit_app.components.resource_card import render_resource_card
 from streamlit_app.components.mindmap import render_mindmap
 from streamlit_app.components.quiz_card import render_quiz_card
+
+init_session_state()
 
 st.set_page_config(page_title="资源库", page_icon="📚", layout="wide")
 st.title("📚 我的资源库")

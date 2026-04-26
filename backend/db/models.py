@@ -167,7 +167,7 @@ class ResourceMeta(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
-    kp_id: Mapped[str] = mapped_column(ForeignKey("kg_node.id"), nullable=False)
+    kp_id: Mapped[str] = mapped_column(String(256), nullable=False)
     resource_type: Mapped[str] = mapped_column(
         Enum(ResourceType, values_callable=lambda e: [m.value for m in e]),
         nullable=False,

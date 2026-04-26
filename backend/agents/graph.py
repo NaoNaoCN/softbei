@@ -22,6 +22,7 @@ from backend.agents import (
     summary_agent,
 )
 from backend.models.schemas import AgentState
+from backend.services.profile import get_profile
 
 # ----------------------------------------------------------
 # 数据库会话注入辅助
@@ -114,7 +115,7 @@ def build_graph() -> StateGraph:
 _compiled_graph = None
 
 
-def get_graph():
+def get_graph() -> StateGraph:
     """返回已编译的图，若未初始化则抛出 RuntimeError。"""
     global _compiled_graph
     if _compiled_graph is None:
@@ -132,10 +133,15 @@ async def invoke(user_id: str, session_id: str, message: str, db: AsyncSession) 
     :param db:        数据库会话
     :return:           最终 AgentState
     """
+    # 从数据库加载已有画像，避免每次都从零开始
+    import uuid
+    existing_profile = await get_profile(uuid.UUID(user_id), db)
+
     initial_state = AgentState(
         user_id=user_id,
         session_id=session_id,
         user_message=message,
+        profile=existing_profile,
     )
 
     # profile_agent 需要 db 参数
@@ -151,10 +157,15 @@ async def stream_invoke(user_id: str, session_id: str, message: str, db: AsyncSe
     流式执行图推理，逐步 yield AgentState 快照。
     供 FastAPI StreamingResponse 或 Streamlit 实时显示使用。
     """
+    # 从数据库加载已有画像，避免每次都从零开始
+    import uuid
+    existing_profile = await get_profile(uuid.UUID(user_id), db)
+
     initial_state = AgentState(
         user_id=user_id,
         session_id=session_id,
         user_message=message,
+        profile=existing_profile,
     )
     async for event in get_graph().astream(
         initial_state,

@@ -11,6 +11,7 @@ from backend.models.schemas import AgentState
 from backend.services import profile as profile_svc
 from backend.services.llm import chat_completion
 from backend.db.crud import select as db_select
+from langchain_core.runnables import RunnableConfig
 
 
 SYSTEM_PROMPT = """你是一位智能学习顾问。
@@ -31,7 +32,7 @@ SYSTEM_PROMPT = """你是一位智能学习顾问。
 """
 
 
-async def run(state: AgentState, config: dict | None = None) -> AgentState:
+async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     """
     RecommendAgent 节点入口。
 
@@ -101,23 +102,37 @@ async def run(state: AgentState, config: dict | None = None) -> AgentState:
         # 更新 state
         new_metadata = dict(state.metadata) if state.metadata else {}
         new_metadata["recommendations"] = recommendations
-        state = state.model_copy(update={
-            "metadata": new_metadata,
-            "final_content": json.dumps(recommendations, ensure_ascii=False),
-        })
+
+        # 生成人类可读的推荐文本
+        lines = []
+        for i, rec in enumerate(recommendations, 1):
+            name = rec.get("kp_name", "未知知识点")
+            reason = rec.get("reason", "")
+            lines.append(f"**{i}. {name}**")
+            if reason:
+                lines.append(f"   {reason}\n")
+        readable = "\n".join(lines)
+        new_metadata["recommendations_text"] = readable
+
+        # 只在没有已生成内容时才写入 final_content
+        if state.final_content:
+            # 已有资源内容，推荐追加到末尾
+            state = state.model_copy(update={
+                "metadata": new_metadata,
+                "final_content": state.final_content + "\n\n---\n\n**推荐下一步学习：**\n" + readable,
+            })
+        else:
+            state = state.model_copy(update={
+                "metadata": new_metadata,
+                "final_content": "根据你的学习画像，推荐以下学习路径：\n\n" + readable,
+            })
     except json.JSONDecodeError:
         new_metadata = dict(state.metadata) if state.metadata else {}
         new_metadata["recommendations"] = []
-        state = state.model_copy(update={
-            "metadata": new_metadata,
-            "final_content": "[]",
-        })
+        state = state.model_copy(update={"metadata": new_metadata})
     except Exception as e:
         new_metadata = dict(state.metadata) if state.metadata else {}
         new_metadata["recommendations"] = []
-        state = state.model_copy(update={
-            "metadata": new_metadata,
-            "final_content": f"推荐生成失败：{e}",
-        })
+        state = state.model_copy(update={"metadata": new_metadata})
 
     return state

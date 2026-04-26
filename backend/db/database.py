@@ -54,22 +54,24 @@ async def init_db() -> None:
     应在 FastAPI lifespan 的 startup 阶段调用。
     """
     global _engine, _session_factory
-    _engine = create_async_engine(
-        config.url,
-        echo=config.echo,
-        pool_pre_ping=True,
-        pool_size=config.pool_size,
-        max_overflow=config.max_overflow,
-        pool_timeout=config.pool_timeout,
-        pool_recycle=config.pool_recycle,
-    )
+    db_cfg = config.database
+    engine_kwargs: dict = dict(echo=db_cfg.echo, pool_pre_ping=True)
+    if "sqlite" not in db_cfg.url:
+        # 连接池参数仅适用于非 SQLite 数据库
+        engine_kwargs.update(
+            pool_size=db_cfg.pool_size,
+            max_overflow=db_cfg.max_overflow,
+            pool_timeout=db_cfg.pool_timeout,
+            pool_recycle=db_cfg.pool_recycle,
+        )
+    _engine = create_async_engine(db_cfg.url, **engine_kwargs)
     _session_factory = async_sessionmaker(
         _engine,
         expire_on_commit=False,
         class_=AsyncSession,
     )
     # 开发/测试时自动建表
-    if "sqlite" in config.url:
+    if "sqlite" in db_cfg.url:
         _import_models()
         async with _engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)

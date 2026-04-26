@@ -3,6 +3,14 @@ streamlit_app/app.py
 Streamlit 多页应用入口。定义全局配置、侧边栏导航和会话状态初始化。
 """
 
+import sys
+from pathlib import Path
+
+# 确保项目根目录在 sys.path 中，使 from streamlit_app.xxx 导入正常工作
+_project_root = str(Path(__file__).resolve().parent.parent)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
 import httpx
 import streamlit as st
 
@@ -29,6 +37,7 @@ def init_session_state() -> None:
     """初始化所有全局会话变量（仅首次运行时设置默认值）。"""
     defaults = {
         "user_id": None,          # 当前登录用户 UUID 字符串
+        "username": None,         # 当前登录用户名
         "access_token": None,     # JWT Token
         "session_id": None,       # 当前对话会话 ID
         "profile": None,          # 缓存的学生画像 dict
@@ -73,7 +82,7 @@ with st.sidebar:
     st.markdown("---")
 
     if st.session_state.user_id:
-        st.success(f"已登录：{st.session_state.user_id[:8]}...")
+        st.success(f"已登录：{st.session_state.username or st.session_state.user_id[:8]}")
 
         # 检测画像是否为空，引导用户进入 onboarding 对话
         if st.session_state.profile is None:
