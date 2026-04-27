@@ -69,16 +69,16 @@ def import_document(file_obj, file_name: str, title: str = None, user_id: str = 
     """上传并导入 PDF 文档。"""
     try:
         files = {"file": (file_name, file_obj, "application/pdf")}
-        data = {}
-        if title:
-            data["title"] = title
+        params = {}
         if user_id:
-            data["user_id"] = user_id
+            params["user_id"] = user_id
+        if title:
+            params["title"] = title
         resp = httpx.post(
             f"{API_BASE_URL}/documents/import",
             files=files,
-            data=data,
-            timeout=30.0,
+            params=params,
+            timeout=180.0,
         )
         if resp.status_code == 200:
             return resp.json()
@@ -132,6 +132,23 @@ def get_resource_stats(user_id: str) -> dict:
     return {}
 
 
+def build_kg_for_doc(doc_id: str) -> dict | None:
+    """调用后端构建知识图谱。"""
+    try:
+        resp = httpx.post(
+            f"{API_BASE_URL}/kg/build",
+            params={"doc_id": doc_id},
+            timeout=300.0,
+        )
+        if resp.status_code == 200:
+            return resp.json()
+        else:
+            st.error(f"构建失败：{resp.text}")
+    except Exception as e:
+        st.error(f"构建失败：{e}")
+    return None
+
+
 # ----------------------------------------------------------
 # 页面主体
 # ----------------------------------------------------------
@@ -172,6 +189,36 @@ with st.expander("📤 上传 PDF 文件", expanded=False):
                         f"切分为 {result['chunks']} 个文本块，已索引 {result['indexed']} 个。"
                     )
                     st.rerun()
+    st.markdown("---")
+
+# 已导入文档列表（含知识图谱构建按钮）
+docs = fetch_documents(user_id)
+if docs:
+    st.subheader("📂 已导入文档")
+    for doc in docs:
+        doc_title = doc.get("title", "无标题")
+        doc_id = doc.get("kp_id", doc.get("id", ""))
+        with st.container(border=True):
+            col_d1, col_d2, col_d3 = st.columns([4, 2, 1])
+            with col_d1:
+                st.write(f"📄 **{doc_title}**")
+            with col_d2:
+                if st.button("🔗 构建知识图谱", key=f"kg_{doc_id}"):
+                    with st.spinner("正在构建知识图谱，请稍候..."):
+                        kg_result = build_kg_for_doc(doc_id)
+                        if kg_result and kg_result.get("success"):
+                            st.success(
+                                f"知识图谱构建完成！"
+                                f"提取 {kg_result['nodes_count']} 个知识点，"
+                                f"{kg_result['edges_count']} 条关系。"
+                            )
+                        else:
+                            st.error("知识图谱构建失败")
+            with col_d3:
+                if st.button("🗑️", key=f"del_doc_{doc_id}"):
+                    if delete_document(doc_id, user_id):
+                        st.success("已删除")
+                        st.rerun()
     st.markdown("---")
 
 # 筛选区
@@ -324,7 +371,7 @@ else:
                                 st.session_state["current_kp_id"] = res.get("kp_id")
                                 st.switch_page("pages/5_evaluate.py")
                         else:
-                            st.button("📝 测验", disabled=True, use_container_width=True)
+                            st.button("📝 测验", key=f"quiz_disabled_{res['id']}", disabled=True, use_container_width=True)
                     with col_g3:
                         if st.button("🗑️ 删除", key=f"del_g_{res['id']}", use_container_width=True):
                             if delete_resource(res["id"]):

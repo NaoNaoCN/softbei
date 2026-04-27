@@ -278,6 +278,23 @@ async def get_kg_graph(
     return KGGraphOut(nodes=kg_nodes, edges=kg_edges)
 
 
+@app.post("/kg/build", tags=["knowledge-graph"])
+async def build_kg_endpoint(
+    doc_id: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """从已导入文档构建知识图谱。"""
+    from backend.services.kg_builder import build_kg
+    try:
+        print(f"[POST /kg/build] 开始构建知识图谱，doc_id={doc_id}")
+        result = await build_kg(doc_id, db)
+        return {"success": True, **result}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"知识图谱构建失败：{e}")
+
+
 # ===========================================================
 # 资源生成
 # ===========================================================
@@ -339,6 +356,17 @@ async def list_resources(
     return await resource_svc.list_resources(user_id, db, resource_type, kp_id, skip, limit)
 
 
+@app.get("/resources/stats", tags=["resources"])
+async def get_resource_stats(user_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
+    """返回用户的资源统计：按类型计数的字典。"""
+    from backend.db.crud import count
+
+    stats = {}
+    for rt in ["doc", "mindmap", "quiz", "code", "summary"]:
+        stats[rt] = await count(db, ResourceMeta, {"user_id": user_id, "resource_type": rt})
+    return stats
+
+
 @app.get("/resources/{resource_id}", response_model=ResourceMetaOut, tags=["resources"])
 async def get_resource(resource_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
     """获取单个资源详情。"""
@@ -353,17 +381,6 @@ async def delete_resource(resource_id: uuid.UUID, db: AsyncSession = Depends(get
     """删除资源。"""
     await resource_svc.delete_resource(resource_id, db)
     return {"deleted": True}
-
-
-@app.get("/resources/stats", tags=["resources"])
-async def get_resource_stats(user_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
-    """返回用户的资源统计：按类型计数的字典。"""
-    from backend.db.crud import count
-
-    stats = {}
-    for rt in ["doc", "mindmap", "quiz", "code", "summary"]:
-        stats[rt] = await count(db, ResourceMeta, {"user_id": user_id, "resource_type": rt})
-    return stats
 
 
 # ===========================================================
@@ -572,6 +589,8 @@ async def import_document(
     - 索引到向量库（供 RAG 检索使用）
     - 创建资源记录到数据库
     """
+    import logging
+    _log = logging.getLogger(__name__)
     file_name = file.filename or "unknown.pdf"
     if not file_name.lower().endswith(".pdf"):
         raise HTTPException(
@@ -582,6 +601,7 @@ async def import_document(
     try:
         content = await file.read()
         saved_path = document_svc.save_uploaded_file(content, file_name)
+        _log.info(f"[import_document] 文件 {file_name} 已保存到 {saved_path}，开始处理...")
         result = await document_svc.import_pdf(
             file_path=saved_path,
             user_id=user_id,

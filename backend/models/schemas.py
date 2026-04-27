@@ -23,6 +23,7 @@ class ResourceType(str, Enum):
     quiz = "quiz"
     code = "code"
     summary = "summary"
+    kg = "kg"
 
 
 class TaskStatus(str, Enum):
@@ -312,6 +313,7 @@ class AgentState(BaseModel):
     safety_passed: bool = True
     error: Optional[str] = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    kg_doc_id: Optional[str] = None       # 知识图谱构建的目标文档 ID
     # 画像初始化 / 追问流程控制
     is_onboarding: bool = False          # 前端标记：当前是否处于画像初始化阶段
     profile_complete: bool = False       # profile_agent 判断后写入，供条件路由使用

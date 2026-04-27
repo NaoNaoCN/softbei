@@ -1,5 +1,6 @@
 .claude
 /CLAUDE.md
+*.pdf
 
 # 环境变量
 .env

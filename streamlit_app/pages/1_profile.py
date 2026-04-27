@@ -6,7 +6,9 @@ streamlit_app/pages/1_profile.py
 import httpx
 import streamlit as st
 
-from streamlit_app.app import API_BASE_URL
+from streamlit_app.app import API_BASE_URL, init_session_state
+
+init_session_state()
 
 st.set_page_config(page_title="我的画像", page_icon="🧠")
 st.title("🧠 我的学习画像")

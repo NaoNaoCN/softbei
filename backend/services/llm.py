@@ -76,8 +76,10 @@ def _get_embedding_model():
     """单例加载 sentence-transformers BGE-M3 模型（避免每次重新加载）。"""
     global _embedding_model
     if _embedding_model is None:
+        logger.info("[Embedding] 开始加载模型...")
         from sentence_transformers import SentenceTransformer
         _embedding_model = SentenceTransformer(config.embedding.model)
+        logger.info("[Embedding] 模型加载完成")
     return _embedding_model
 
 
@@ -175,10 +177,10 @@ async def stream_chat_completion(
 async def get_embedding(text: str) -> list[float]:
     """
     获取文本的向量表示。
-    根据 config.embedding.use_spark 决定使用讯飞 API 还是本地模型。
+    根据 config.embedding.use_spark 决定使用 API 还是本地模型。
     """
     if config.embedding.use_spark:
-        return await _spark_embedding(text)
+        return await _api_embedding(text)
     return await _local_embedding(text)
 
 
@@ -192,6 +194,14 @@ async def _local_embedding(text: str) -> list[float]:
         return []
 
 
-async def _spark_embedding(text: str) -> list[float]:
-    """调用讯飞星火嵌入 API。"""
-    raise NotImplementedError("Spark embedding not implemented yet.")
+async def _api_embedding(text: str) -> list[float]:
+    """调用通义千问 text-embedding-v4 API。"""
+    client = AsyncOpenAI(
+        api_key=config.llm.api_key,
+        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+    )
+    response = await client.embeddings.create(
+        model="text-embedding-v4",
+        input=text,
+    )
+    return response.data[0].embedding

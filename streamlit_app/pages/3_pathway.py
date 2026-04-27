@@ -6,7 +6,9 @@ streamlit_app/pages/3_pathway.py
 import httpx
 import streamlit as st
 
-from streamlit_app.app import API_BASE_URL
+from streamlit_app.app import API_BASE_URL, init_session_state
+
+init_session_state()
 
 st.set_page_config(page_title="学习路径", page_icon="🗺️", layout="wide")
 st.title("🗺️ 学习路径 & 知识图谱")
@@ -71,7 +73,8 @@ user_id = st.session_state["user_id"]
 tab_graph, tab_path, tab_records = st.tabs(["知识图谱", "我的学习路径", "学习记录"])
 
 with tab_graph:
-    col_depth, col_root, col_refresh = st.columns([1, 2, 1])
+    # 筛选控制栏
+    col_depth, col_root, col_type_filter, col_search, col_refresh = st.columns([1, 2, 1, 2, 1])
     with col_depth:
         depth = st.selectbox("展开深度", [1, 2, 3, 4, 5], index=2)
     with col_root:
@@ -83,6 +86,11 @@ with tab_graph:
                 if node.get("type") in ("Course", "Chapter"):
                     root_options.append(node.get("name", node["id"]))
         selected_root_name = st.selectbox("选择根节点", root_options)
+    with col_type_filter:
+        type_options = ["全部", "Course", "Chapter", "KnowledgePoint", "SubPoint", "Concept"]
+        selected_type = st.selectbox("节点类型", type_options)
+    with col_search:
+        search_query = st.text_input("搜索知识点", placeholder="输入名称搜索")
     with col_refresh:
         st.write("")
         if st.button("🔄 刷新", key="refresh_graph"):
@@ -98,8 +106,62 @@ with tab_graph:
 
     full_graph = fetch_kg_graph(root_id=root_id, depth=depth)
     if full_graph:
+        # 按类型筛选
+        if selected_type != "全部":
+            full_graph["nodes"] = [n for n in full_graph["nodes"] if n.get("type") == selected_type]
+            valid_ids = {n["id"] for n in full_graph["nodes"]}
+            full_graph["edges"] = [e for e in full_graph["edges"] if e["source_id"] in valid_ids and e["target_id"] in valid_ids]
+
+        # 搜索高亮
+        if search_query:
+            matching_ids = {n["id"] for n in full_graph["nodes"] if search_query.lower() in n.get("name", "").lower()}
+            if matching_ids:
+                # 保留匹配节点及其直接关联节点
+                related_ids = set()
+                for e in full_graph["edges"]:
+                    if e["source_id"] in matching_ids:
+                        related_ids.add(e["target_id"])
+                    if e["target_id"] in matching_ids:
+                        related_ids.add(e["source_id"])
+                keep_ids = matching_ids | related_ids
+                full_graph["nodes"] = [n for n in full_graph["nodes"] if n["id"] in keep_ids]
+                full_graph["edges"] = [e for e in full_graph["edges"] if e["source_id"] in keep_ids and e["target_id"] in keep_ids]
+
         from streamlit_app.components.mindmap import render_kg_graph
-        render_kg_graph(full_graph)
+        col_graph, col_detail = st.columns([3, 1])
+        with col_graph:
+            clicked_id = render_kg_graph(full_graph, on_click=True)
+        with col_detail:
+            # 节点详情侧边栏
+            detail_id = clicked_id or st.session_state.get("selected_kg_node")
+            if clicked_id:
+                st.session_state["selected_kg_node"] = clicked_id
+            if detail_id:
+                node_info = next((n for n in full_graph["nodes"] if n["id"] == detail_id), None)
+                if node_info:
+                    type_icon = {"Course": "📘", "Chapter": "📖", "KnowledgePoint": "📌", "SubPoint": "📍", "Concept": "💡"}.get(node_info.get("type", ""), "📦")
+                    st.markdown(f"### {type_icon} {node_info['name']}")
+                    st.caption(f"类型: {node_info.get('type', '未知')}")
+                    st.caption(f"ID: {node_info['id']}")
+                    extra = node_info.get("extra", {})
+                    if isinstance(extra, dict) and extra.get("description"):
+                        st.markdown(f"**描述:** {extra['description']}")
+                    # 关联关系
+                    related_edges = [e for e in full_graph["edges"] if e["source_id"] == detail_id or e["target_id"] == detail_id]
+                    if related_edges:
+                        st.markdown("**关联关系:**")
+                        for e in related_edges[:10]:
+                            other_id = e["target_id"] if e["source_id"] == detail_id else e["source_id"]
+                            other_node = next((n for n in full_graph["nodes"] if n["id"] == other_id), None)
+                            other_name = other_node["name"] if other_node else other_id
+                            direction = "→" if e["source_id"] == detail_id else "←"
+                            st.caption(f"{direction} {other_name} ({e.get('relation', '')})")
+                    if st.button("📖 生成学习资源", key="gen_from_kg"):
+                        st.session_state["current_kp_id"] = detail_id
+                        st.session_state["current_kp_name"] = node_info["name"]
+                        st.switch_page("pages/2_generate.py")
+            else:
+                st.info("点击图中节点查看详情")
 
         # 展示节点列表供点击
         st.markdown("---")

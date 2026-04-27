@@ -43,18 +43,20 @@ async def import_pdf(
     :param db:         数据库会话（可选，无会话时仅解析和索引）
     :return:           {"doc_id": str, "chunks": int, "resource_id": uuid}
     """
+    import logging
+    _log = logging.getLogger(__name__)
     path = Path(file_path)
     doc_id = f"pdf_{uuid.uuid4().hex[:12]}"
     doc_title = title or path.stem
 
     # 1. 加载并解析 PDF
     chunks = loader.load_file(str(path), doc_id=doc_id)
-
+    _log.info(f"[import_pdf] 解析完成，生成 {len(chunks)} 个文本块")
     # 2. 索引到向量库
     indexed_count = 0
     if chunks:
         indexed_count = await rag_indexer.index_chunks(chunks)
-
+        _log.info(f"[import_pdf] 索引完成，共索引 {len(chunks)} 个文本块")
     # 3. 创建资源记录（可选）
     resource_id = None
     if db is not None:
@@ -69,7 +71,7 @@ async def import_pdf(
             },
         )
         resource_id = resource.id
-
+        _log.info(f"[import_pdf] 资源记录创建完成，ID={resource_id}")
     return {
         "doc_id": doc_id,
         "title": doc_title,

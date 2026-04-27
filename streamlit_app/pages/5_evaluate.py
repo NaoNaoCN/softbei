@@ -6,12 +6,13 @@ streamlit_app/pages/5_evaluate.py
 import httpx
 import streamlit as st
 
-from streamlit_app.app import API_BASE_URL
+from streamlit_app.app import API_BASE_URL, init_session_state
 from streamlit_app.components.quiz_card import render_quiz_card
 
 st.set_page_config(page_title="学习评估", page_icon="📝", layout="wide")
 st.title("📝 学习评估")
 
+init_session_state()
 
 # ----------------------------------------------------------
 # 辅助函数

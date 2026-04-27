@@ -13,6 +13,7 @@ from langgraph.graph import END, StateGraph
 from backend.agents import (
     code_agent,
     doc_agent,
+    kg_agent,
     mindmap_agent,
     planner_agent,
     profile_agent,
@@ -72,6 +73,7 @@ def build_graph() -> StateGraph:
     graph.add_node("summary_agent", summary_agent.run)
     graph.add_node("safety_agent", safety_agent.run)
     graph.add_node("recommend_agent", recommend_agent.run)
+    graph.add_node("kg_agent", kg_agent.run)
 
     # -- 起始节点 --
     graph.set_entry_point("profile_agent")
@@ -96,6 +98,7 @@ def build_graph() -> StateGraph:
             "quiz_agent": "quiz_agent",
             "code_agent": "code_agent",
             "summary_agent": "summary_agent",
+            "kg_agent": "kg_agent",
             "recommend_agent": "recommend_agent",
         },
     )
@@ -106,6 +109,7 @@ def build_graph() -> StateGraph:
 
     # safety → recommend → END
     graph.add_edge("safety_agent", "recommend_agent")
+    graph.add_edge("kg_agent", "recommend_agent")  # KG 跳过 safety，直接到 recommend
     graph.add_edge("recommend_agent", END)
 
     return graph.compile()

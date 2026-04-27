@@ -8,10 +8,12 @@ import time
 import httpx
 import streamlit as st
 
-from streamlit_app.app import API_BASE_URL
+from streamlit_app.app import API_BASE_URL, init_session_state
 from streamlit_app.components.mindmap import render_mindmap
 from streamlit_app.components.quiz_card import render_quiz_card
 from streamlit_app.components.resource_card import render_resource_card
+
+init_session_state()
 
 st.set_page_config(page_title="生成资源", page_icon="✨", layout="wide")
 st.title("✨ 生成学习资源")

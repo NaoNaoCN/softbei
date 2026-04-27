@@ -113,6 +113,12 @@ def delete_by_doc_id(doc_id: str, collection_name: Optional[str] = None) -> None
     col.delete(where={"doc_id": doc_id})
 
 
+def get_documents_by_doc_id(doc_id: str, collection_name: Optional[str] = None) -> dict:
+    """按 doc_id 元数据获取所有文本块（不需要 embedding）。"""
+    col = get_or_create_collection(collection_name) if collection_name else get_collection()
+    return col.get(where={"doc_id": doc_id}, include=["documents", "metadatas"])
+
+
 def health_check() -> bool:
     """检查向量库是否可用。"""
     try:

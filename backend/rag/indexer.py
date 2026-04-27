@@ -31,8 +31,12 @@ async def index_chunks(
     :return:                成功写入的 chunk 数量
     """
     total = 0
+    import logging
+    _log = logging.getLogger(__name__)
+    _log.info(f"[Indexer] 开始索引 {len(chunks)} 个文本块，batch_size={batch_size}")
     for i in range(0, len(chunks), batch_size):
         batch = chunks[i : i + batch_size]
+        _log.info(f"[Indexer] 正在 embedding 第 {i+1}-{i+len(batch)}/{len(chunks)} 块...")
         embeddings = await _embed_batch([c.text for c in batch])
         upsert_documents(
             ids=[c.chunk_id for c in batch],

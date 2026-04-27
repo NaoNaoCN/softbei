@@ -21,6 +21,7 @@ SYSTEM_PROMPT = """你是一个学习计划分析助手。
    - quiz: 测验题目（当学生想测试自己时）
    - code: 代码示例（当学生想看代码实现时）
    - summary: 知识总结（当学生想要复习总结时）
+   - kg: 知识图谱构建（当学生想构建知识图谱、分析知识结构时）
 2. 目标知识点名称（从学生消息中提取）
 
 {kp_list_section}
@@ -123,6 +124,7 @@ def route_by_resource_type(state: AgentState) -> str:
         ResourceType.quiz: "quiz_agent",
         ResourceType.code: "code_agent",
         ResourceType.summary: "summary_agent",
+        ResourceType.kg: "kg_agent",
     }
     if state.resource_type and state.resource_type in mapping:
         return mapping[state.resource_type]

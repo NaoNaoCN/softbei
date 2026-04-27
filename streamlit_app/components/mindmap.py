@@ -66,21 +66,23 @@ def render_mindmap(tree_data: dict[str, Any], height: int = 600) -> None:
     st_echarts(options=option, height=f"{height}px")
 
 
-def render_kg_graph(graph_data: dict[str, Any], height: int = 700) -> None:
+def render_kg_graph(graph_data: dict[str, Any], height: int = 700, on_click: bool = False) -> str | None:
     """
     渲染知识图谱（ECharts graph 力导向布局）。
 
     :param graph_data: 包含 nodes / edges 列表的字典（KGGraphOut 序列化）
     :param height:     图表高度（像素）
+    :param on_click:   是否启用点击事件回调
+    :return:           点击的节点 ID（如果 on_click=True），否则 None
     """
     if not graph_data:
         st.info("暂无知识图谱数据。")
-        return
+        return None
 
     if not _ECHARTS_AVAILABLE:
         st.warning("streamlit-echarts 未安装，以 JSON 形式展示。")
         st.json(graph_data)
-        return
+        return None
 
     # 节点类型颜色映射
     color_map = {
@@ -91,23 +93,43 @@ def render_kg_graph(graph_data: dict[str, Any], height: int = 700) -> None:
         "Concept": "#73c0de",
     }
 
-    nodes = [
-        {
+    # 计算每个节点的关联边数量（用于动态大小）
+    edge_count: dict[str, int] = {}
+    for e in graph_data.get("edges", []):
+        edge_count[e["source_id"]] = edge_count.get(e["source_id"], 0) + 1
+        edge_count[e["target_id"]] = edge_count.get(e["target_id"], 0) + 1
+
+    base_sizes = {"Course": 40, "Chapter": 30, "KnowledgePoint": 20, "SubPoint": 14, "Concept": 12}
+
+    nodes = []
+    for n in graph_data.get("nodes", []):
+        base = base_sizes.get(n["type"], 12)
+        ec = edge_count.get(n["id"], 0)
+        size = base + min(ec * 3, 20)  # 关联越多越大，上限 +20
+        desc = n.get("extra", {}).get("description", "") if isinstance(n.get("extra"), dict) else ""
+        nodes.append({
             "id": n["id"],
             "name": n["name"],
-            "symbolSize": {"Course": 40, "Chapter": 30, "KnowledgePoint": 20}.get(n["type"], 12),
+            "symbolSize": size,
             "itemStyle": {"color": color_map.get(n["type"], "#999")},
             "category": n["type"],
-        }
-        for n in graph_data.get("nodes", [])
-    ]
+            "tooltip": {"formatter": f"<b>{n['name']}</b><br/>类型: {n['type']}<br/>{desc}"},
+        })
+
     links = [
-        {"source": e["source_id"], "target": e["target_id"], "label": {"show": False}}
+        {
+            "source": e["source_id"],
+            "target": e["target_id"],
+            "label": {"show": False},
+            "lineStyle": {"type": {"REQUIRES": "dashed", "RELATED_TO": "dotted"}.get(e.get("relation", ""), "solid")},
+        }
         for e in graph_data.get("edges", [])
     ]
 
+    categories = [{"name": k} for k in color_map]
+
     option = {
-        "tooltip": {},
+        "tooltip": {"trigger": "item"},
         "legend": [{"data": list(color_map.keys())}],
         "series": [
             {
@@ -115,12 +137,16 @@ def render_kg_graph(graph_data: dict[str, Any], height: int = 700) -> None:
                 "layout": "force",
                 "data": nodes,
                 "links": links,
+                "categories": categories,
                 "roam": True,
                 "label": {"show": True, "position": "right", "fontSize": 11},
-                "force": {"repulsion": 200, "edgeLength": 80},
-                "emphasis": {"focus": "adjacency"},
+                "force": {"repulsion": 200, "edgeLength": 80, "gravity": 0.1},
+                "emphasis": {"focus": "adjacency", "lineStyle": {"width": 3}},
                 "lineStyle": {"color": "source", "curveness": 0.3},
             }
         ],
     }
-    st_echarts(options=option, height=f"{height}px")
+
+    events = {"click": "function(params){return params.data ? params.data.id : null;}"} if on_click else {}
+    result = st_echarts(options=option, height=f"{height}px", events=events)
+    return result if on_click else None
