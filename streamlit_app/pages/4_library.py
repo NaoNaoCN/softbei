@@ -65,6 +65,58 @@ def delete_resource(resource_id: str) -> bool:
         return False
 
 
+def import_document(file_obj, file_name: str, title: str = None, user_id: str = None) -> dict | None:
+    """上传并导入 PDF 文档。"""
+    try:
+        files = {"file": (file_name, file_obj, "application/pdf")}
+        data = {}
+        if title:
+            data["title"] = title
+        if user_id:
+            data["user_id"] = user_id
+        resp = httpx.post(
+            f"{API_BASE_URL}/documents/import",
+            files=files,
+            data=data,
+            timeout=30.0,
+        )
+        if resp.status_code == 200:
+            return resp.json()
+        else:
+            st.error(f"导入失败：{resp.text}")
+    except Exception as e:
+        st.error(f"导入失败：{e}")
+    return None
+
+
+def fetch_documents(user_id: str, skip: int = 0, limit: int = 20) -> list[dict]:
+    """获取文档列表。"""
+    try:
+        resp = httpx.get(
+            f"{API_BASE_URL}/documents",
+            params={"user_id": user_id, "skip": skip, "limit": limit},
+            timeout=10.0,
+        )
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return []
+
+
+def delete_document(doc_id: str, user_id: str) -> bool:
+    """删除文档。"""
+    try:
+        resp = httpx.delete(
+            f"{API_BASE_URL}/documents/{doc_id}",
+            params={"user_id": user_id},
+            timeout=10.0,
+        )
+        return resp.status_code == 200
+    except Exception:
+        return False
+
+
 def get_resource_stats(user_id: str) -> dict:
     """获取资源统计信息。"""
     try:
@@ -95,6 +147,32 @@ if "lib_view_mode" not in st.session_state:
     st.session_state["lib_view_mode"] = "grid"  # grid or list
 if "lib_preview_id" not in st.session_state:
     st.session_state["lib_preview_id"] = None
+
+# ----------------------------------------------------------
+# PDF 导入区
+# ----------------------------------------------------------
+
+st.subheader("导入 PDF 文档")
+with st.expander("📤 上传 PDF 文件", expanded=False):
+    uploaded_file = st.file_uploader("选择 PDF 文件", type=["pdf"])
+    col_upload1, col_upload2 = st.columns([3, 1])
+    with col_upload1:
+        doc_title = st.text_input("文档标题（可选）", placeholder="留空则使用文件名")
+    with col_upload2:
+        st.write("")  # 占位对齐
+    if uploaded_file is not None:
+        st.success(f"已选择：{uploaded_file.name}")
+        if st.button("🚀 开始导入", use_container_width=True):
+            with st.spinner("正在解析并索引 PDF..."):
+                result = import_document(uploaded_file, uploaded_file.name, doc_title or None, user_id)
+                if result and result.get("success"):
+                    st.success(
+                        f"导入成功！\n"
+                        f"文档：「{result['title']}」\n"
+                        f"切分为 {result['chunks']} 个文本块，已索引 {result['indexed']} 个。"
+                    )
+                    st.rerun()
+    st.markdown("---")
 
 # 筛选区
 st.subheader("筛选条件")

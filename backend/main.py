@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import jwt
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,6 +51,7 @@ from backend.models.schemas import (
 )
 from backend.services import profile as profile_svc
 from backend.services import resource as resource_svc
+from backend.services import document as document_svc
 from backend.db.models import User, ChatSession, ChatMessage, KGNode, KGEdge, QuizItem, QuizAttempt, LearningPath, LearningPathItem, ResourceMeta
 
 # ===========================================================
@@ -549,6 +550,107 @@ async def remove_pathway_item(
     deleted = await pathway_svc.remove_pathway_item(item_id, user_id, db)
     if not deleted:
         raise HTTPException(status_code=404, detail="Item not found or unauthorized")
+    return {"deleted": True}
+
+
+# ===============================================================
+# 文档导入
+# ===============================================================
+
+@app.post("/documents/import", tags=["documents"])
+async def import_document(
+    user_id: uuid.UUID,
+    file: UploadFile = File(...),
+    title: Optional[str] = None,
+    db: AsyncSession = Depends(get_session),
+):
+    """
+    上传并导入 PDF 文档。
+
+    - 保存文件到 uploaded_docs 目录
+    - 解析 PDF 内容并切分为文本块
+    - 索引到向量库（供 RAG 检索使用）
+    - 创建资源记录到数据库
+    """
+    file_name = file.filename or "unknown.pdf"
+    if not file_name.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="只支持 PDF 格式文件",
+        )
+
+    try:
+        content = await file.read()
+        saved_path = document_svc.save_uploaded_file(content, file_name)
+        result = await document_svc.import_pdf(
+            file_path=saved_path,
+            user_id=user_id,
+            title=title,
+            db=db,
+        )
+        return {
+            "success": True,
+            "doc_id": result["doc_id"],
+            "title": result["title"],
+            "file_name": result["file_name"],
+            "chunks": result["chunks"],
+            "indexed": result["indexed"],
+            "resource_id": result["resource_id"],
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"导入失败：{str(e)}",
+        )
+
+
+@app.get("/documents", tags=["documents"])
+async def list_documents(
+    user_id: uuid.UUID,
+    skip: int = 0,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_session),
+):
+    """列举用户导入的文档列表。"""
+    from backend.db.crud import select as db_select
+
+    resources = await db_select(
+        db, ResourceMeta,
+        filters={"user_id": user_id, "resource_type": "doc"},
+        limit=limit,
+        offset=skip,
+    )
+    return [
+        {
+            "id": str(r.id),
+            "title": r.title or "无标题",
+            "kp_id": r.kp_id,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in resources
+    ]
+
+
+@app.delete("/documents/{doc_id}", tags=["documents"])
+async def delete_document(
+    doc_id: str,
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_session),
+):
+    """删除文档（同时从向量库移除）。"""
+    from backend.db.crud import delete_by_id
+    from backend.db.vector import delete_by_doc_id
+
+    try:
+        delete_by_doc_id(doc_id)
+    except Exception:
+        pass
+
+    from backend.db.crud import select_one
+    resource = await select_one(db, ResourceMeta, filters={"kp_id": doc_id, "user_id": user_id})
+    if resource:
+        await delete_by_id(db, ResourceMeta, resource.id)
+
     return {"deleted": True}
 
 

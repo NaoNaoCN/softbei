@@ -107,6 +107,12 @@ def delete_documents(ids: list[str], collection_name: Optional[str] = None) -> N
     col.delete(ids=ids)
 
 
+def delete_by_doc_id(doc_id: str, collection_name: Optional[str] = None) -> None:
+    """删除指定 doc_id 的所有向量（根据 metadata 中的 doc_id 过滤）。"""
+    col = get_or_create_collection(collection_name) if collection_name else get_collection()
+    col.delete(where={"doc_id": doc_id})
+
+
 def health_check() -> bool:
     """检查向量库是否可用。"""
     try:
