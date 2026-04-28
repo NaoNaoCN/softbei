@@ -6,9 +6,11 @@ CodeAgent：生成代码示例或编程练习题（含参考答案）。
 from __future__ import annotations
 
 from backend.models.schemas import AgentState
+from backend.agents.utils import resolve_kp_name
 from backend.rag.retriever import retrieve_by_kp, format_context
 from backend.services import profile as profile_svc
 from backend.services.llm import chat_completion
+from langchain_core.runnables import RunnableConfig
 
 
 SYSTEM_PROMPT = """你是一位编程教学专家。
@@ -28,7 +30,7 @@ SYSTEM_PROMPT = """你是一位编程教学专家。
 """
 
 
-async def run(state: AgentState, config: dict | None = None) -> AgentState:
+async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     """
     CodeAgent 节点入口。
 
@@ -37,7 +39,7 @@ async def run(state: AgentState, config: dict | None = None) -> AgentState:
     2. 调用 LLM 生成代码内容
     3. 写入 state.draft_content
     """
-    kp_name = state.kp_id or "未知知识点"
+    kp_name = await resolve_kp_name(state, config)
 
     # 检索相关文档
     try:

@@ -9,6 +9,7 @@ import json
 
 from backend.models.schemas import AgentState
 from backend.services.llm import chat_completion
+from langchain_core.runnables import RunnableConfig
 
 
 SYSTEM_PROMPT = """你是一位内容质量审核专家。
@@ -34,7 +35,7 @@ SYSTEM_PROMPT = """你是一位内容质量审核专家。
 """
 
 
-async def run(state: AgentState, config: dict | None = None) -> AgentState:
+async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     """
     SafetyAgent 节点入口。
 
@@ -67,9 +68,15 @@ async def run(state: AgentState, config: dict | None = None) -> AgentState:
         issues = result.get("issues", [])
         revised_content = result.get("revised_content")
 
+        # 结构化内容（JSON）不使用 LLM 修正版本，直接保留原始 draft
+        if not passed and revised_content and isinstance(revised_content, str):
+            final = revised_content
+        else:
+            final = state.draft_content
+
         state = state.model_copy(update={
             "safety_passed": passed,
-            "final_content": revised_content if not passed else state.draft_content,
+            "final_content": final,
         })
 
         if not passed and issues:

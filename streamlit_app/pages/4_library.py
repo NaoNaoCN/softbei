@@ -3,6 +3,8 @@ streamlit_app/pages/4_library.py
 资源库页：浏览、搜索、筛选已生成的学习资源，支持预览和删除。
 """
 
+import time
+
 import httpx
 import streamlit as st
 
@@ -132,20 +134,44 @@ def get_resource_stats(user_id: str) -> dict:
     return {}
 
 
-def build_kg_for_doc(doc_id: str) -> dict | None:
-    """调用后端构建知识图谱。"""
+def start_kg_build(doc_id: str) -> dict | None:
+    """触发异步知识图谱构建，返回任务信息。"""
     try:
         resp = httpx.post(
             f"{API_BASE_URL}/kg/build",
             params={"doc_id": doc_id},
-            timeout=300.0,
+            timeout=10.0,
         )
         if resp.status_code == 200:
             return resp.json()
         else:
-            st.error(f"构建失败：{resp.text}")
+            st.error(f"构建启动失败：{resp.text}")
     except Exception as e:
-        st.error(f"构建失败：{e}")
+        st.error(f"构建启动失败：{e}")
+    return None
+
+
+def poll_kg_status(task_id: str) -> dict | None:
+    """轮询知识图谱构建任务状态。"""
+    try:
+        resp = httpx.get(f"{API_BASE_URL}/kg/build/{task_id}/status", timeout=10.0)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return None
+
+
+def check_kg_task_by_doc(doc_id: str) -> dict | None:
+    """按 doc_id 查询最新构建任务状态（刷新后恢复跟踪）。"""
+    try:
+        resp = httpx.get(f"{API_BASE_URL}/kg/build/by-doc/{doc_id}/status", timeout=10.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("status") != "none":
+                return data
+    except Exception:
+        pass
     return None
 
 
@@ -198,22 +224,59 @@ if docs:
     for doc in docs:
         doc_title = doc.get("title", "无标题")
         doc_id = doc.get("kp_id", doc.get("id", ""))
+        task_key = f"kg_task_{doc_id}"
+
         with st.container(border=True):
             col_d1, col_d2, col_d3 = st.columns([4, 2, 1])
             with col_d1:
                 st.write(f"📄 **{doc_title}**")
             with col_d2:
-                if st.button("🔗 构建知识图谱", key=f"kg_{doc_id}"):
-                    with st.spinner("正在构建知识图谱，请稍候..."):
-                        kg_result = build_kg_for_doc(doc_id)
-                        if kg_result and kg_result.get("success"):
+                # 检查是否有进行中的任务（刷新浏览器后恢复）
+                if task_key not in st.session_state:
+                    existing = check_kg_task_by_doc(doc_id)
+                    if existing and existing.get("status") in ("pending", "running"):
+                        st.session_state[task_key] = existing.get("task_id")
+
+                if task_key in st.session_state:
+                    # 有进行中的任务，显示进度
+                    task_id = st.session_state[task_key]
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    task_data = poll_kg_status(task_id)
+                    if task_data:
+                        progress = task_data.get("progress", 0)
+                        stage = task_data.get("stage", "")
+                        task_status = task_data.get("status", "")
+                        progress_bar.progress(
+                            min(progress, 100) / 100,
+                            text=f"{stage}（{progress}%）",
+                        )
+                        if task_status == "done":
+                            progress_bar.progress(1.0, text="构建完成")
                             st.success(
                                 f"知识图谱构建完成！"
-                                f"提取 {kg_result['nodes_count']} 个知识点，"
-                                f"{kg_result['edges_count']} 条关系。"
+                                f"提取 {task_data.get('nodes_count', 0)} 个知识点，"
+                                f"{task_data.get('edges_count', 0)} 条关系。"
                             )
+                            del st.session_state[task_key]
+                        elif task_status == "failed":
+                            progress_bar.empty()
+                            st.error(f"构建失败：{task_data.get('error_msg', '未知错误')}")
+                            del st.session_state[task_key]
                         else:
-                            st.error("知识图谱构建失败")
+                            # 仍在进行中，2 秒后自动刷新
+                            time.sleep(2)
+                            st.rerun()
+                    else:
+                        st.warning("无法获取任务状态")
+                        del st.session_state[task_key]
+                else:
+                    # 没有进行中的任务，显示构建按钮
+                    if st.button("🔗 构建知识图谱", key=f"kg_{doc_id}"):
+                        result = start_kg_build(doc_id)
+                        if result and result.get("task_id"):
+                            st.session_state[task_key] = result["task_id"]
+                            st.rerun()
             with col_d3:
                 if st.button("🗑️", key=f"del_doc_{doc_id}"):
                     if delete_document(doc_id, user_id):

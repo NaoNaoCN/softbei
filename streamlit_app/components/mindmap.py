@@ -126,7 +126,7 @@ def render_kg_graph(graph_data: dict[str, Any], height: int = 700, on_click: boo
         for e in graph_data.get("edges", [])
     ]
 
-    categories = [{"name": k} for k in color_map]
+    categories = [{"name": k, "itemStyle": {"color": v}} for k, v in color_map.items()]
 
     option = {
         "tooltip": {"trigger": "item"},

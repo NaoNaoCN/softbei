@@ -221,12 +221,19 @@ async def chat(
     # 如果生成了资源，持久化到 resource_meta 表
     if result.resource_type and result.draft_content:
         try:
-            from backend.db.crud import insert
+            from backend.db.crud import insert, select_one
+            # 解析 kp_id → 知识点名称
+            kp_id = result.kp_id or "unknown"
+            kp_title = kp_id
+            if kp_id.startswith("kp_"):
+                node = await select_one(db, KGNode, filters={"id": kp_id})
+                if node:
+                    kp_title = node.name
             await insert(db, ResourceMeta, data={
                 "user_id": user_id,
-                "kp_id": result.kp_id or "unknown",
+                "kp_id": kp_id,
                 "resource_type": result.resource_type.value,
-                "title": f"{result.kp_id or '学习资源'} - {result.resource_type.value}",
+                "title": f"{kp_title} - {result.resource_type.value}",
                 "content": result.draft_content,
             })
         except Exception as e:
@@ -247,14 +254,49 @@ async def chat(
 @app.get("/kg/graph", response_model=KGGraphOut, tags=["knowledge-graph"])
 async def get_kg_graph(
     root_id: Optional[str] = None,
+    doc_id: Optional[str] = None,
     depth: int = 3,
     db: AsyncSession = Depends(get_session),
 ):
-    """获取知识图谱子图，供前端 ECharts 渲染。"""
+    """获取知识图谱子图，供前端 ECharts 渲染。支持按 doc_id 过滤 + depth 控制展开层数。"""
     from backend.db.crud import select as db_select
 
-    nodes = await db_select(db, KGNode)
-    edges = await db_select(db, KGEdge)
+    filters = {"course_id": doc_id} if doc_id else {}
+    all_nodes = await db_select(db, KGNode, filters=filters)
+    node_map = {n.id: n for n in all_nodes}
+    node_ids = set(node_map.keys())
+
+    all_edges = await db_select(db, KGEdge)
+    edges_in_scope = [e for e in all_edges if e.source_id in node_ids and e.target_id in node_ids]
+
+    # depth 统一按节点类型层级过滤
+    type_levels = ["Course", "Chapter", "KnowledgePoint", "SubPoint", "Concept"]
+    allowed_types = set(type_levels[:depth])
+    reachable = {nid for nid, n in node_map.items() if n.node_type in allowed_types}
+
+    # 如果指定了 root_id，进一步限制为该根节点的层级子树
+    if root_id and root_id in node_ids:
+        hierarchy_adj: dict[str, list[str]] = {nid: [] for nid in node_ids}
+        for e in edges_in_scope:
+            if e.relation in ("IS_PART_OF", "CONTAINS"):
+                hierarchy_adj[e.target_id].append(e.source_id)
+                hierarchy_adj[e.source_id].append(e.target_id)
+        # BFS 找出 root 的所有后代
+        descendants: set[str] = {root_id}
+        frontier = [root_id]
+        while frontier:
+            next_frontier = []
+            for nid in frontier:
+                for child in hierarchy_adj.get(nid, []):
+                    if child not in descendants:
+                        descendants.add(child)
+                        next_frontier.append(child)
+            frontier = next_frontier
+        reachable = reachable & descendants
+
+    # 过滤节点和边
+    filtered_nodes = [n for n in all_nodes if n.id in reachable]
+    filtered_edges = [e for e in edges_in_scope if e.source_id in reachable and e.target_id in reachable]
 
     kg_nodes = [
         KGNodeOut(
@@ -263,9 +305,9 @@ async def get_kg_graph(
             name=n.name,
             difficulty=None,
             is_core=False,
-            extra={},
+            extra={"description": n.description or ""},
         )
-        for n in nodes
+        for n in filtered_nodes
     ]
     kg_edges = [
         KGEdgeOut(
@@ -273,7 +315,7 @@ async def get_kg_graph(
             target_id=e.target_id,
             relation=KGRelation(e.relation),
         )
-        for e in edges
+        for e in filtered_edges
     ]
     return KGGraphOut(nodes=kg_nodes, edges=kg_edges)
 
@@ -281,18 +323,86 @@ async def get_kg_graph(
 @app.post("/kg/build", tags=["knowledge-graph"])
 async def build_kg_endpoint(
     doc_id: str,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_session),
 ):
-    """从已导入文档构建知识图谱。"""
-    from backend.services.kg_builder import build_kg
-    try:
-        print(f"[POST /kg/build] 开始构建知识图谱，doc_id={doc_id}")
-        result = await build_kg(doc_id, db)
-        return {"success": True, **result}
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"知识图谱构建失败：{e}")
+    """异步构建知识图谱，立即返回任务 ID 供轮询。"""
+    from backend.db.crud import insert
+    from backend.db.models import KGBuildTask
+    from backend.models.schemas import KGBuildTaskOut
+
+    print(f"[POST /kg/build] 创建异步构建任务，doc_id={doc_id}")
+    task = await insert(db, KGBuildTask, data={
+        "doc_id": doc_id,
+        "status": "pending",
+        "progress": 0,
+        "stage": "排队中",
+    })
+
+    from backend.services.kg_builder import run_kg_build
+    background_tasks.add_task(run_kg_build, task.id, doc_id, db)
+
+    return KGBuildTaskOut(
+        task_id=task.id,
+        doc_id=doc_id,
+        status="pending",
+        progress=0,
+        stage="排队中",
+    )
+
+
+@app.get("/kg/build/{task_id}/status", tags=["knowledge-graph"])
+async def get_kg_build_status(
+    task_id: uuid.UUID,
+    db: AsyncSession = Depends(get_session),
+):
+    """轮询知识图谱构建任务状态。"""
+    from backend.db.crud import select_one
+    from backend.db.models import KGBuildTask
+    from backend.models.schemas import KGBuildTaskOut
+
+    task = await select_one(db, KGBuildTask, filters={"id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return KGBuildTaskOut(
+        task_id=task.id,
+        doc_id=task.doc_id,
+        status=task.status,
+        progress=task.progress,
+        stage=task.stage,
+        nodes_count=task.nodes_count,
+        edges_count=task.edges_count,
+        error_msg=task.error_message,
+    )
+
+
+@app.get("/kg/build/by-doc/{doc_id}/status", tags=["knowledge-graph"])
+async def get_kg_build_status_by_doc(
+    doc_id: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """按 doc_id 查询最新的构建任务状态（刷新浏览器后恢复跟踪）。"""
+    from backend.db.crud import select as db_select
+    from backend.db.models import KGBuildTask
+    from backend.models.schemas import KGBuildTaskOut
+
+    tasks = await db_select(
+        db, KGBuildTask, filters={"doc_id": doc_id},
+        order_by=KGBuildTask.created_at.desc(), limit=1,
+    )
+    if not tasks:
+        return {"status": "none"}
+    task = tasks[0]
+    return KGBuildTaskOut(
+        task_id=task.id,
+        doc_id=task.doc_id,
+        status=task.status,
+        progress=task.progress,
+        stage=task.stage,
+        nodes_count=task.nodes_count,
+        edges_count=task.edges_count,
+        error_msg=task.error_message,
+    )
 
 
 # ===========================================================

@@ -8,8 +8,10 @@ from __future__ import annotations
 import json
 
 from backend.models.schemas import AgentState
+from backend.agents.utils import resolve_kp_name
 from backend.rag.retriever import retrieve_by_kp, format_context
 from backend.services.llm import chat_completion
+from langchain_core.runnables import RunnableConfig
 
 
 SYSTEM_PROMPT = """你是一位专业的教学资料撰写专家。
@@ -27,7 +29,7 @@ SYSTEM_PROMPT = """你是一位专业的教学资料撰写专家。
 """
 
 
-async def run(state: AgentState, config: dict | None = None) -> AgentState:
+async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     """
     DocAgent 节点入口。
 
@@ -36,9 +38,9 @@ async def run(state: AgentState, config: dict | None = None) -> AgentState:
     2. 构造 RAG prompt，调用 LLM 生成 Markdown 文档
     3. 将 draft_content 写入 state
     """
-    # 获取 kp_name（从 retrieved_docs 元数据或直接用 kp_id）
-    kp_name = state.kp_id or "未知知识点"
-
+    # 获取 kp_name（从 DB 解析 ID → 名称）
+    kp_name = await resolve_kp_name(state, config)
+    print(f"DocAgent: resolved kp_name = {kp_name}")
     # 检索相关文档
     try:
         chunks = await retrieve_by_kp(kp_name, n_results=5)

@@ -99,13 +99,20 @@ async def create_generation_task(
     实际异步执行由 BackgroundTasks / Celery 触发。
     """
     # 先创建资源记录
+    # 解析 kp_id → 知识点名称用于标题
+    kp_title = request.kp_id
+    if request.kp_id.startswith("kp_"):
+        from backend.db.models import KGNode
+        node = await select_one(db, KGNode, filters={"id": request.kp_id})
+        if node:
+            kp_title = node.name
     resource = await insert(
         db, ResourceMeta,
         data={
             "user_id": user_id,
             "kp_id": request.kp_id,
             "resource_type": request.resource_type.value,
-            "title": f"{request.resource_type.value} - {request.kp_id}",
+            "title": f"{kp_title} — {request.resource_type.value}",
         },
         commit=False,
     )

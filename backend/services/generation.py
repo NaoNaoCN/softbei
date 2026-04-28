@@ -37,10 +37,20 @@ async def run_generation(
         {"status": TaskStatus.running.value, "progress": 10},
     )
 
+    # 解析 kp_id → 知识点名称
+    kp_name = request.kp_id
+    if request.kp_id.startswith("kp_"):
+        from backend.db.models import KGNode
+        node = await select_one(db, KGNode, filters={"id": request.kp_id})
+        if node:
+            kp_name = node.name
+
     initial_state = AgentState(
         user_id=user_id,
         session_id=session_id,
-        user_message=f"请生成一份关于 {request.kp_id} 的 {request.resource_type.value} 学习资源",
+        user_message=f"请生成一份关于 {kp_name} 的 {request.resource_type.value} 学习资源",
+        kp_id=request.kp_id,
+        resource_type=request.resource_type,
     )
 
     try:

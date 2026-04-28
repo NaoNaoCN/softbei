@@ -8,8 +8,10 @@ from __future__ import annotations
 import json
 
 from backend.models.schemas import AgentState
+from backend.agents.utils import resolve_kp_name
 from backend.rag.retriever import retrieve_by_kp, format_context
 from backend.services.llm import chat_completion
+from langchain_core.runnables import RunnableConfig
 
 
 SYSTEM_PROMPT = """你是一位思维导图设计专家。
@@ -34,7 +36,7 @@ SYSTEM_PROMPT = """你是一位思维导图设计专家。
 """
 
 
-async def run(state: AgentState, config: dict | None = None) -> AgentState:
+async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     """
     MindmapAgent 节点入口。
 
@@ -43,7 +45,7 @@ async def run(state: AgentState, config: dict | None = None) -> AgentState:
     2. 调用 LLM 生成 ECharts tree JSON
     3. 将 JSON 字符串存入 draft_content
     """
-    kp_name = state.kp_id or "未知知识点"
+    kp_name = await resolve_kp_name(state, config)
 
     # 检索相关文档
     try:

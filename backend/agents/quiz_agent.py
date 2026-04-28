@@ -11,8 +11,10 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.schemas import AgentState, QuestionType
+from backend.agents.utils import resolve_kp_name
 from backend.rag.retriever import retrieve_by_kp, format_context
 from backend.services.llm import chat_completion
+from langchain_core.runnables import RunnableConfig
 from backend.db.crud import insert_many
 from backend.db.models import QuizItem
 
@@ -53,7 +55,7 @@ def _get_question_counts(profile) -> tuple[int, int, int]:
     return 2, 1, 1
 
 
-async def run(state: AgentState, config: dict | None = None) -> AgentState:
+async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     """
     QuizAgent 节点入口。
 
@@ -62,7 +64,7 @@ async def run(state: AgentState, config: dict | None = None) -> AgentState:
     2. 调用 LLM 生成题目 JSON 数组
     3. 将题目列表序列化后存入 draft_content
     """
-    kp_name = state.kp_id or "未知知识点"
+    kp_name = await resolve_kp_name(state, config)
 
     # 决定题目数量
     total, single, multi = 4, 2, 1

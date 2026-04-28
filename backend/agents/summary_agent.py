@@ -6,8 +6,10 @@ SummaryAgent：生成知识点精简总结（适合复习的要点提炼）。
 from __future__ import annotations
 
 from backend.models.schemas import AgentState
+from backend.agents.utils import resolve_kp_name
 from backend.rag.retriever import retrieve_by_kp, format_context
 from backend.services.llm import chat_completion
+from langchain_core.runnables import RunnableConfig
 
 
 SYSTEM_PROMPT = """你是一位学习总结专家。
@@ -24,7 +26,7 @@ SYSTEM_PROMPT = """你是一位学习总结专家。
 """
 
 
-async def run(state: AgentState, config: dict | None = None) -> AgentState:
+async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     """
     SummaryAgent 节点入口。
 
@@ -33,7 +35,7 @@ async def run(state: AgentState, config: dict | None = None) -> AgentState:
     2. 调用 LLM 生成复习总结 Markdown
     3. 写入 state.draft_content
     """
-    kp_name = state.kp_id or "未知知识点"
+    kp_name = await resolve_kp_name(state, config)
 
     # 检索相关文档
     try:

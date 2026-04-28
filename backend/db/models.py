@@ -202,6 +202,29 @@ class GenerationTask(Base):
 
 
 # ----------------------------------------------------------
+# 5b. KGBuildTask（知识图谱构建任务）
+# ----------------------------------------------------------
+
+class KGBuildTask(Base):
+    __tablename__ = "kg_build_task"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    doc_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(
+        Enum(TaskStatus, values_callable=lambda e: [m.value for m in e]),
+        default=TaskStatus.pending,
+        nullable=False,
+    )
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    stage: Mapped[str | None] = mapped_column(String(64))
+    nodes_count: Mapped[int] = mapped_column(Integer, default=0)
+    edges_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ----------------------------------------------------------
 # 6. QuizItem + QuizAttempt
 # ----------------------------------------------------------
 

@@ -40,7 +40,16 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     1. 结合 user_message 和 profile 分析意图
     2. 确定 resource_type 和 kp_id
     3. 写入 state 供后续 Agent 使用
+
+    如果 state 中已预设了 resource_type 和 kp_id（直接生成模式），跳过 LLM 分析。
     """
+    # 如果已经预设了 resource_type 和 kp_id，直接跳过
+    if state.resource_type and state.kp_id:
+        import logging
+        logging.getLogger(__name__).warning(
+            f"[PlannerAgent] 跳过分析（已预设 resource_type={state.resource_type}, kp_id={state.kp_id}）"
+        )
+        return state
     # 从 config 中获取 db
     db = None
     if config and "configurable" in config:

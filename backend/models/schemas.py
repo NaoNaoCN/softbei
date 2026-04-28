@@ -229,6 +229,19 @@ class GenerateTaskOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class KGBuildTaskOut(BaseModel):
+    task_id: uuid.UUID
+    doc_id: str
+    status: TaskStatus
+    progress: int = Field(ge=0, le=100)
+    stage: Optional[str] = None
+    nodes_count: int = 0
+    edges_count: int = 0
+    error_msg: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
 class ResourceMetaOut(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID

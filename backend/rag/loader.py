@@ -70,6 +70,66 @@ class TextChunk:
 # 核心接口
 # ----------------------------------------------------------
 
+def extract_toc(file_path: str | Path) -> list[dict] | None:
+    """
+    从 PDF 提取目录（outline/bookmarks）结构。
+
+    返回 [{"title": "注意力机制", "page": 42, "level": 2}, ...] 或 None。
+    仅支持 PDF 格式；outline 为空或解析失败返回 None。
+    """
+    from pypdf import PdfReader
+
+    path = Path(file_path)
+    if path.suffix.lower() != ".pdf":
+        return None
+
+    try:
+        reader = PdfReader(str(path))
+        outline = reader.outline
+        if not outline:
+            return None
+    except Exception:
+        return None
+
+    toc_items: list[dict] = []
+
+    def _resolve_page(dest) -> int:
+        """将 outline destination 解析为 0-based 页码。"""
+        try:
+            if hasattr(dest, "page"):
+                page_obj = dest.page
+                # page_obj 可能是 IndirectObject，需要 get_object
+                if hasattr(page_obj, "get_object"):
+                    page_obj = page_obj.get_object()
+                for i, p in enumerate(reader.pages):
+                    if p.get_object() == page_obj:
+                        return i
+            # fallback: 尝试 page_number 属性
+            if hasattr(dest, "page_number"):
+                return dest.page_number
+        except Exception:
+            pass
+        return 0
+
+    def _walk(items, level: int = 1):
+        for item in items:
+            if isinstance(item, list):
+                _walk(item, level + 1)
+            else:
+                try:
+                    title = item.title if hasattr(item, "title") else str(item.get("/Title", ""))
+                    title = title.strip()
+                    if not title:
+                        continue
+                    page = _resolve_page(item)
+                    toc_items.append({"title": title, "page": page, "level": level})
+                except Exception:
+                    continue
+
+    _walk(outline)
+    return toc_items if toc_items else None
+
+
 def load_file(file_path: str | Path, doc_id: Optional[str] = None) -> list[TextChunk]:
     """
     加载单个文件，自动根据扩展名选择解析器，返回文本块列表。

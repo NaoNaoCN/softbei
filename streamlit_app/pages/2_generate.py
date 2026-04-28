@@ -26,7 +26,10 @@ st.title("✨ 生成学习资源")
 def fetch_kg_nodes(root_id: str | None = None, depth: int = 2) -> list[dict]:
     """获取知识图谱节点列表供下拉选择。"""
     try:
-        resp = httpx.get(f"{API_BASE_URL}/kg/graph", params={"root_id": root_id, "depth": depth}, timeout=10.0)
+        params: dict = {"depth": depth}
+        if root_id:
+            params["root_id"] = root_id
+        resp = httpx.get(f"{API_BASE_URL}/kg/graph", params=params, timeout=10.0)
         if resp.status_code == 200:
             return resp.json().get("nodes", [])
     except Exception:
@@ -208,8 +211,8 @@ with tab_direct:
         st.subheader("生成配置")
 
         # 获取知识点
-        nodes = fetch_kg_nodes()
-        kp_options = {n["name"]: n["id"] for n in nodes if n.get("type") in ("KnowledgePoint", "SubPoint", "Concept")}
+        nodes = fetch_kg_nodes(depth=5)
+        kp_options = {n["name"]: n["id"] for n in nodes if n.get("type") in ("Chapter", "KnowledgePoint", "SubPoint", "Concept")}
 
         # 如果有预设的知识点，优先选中
         default_kp = st.session_state.get("current_kp_name", "")

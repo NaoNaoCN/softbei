@@ -18,12 +18,14 @@ st.title("🗺️ 学习路径 & 知识图谱")
 # 辅助函数
 # ----------------------------------------------------------
 
-def fetch_kg_graph(root_id: str | None = None, depth: int = 3) -> dict | None:
+def fetch_kg_graph(root_id: str | None = None, depth: int = 3, doc_id: str | None = None) -> dict | None:
     """获取知识图谱数据。"""
     try:
         params = {"depth": depth}
         if root_id:
             params["root_id"] = root_id
+        if doc_id:
+            params["doc_id"] = doc_id
         resp = httpx.get(f"{API_BASE_URL}/kg/graph", params=params, timeout=15.0)
         if resp.status_code == 200:
             return resp.json()
@@ -32,6 +34,17 @@ def fetch_kg_graph(root_id: str | None = None, depth: int = 3) -> dict | None:
     except Exception as e:
         st.error(f"获取知识图谱失败：{e}")
     return None
+
+
+def fetch_documents(user_id: str) -> list[dict]:
+    """获取用户导入的文档列表。"""
+    try:
+        resp = httpx.get(f"{API_BASE_URL}/documents", params={"user_id": user_id}, timeout=10.0)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return []
 
 
 def fetch_pathways(user_id: str) -> list[dict]:
@@ -73,13 +86,24 @@ user_id = st.session_state["user_id"]
 tab_graph, tab_path, tab_records = st.tabs(["知识图谱", "我的学习路径", "学习记录"])
 
 with tab_graph:
+    # 文档选择器
+    docs = fetch_documents(user_id)
+    doc_options = {"全部文档": None}
+    for doc in docs:
+        doc_title = doc.get("title", "无标题")
+        doc_kp_id = doc.get("kp_id", "")
+        if doc_kp_id:
+            doc_options[doc_title] = doc_kp_id
+    selected_doc_label = st.selectbox("选择文档", list(doc_options.keys()))
+    selected_doc_id = doc_options.get(selected_doc_label)
+
     # 筛选控制栏
     col_depth, col_root, col_type_filter, col_search, col_refresh = st.columns([1, 2, 1, 2, 1])
     with col_depth:
         depth = st.selectbox("展开深度", [1, 2, 3, 4, 5], index=2)
     with col_root:
         # 获取所有节点作为根节点选项
-        graph_data = fetch_kg_graph(depth=1)
+        graph_data = fetch_kg_graph(depth=1, doc_id=selected_doc_id)
         root_options = ["全部"]
         if graph_data and "nodes" in graph_data:
             for node in graph_data["nodes"]:
@@ -104,7 +128,7 @@ with tab_graph:
                 root_id = node.get("id")
                 break
 
-    full_graph = fetch_kg_graph(root_id=root_id, depth=depth)
+    full_graph = fetch_kg_graph(root_id=root_id, depth=depth, doc_id=selected_doc_id)
     if full_graph:
         # 按类型筛选
         if selected_type != "全部":
