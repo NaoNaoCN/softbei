@@ -188,9 +188,11 @@ async def _local_embedding(text: str) -> list[float]:
     """使用 sentence-transformers BGE-M3 本地嵌入。"""
     try:
         model = _get_embedding_model()
-        return model.encode(text).tolist()
-    except Exception:
-        # 模型未就绪时返回空向量，让 RAG 检索优雅降级
+        result = model.encode(text).tolist()
+        logging.getLogger(__name__).info(f"[Embedding] 本地 BGE-M3 成功，维度={len(result)}")
+        return result
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"[Embedding] 本地 BGE-M3 失败: {e}，返回空向量，RAG 将降级。")
         return []
 
 

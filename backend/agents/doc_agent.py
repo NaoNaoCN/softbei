@@ -6,12 +6,15 @@ DocAgent：基于 RAG 生成结构化学习文档（Markdown 格式）。
 from __future__ import annotations
 
 import json
+import logging
 
 from backend.models.schemas import AgentState
 from backend.agents.utils import resolve_kp_name
 from backend.rag.retriever import retrieve_by_kp, format_context
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
+
+_logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT = """你是一位专业的教学资料撰写专家。
@@ -40,13 +43,18 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     """
     # 获取 kp_name（从 DB 解析 ID → 名称）
     kp_name = await resolve_kp_name(state, config)
-    print(f"DocAgent: resolved kp_name = {kp_name}")
+    _logger.info(f"[DocAgent] kp_name={kp_name}")
     # 检索相关文档
     try:
         chunks = await retrieve_by_kp(kp_name, n_results=5)
         context = format_context(chunks, max_tokens=3000)
         retrieved_texts = [c.text for c in chunks]
-    except Exception:
+        if chunks:
+            _logger.info(f"[DocAgent] RAG 检索到 {len(chunks)} 条参考资料，将基于课程文档生成内容。")
+        else:
+            _logger.warning(f"[DocAgent] RAG 未检索到参考资料，将仅依赖 LLM 自身知识生成（质量可能下降）。")
+    except Exception as e:
+        _logger.warning(f"[DocAgent] RAG 检索异常: {e}，降级为纯 LLM 生成。")
         context = "（暂无参考资料）"
         retrieved_texts = []
 

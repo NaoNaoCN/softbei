@@ -5,11 +5,14 @@ RAG 检索器：给定用户问题，返回相关文本块及其来源引用。
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Optional
 
 from backend.db.vector import query_documents
 from backend.services.llm import get_embedding
+
+_logger = logging.getLogger(__name__)
 
 
 # ----------------------------------------------------------
@@ -46,21 +49,32 @@ async def retrieve(
     try:
         from backend.db.vector import get_collection
         col = get_collection()
-        if col.count() == 0:
+        doc_count = col.count()
+        if doc_count == 0:
+            _logger.warning("[RAG] 向量库为空（0 条文档），RAG 降级为纯 LLM 生成。请运行 python -m backend.rag.indexer 导入文档。")
             return []
-    except Exception:
+        _logger.info(f"[RAG] 向量库就绪，共 {doc_count} 条文档，开始检索: query={query[:60]!r}")
+    except Exception as e:
+        _logger.warning(f"[RAG] 向量库未初始化或不可用: {e}，RAG 降级为纯 LLM 生成。")
         return []
 
     embedding = await get_embedding(query)
     if not embedding:
+        _logger.warning("[RAG] Embedding 返回空向量，无法执行语义检索。请检查 embedding 模型/API 配置。")
         return []
+
     raw = query_documents(
         query_embedding=embedding,
         n_results=n_results,
         where=where,
         collection_name=collection_name,
     )
-    return _parse_results(raw, score_threshold)
+    chunks = _parse_results(raw, score_threshold)
+    if not chunks:
+        _logger.warning(f"[RAG] 检索完成但无结果通过阈值（threshold={score_threshold}），query={query[:60]!r}")
+    else:
+        _logger.info(f"[RAG] 检索到 {len(chunks)} 条相关文档，最高分={chunks[0].score:.3f}，最低分={chunks[-1].score:.3f}")
+    return chunks
 
 
 async def retrieve_by_kp(
@@ -91,6 +105,9 @@ def format_context(chunks: list[RetrievedChunk], max_tokens: int = 3000) -> str:
     [2] （来源：notes.md, 第一章）
     反向传播算法...
     """
+    if not chunks:
+        _logger.warning("[RAG] format_context 收到空 chunks，LLM 将在无参考资料的情况下生成内容。")
+        return "（暂无参考资料）"
     parts: list[str] = []
     total_chars = 0
     for i, chunk in enumerate(chunks, 1):

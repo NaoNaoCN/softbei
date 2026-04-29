@@ -221,9 +221,10 @@ with st.expander("📤 上传 PDF 文件", expanded=False):
 docs = fetch_documents(user_id)
 if docs:
     st.subheader("📂 已导入文档")
-    for doc in docs:
+    for idx, doc in enumerate(docs):
         doc_title = doc.get("title", "无标题")
-        doc_id = doc.get("kp_id", doc.get("id", ""))
+        doc_id = doc.get("id", f"doc_{idx}")
+        kp_id = doc.get("kp_id", doc_id)
         task_key = f"kg_task_{doc_id}"
 
         with st.container(border=True):
