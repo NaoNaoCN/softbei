@@ -5,7 +5,6 @@ FastAPI 应用入口：路由注册、生命周期管理、中间件配置。
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -70,24 +69,12 @@ JWT_EXPIRE_HOURS = app_config.jwt.expire_hours
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """初始化数据库连接池与向量库，启动后台清理任务，关闭时释放资源。"""
+    """初始化数据库连接池与向量库，关闭时释放资源。"""
     await init_db()
     init_vector_db()
     get_graph()  # 预热 LangGraph
-
-    # 启动动态会话表过期清理后台任务
-    from backend.db.dynamic_chat import start_cleanup_task
-    cleanup_task = asyncio.create_task(start_cleanup_task())
-
-    try:
-        yield
-    finally:
-        cleanup_task.cancel()
-        try:
-            await cleanup_task
-        except (asyncio.CancelledError, Exception):
-            pass
-        await close_db()
+    yield
+    await close_db()
 
 
 # ===========================================================
@@ -206,31 +193,9 @@ async def list_sessions(user_id: uuid.UUID, db: AsyncSession = Depends(get_sessi
 
 @app.post("/chat/sessions", response_model=ChatSessionOut, tags=["chat"])
 async def create_chat_session(user_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
-    """创建新的对话会话，同时为该会话创建一张独立的消息表。"""
-    from backend.db.crud import insert, select_by_id, update_by_id
-    from backend.db.dynamic_chat import build_table_name, create_session_table
-
-    # 1. 查用户名（用于表名拼接）
-    user = await select_by_id(db, User, user_id)
-    username = user.username if user else "anon"
-
-    # 2. 插入 chat_session 记录
+    """创建新的对话会话。"""
+    from backend.db.crud import insert
     session = await insert(db, ChatSession, data={"user_id": user_id})
-
-    # 3. 以 username + 创建时间 + session_id 生成动态表名，并创建表
-    table_name = build_table_name(username, str(session.id), session.created_at)
-    try:
-        await create_session_table(table_name)
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"动态会话表创建失败: {e}")
-        table_name = None
-
-    # 4. 回写 messages_table 字段
-    if table_name:
-        await update_by_id(db, ChatSession, session.id, data={"messages_table": table_name})
-        session.messages_table = table_name
-
     return ChatSessionOut.model_validate(session)
 
 
@@ -252,26 +217,6 @@ async def chat(
                 yield f"data: {event}\n\n"
         return StreamingResponse(event_generator(), media_type="text/event-stream")
     result = await invoke(str(user_id), str(session_id), body.content, db)
-
-    # 刷新 last_used_at，并将本轮对话写入动态会话表
-    try:
-        from backend.db.crud import select_by_id, update_by_id
-        from backend.db.dynamic_chat import insert_message
-        chat_sess = await select_by_id(db, ChatSession, session_id)
-        if chat_sess:
-            await update_by_id(
-                db, ChatSession, session_id,
-                data={"last_used_at": datetime.utcnow()},
-            )
-            if chat_sess.messages_table:
-                await insert_message(chat_sess.messages_table, "user", body.content)
-                if result.final_content:
-                    await insert_message(
-                        chat_sess.messages_table, "assistant", result.final_content
-                    )
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"动态会话表写入失败: {e}")
 
     # 如果生成了资源，持久化到 resource_meta 表
     if result.resource_type and result.draft_content:

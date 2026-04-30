@@ -100,12 +100,6 @@ class ChatSession(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
     title: Mapped[str | None] = mapped_column(String(256))
-    # 该会话独立的消息表名（动态建表，与 chat_session 同级）
-    messages_table: Mapped[str | None] = mapped_column(String(128))
-    # 最后一次使用时间（用于过期清理）
-    last_used_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     user: Mapped["User"] = relationship(back_populates="sessions")
