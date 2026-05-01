@@ -6,8 +6,12 @@ backend/services/generation.py
 from __future__ import annotations
 
 import json
+import logging
+import re
 import uuid
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -102,6 +106,73 @@ async def run_generation(
         {"status": TaskStatus.done.value, "progress": 100},
     )
 
+    # -- 兜底：若用户尚无学习路径，自动从推荐创建一条 --
+    try:
+        recommendations = state.metadata.get("recommendations", []) if state.metadata else []
+        if recommendations:
+            from backend.services import pathway as pathway_svc
+            from backend.models.schemas import LearningPathCreate, LearningPathItemCreate
+            from backend.db.models import KGNode
+
+            existing = await pathway_svc.list_pathways(uuid.UUID(user_id), db)
+            if not existing:
+                new_path = await pathway_svc.create_pathway(
+                    uuid.UUID(user_id),
+                    LearningPathCreate(name=f"{kp_name} 学习路径"),
+                    db,
+                )
+                if new_path:
+                    for i, rec in enumerate(recommendations):
+                        rec_kp_id = rec.get("kp_id")
+                        if not rec_kp_id:
+                            continue
+                        node = await select_one(db, KGNode, filters={"id": rec_kp_id})
+                        if node:
+                            await pathway_svc.add_pathway_item(
+                                uuid.UUID(new_path.id),
+                                uuid.UUID(user_id),
+                                LearningPathItemCreate(kp_id=rec_kp_id, order_index=i),
+                                db,
+                            )
+    except Exception as e:
+        logger.warning("[auto_pathway] failed to auto-create pathway: %s", e)
+
+
+def _parse_code_block(draft: str) -> tuple[str, str]:
+    """从 LLM 返回的 Markdown 中提取代码块和语言标识。
+
+    优先提取"参考答案"分隔符之后的代码块；若无分隔符则取最后一个代码块
+    （通常最后一个是完整答案，前面的可能是题目中的片段）。
+    """
+    # 如果有"参考答案"分隔符，只在答案部分搜索
+    answer_section = draft
+    sep_idx = draft.find("参考答案")
+    if sep_idx != -1:
+        answer_section = draft[sep_idx:]
+        logger.debug("[parse_code] found answer separator at pos %d", sep_idx)
+
+    # 提取所有代码块
+    blocks = re.findall(r"```(\w*)\s*\n([\s\S]*?)```", answer_section)
+    if blocks:
+        lang, code = blocks[-1]  # 取最后一个（最完整的答案）
+        lang = lang.strip() or "python"
+        code = code.strip()
+        logger.debug("[parse_code] extracted lang=%s code_len=%d from %d blocks", lang, len(code), len(blocks))
+        return code, lang
+
+    # answer_section 没找到，回退到全文搜索
+    if sep_idx != -1:
+        blocks = re.findall(r"```(\w*)\s*\n([\s\S]*?)```", draft)
+        if blocks:
+            lang, code = blocks[-1]
+            lang = lang.strip() or "python"
+            logger.debug("[parse_code] fallback to full draft, lang=%s", lang)
+            return code.strip(), lang
+
+    # 没有代码块标记，整段当作代码
+    logger.warning("[parse_code] no fenced code block found, using raw draft")
+    return draft.strip(), "python"
+
 
 async def _persist_content(
     task_id: uuid.UUID,
@@ -116,18 +187,36 @@ async def _persist_content(
         return
     resource_id = task.resource_id
 
+    logger.info(
+        "[persist] type=%s resource_id=%s draft_len=%d draft_preview=%.200s",
+        resource_type, resource_id, len(draft), draft,
+    )
+
     if resource_type == ResourceType.mindmap:
         # mindmap 是 JSON，存入 content_json
         try:
             content_json = json.loads(draft)
         except json.JSONDecodeError:
-            # 尝试提取 JSON 部分
-            import re
             match = re.search(r"\{[\s\S]*\}", draft)
             content_json = json.loads(match.group(0)) if match else {"tree": {}}
+        logger.info("[persist] mindmap content_json keys=%s", list(content_json.keys()))
         await update_by_id(db, ResourceMeta, resource_id, {"content_json": content_json})
+
+    elif resource_type == ResourceType.code:
+        # code 需要解析为结构化 JSON 存入 content_json，前端从 content_json.code 读取
+        code_text, language = _parse_code_block(draft)
+        content_json = {"code": code_text, "language": language}
+        logger.info(
+            "[persist] code language=%s code_len=%d code_preview=%.120s",
+            language, len(code_text), code_text,
+        )
+        await update_by_id(
+            db, ResourceMeta, resource_id,
+            {"content": draft, "content_json": content_json},
+        )
+
     else:
-        # doc/summary/code 存为纯文本 content
+        # doc/summary 存为纯文本 content
         await update_by_id(db, ResourceMeta, resource_id, {"content": draft})
 
 

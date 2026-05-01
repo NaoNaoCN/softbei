@@ -233,6 +233,7 @@ class QuizItem(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     resource_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("resource_meta.id"), nullable=False)
+    kp_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     question_type: Mapped[str] = mapped_column(
         Enum(QuestionType, values_callable=lambda e: [m.value for m in e]),
         nullable=False,

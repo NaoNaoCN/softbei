@@ -73,6 +73,34 @@ def fetch_learning_records(user_id: str, limit: int = 10) -> list[dict]:
     return []
 
 
+def mark_item_completed(path_id: str, item_id: str, user_id: str) -> bool:
+    """标记路径节点为已完成。"""
+    try:
+        resp = httpx.put(
+            f"{API_BASE_URL}/pathways/{path_id}/items/{item_id}",
+            json={"is_completed": True},
+            params={"user_id": user_id},
+            timeout=10.0,
+        )
+        return resp.status_code == 200
+    except Exception:
+        return False
+
+
+def add_item_to_pathway(path_id: str, user_id: str, kp_id: str, order_index: int) -> bool:
+    """向路径追加知识点。"""
+    try:
+        resp = httpx.post(
+            f"{API_BASE_URL}/pathways/{path_id}/items",
+            json={"kp_id": kp_id, "order_index": order_index},
+            params={"user_id": user_id},
+            timeout=10.0,
+        )
+        return resp.status_code == 200
+    except Exception:
+        return False
+
+
 # ----------------------------------------------------------
 # 页面主体
 # ----------------------------------------------------------
@@ -209,44 +237,157 @@ with tab_graph:
         st.info("暂无知识图谱数据，请先导入知识库。")
 
 with tab_path:
-    st.markdown("个性化学习路径由系统根据您的画像自动生成。")
     pathways = fetch_pathways(user_id)
 
     if not pathways:
         st.info("暂无学习路径。您可以通过生成资源或与 AI 对话来创建学习路径。")
-        # 提供快速生成入口
         if st.button("➕ 创建学习路径"):
             st.switch_page("pages/2_generate.py")
     else:
-        for path in pathways:
-            path_name = path.get("name", f"路径 {path.get('id', '')[:8]}")
-            items = path.get("items", [])
-            completed = sum(1 for item in items if item.get("is_completed"))
-            progress = completed / len(items) * 100 if items else 0
+        # ---------- 路径选择器 + 进度 ----------
+        path_labels = []
+        for p in pathways:
+            name = p.get("name", f"路径 {p.get('id', '')[:8]}")
+            items = p.get("items", [])
+            done = sum(1 for it in items if it.get("is_completed"))
+            path_labels.append(f"{name}（{done}/{len(items)}）")
 
-            with st.expander(f"📌 {path_name}（{completed}/{len(items)} 完成）"):
-                st.progress(progress / 100, text=f"完成进度：{progress:.0f}%")
+        col_sel, col_prog = st.columns([2, 3])
+        with col_sel:
+            sel_idx = st.selectbox("选择学习路径", range(len(pathways)), format_func=lambda i: path_labels[i])
+        cur_path = pathways[sel_idx]
+        cur_items = sorted(cur_path.get("items", []), key=lambda x: x.get("order_index", 0))
+        done_count = sum(1 for it in cur_items if it.get("is_completed"))
+        progress = done_count / len(cur_items) if cur_items else 0
+        with col_prog:
+            st.write("")  # 垂直对齐
+            st.progress(progress, text=f"完成进度：{done_count}/{len(cur_items)}")
 
-                if items:
-                    for item in items:
-                        icon = "✅" if item.get("is_completed") else "⭕"
-                        kp_name = item.get("kp_name", item.get("kp_id", "未知"))
-                        order = item.get("order_index", 0)
-                        col1, col2, col3 = st.columns([4, 1, 1])
-                        with col1:
-                            st.write(f"{icon} **{order}. {kp_name}**")
-                        with col2:
-                            if not item.get("is_completed"):
-                                if st.button("📖 学习", key=f"learn_{item.get('kp_id')}_{order}"):
-                                    st.session_state["current_kp_id"] = item.get("kp_id")
-                                    st.session_state["current_kp_name"] = kp_name
-                                    st.switch_page("pages/2_generate.py")
-                        with col3:
-                            if st.button("📝 测验", key=f"quiz_{item.get('kp_id')}_{order}"):
-                                st.session_state["current_kp_id"] = item.get("kp_id")
-                                st.switch_page("pages/5_evaluate.py")
+        # ---------- 分类节点 ----------
+        completed_ids: set[str] = set()
+        current_ids: set[str] = set()
+        planned_ids: set[str] = set()
+        planned_order: dict[str, int] = {}
+
+        remaining = []
+        for it in cur_items:
+            kp_id = it.get("kp_id", "")
+            if it.get("is_completed"):
+                completed_ids.add(kp_id)
+            else:
+                remaining.append(kp_id)
+
+        if remaining:
+            current_ids.add(remaining[0])
+            for idx, kp_id in enumerate(remaining[1:6], start=1):
+                planned_ids.add(kp_id)
+                planned_order[kp_id] = idx
+
+        pathway_highlight = {
+            "completed": completed_ids,
+            "current": current_ids,
+            "planned": planned_ids,
+            "planned_order": planned_order,
+        }
+
+        # ---------- 获取知识图谱并渲染 ----------
+        path_graph = fetch_kg_graph(depth=5)
+        if path_graph and path_graph.get("nodes"):
+            from streamlit_app.components.mindmap import render_kg_graph
+
+            col_graph, col_detail = st.columns([3, 1])
+            with col_graph:
+                clicked_id = render_kg_graph(
+                    path_graph, on_click=True, pathway_highlight=pathway_highlight,
+                )
+            with col_detail:
+                detail_id = clicked_id or st.session_state.get("pathway_clicked_node")
+                if clicked_id:
+                    st.session_state["pathway_clicked_node"] = clicked_id
+                if detail_id:
+                    node_info = next((n for n in path_graph["nodes"] if n["id"] == detail_id), None)
+                    if node_info:
+                        # 判断节点在路径中的状态
+                        if detail_id in completed_ids:
+                            st.success("已完成")
+                        elif detail_id in current_ids:
+                            st.warning("正在学习")
+                        elif detail_id in planned_ids:
+                            st.info(f"待学习（第 {planned_order.get(detail_id, '?')} 步）")
+
+                        type_icon = {"Course": "📘", "Chapter": "📖", "KnowledgePoint": "📌",
+                                     "SubPoint": "📍", "Concept": "💡"}.get(node_info.get("type", ""), "📦")
+                        st.markdown(f"### {type_icon} {node_info['name']}")
+                        st.caption(f"类型: {node_info.get('type', '未知')}")
+                        extra = node_info.get("extra", {})
+                        if isinstance(extra, dict) and extra.get("description"):
+                            st.markdown(f"**描述:** {extra['description']}")
+
+                        # 操作按钮
+                        all_path_ids = completed_ids | current_ids | planned_ids
+                        cur_item = next((it for it in cur_items if it.get("kp_id") == detail_id), None)
+
+                        if cur_item and detail_id not in completed_ids:
+                            if st.button("✅ 标记完成", key="mark_done", type="primary"):
+                                if mark_item_completed(cur_path["id"], cur_item["id"], user_id):
+                                    st.success("已标记为完成！")
+                                    st.rerun()
+                                else:
+                                    st.error("操作失败，请重试。")
+
+                        if detail_id not in all_path_ids:
+                            if st.button("➕ 添加到路径", key="add_to_path"):
+                                if add_item_to_pathway(cur_path["id"], user_id, detail_id, len(cur_items)):
+                                    st.success("已添加到学习路径！")
+                                    st.rerun()
+                                else:
+                                    st.error("添加失败，请重试。")
+
+                        if detail_id in all_path_ids and detail_id not in completed_ids:
+                            if st.button("📖 开始学习", key="path_learn"):
+                                st.session_state["current_kp_id"] = detail_id
+                                st.session_state["current_kp_name"] = node_info["name"]
+                                st.switch_page("pages/2_generate.py")
+                        if detail_id not in all_path_ids:
+                            if st.button("📖 生成学习资源", key="path_gen"):
+                                st.session_state["current_kp_id"] = detail_id
+                                st.session_state["current_kp_name"] = node_info["name"]
+                                st.switch_page("pages/2_generate.py")
                 else:
-                    st.info("该路径暂无知识点。")
+                    st.info("点击图中节点查看详情")
+        else:
+            st.info("暂无知识图谱数据，请先导入知识库。")
+
+        # ---------- 底部步骤卡片 ----------
+        st.markdown("---")
+        st.subheader("📋 路径步骤")
+        if cur_items:
+            cols = st.columns(min(len(cur_items), 6))
+            for i, item in enumerate(cur_items):
+                kp_id = item.get("kp_id", "")
+                kp_name = item.get("kp_name", kp_id[:8])
+                order = item.get("order_index", i + 1)
+                is_done = item.get("is_completed", False)
+                is_cur = kp_id in current_ids
+                is_plan = kp_id in planned_ids
+
+                with cols[i % min(len(cur_items), 6)]:
+                    if is_done:
+                        color, icon = "#52c41a", "✅"
+                    elif is_cur:
+                        color, icon = "#fa8c16", "▶️"
+                    elif is_plan:
+                        color, icon = "#1890ff", "🔜"
+                    else:
+                        color, icon = "#999", "⭕"
+                    st.markdown(
+                        f"<div style='border-left:4px solid {color};padding:6px 10px;margin-bottom:8px;"
+                        f"border-radius:4px;background:{'#f6ffed' if is_done else '#fff'}'>"
+                        f"<b>{icon} {order}. {kp_name}</b></div>",
+                        unsafe_allow_html=True,
+                    )
+        else:
+            st.info("该路径暂无知识点。")
 
 with tab_records:
     st.subheader("最近学习记录")

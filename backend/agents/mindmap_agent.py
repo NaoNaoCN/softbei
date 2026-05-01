@@ -6,12 +6,15 @@ MindmapAgent：生成思维导图数据（ECharts tree 格式 JSON）。
 from __future__ import annotations
 
 import json
+import logging
 
 from backend.models.schemas import AgentState
 from backend.agents.utils import resolve_kp_name
 from backend.rag.retriever import retrieve_by_kp, format_context
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
+
+_logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT = """你是一位思维导图设计专家。
@@ -46,13 +49,19 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     3. 将 JSON 字符串存入 draft_content
     """
     kp_name = await resolve_kp_name(state, config)
+    _logger.info("[MindmapAgent] kp_name=%s", kp_name)
 
     # 检索相关文档
     try:
         chunks = await retrieve_by_kp(kp_name, n_results=5)
         context = format_context(chunks, max_tokens=3000)
         retrieved_texts = [c.text for c in chunks]
-    except Exception:
+        if chunks:
+            _logger.info("[MindmapAgent] RAG 检索到 %d 条参考资料", len(chunks))
+        else:
+            _logger.warning("[MindmapAgent] RAG 未检索到参考资料，降级为纯 LLM 生成")
+    except Exception as e:
+        _logger.warning("[MindmapAgent] RAG 检索异常: %s，降级为纯 LLM 生成", e)
         context = "（暂无参考资料）"
         retrieved_texts = []
 
@@ -80,8 +89,10 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
                 raw = match.group(0)
                 json.loads(raw)  # 再验证一次
 
+        _logger.info("[MindmapAgent] 思维导图生成成功，json_len=%d", len(raw))
         state = state.model_copy(update={"draft_content": raw})
     except Exception as e:
+        _logger.error("[MindmapAgent] 生成失败: %s", e)
         state = state.model_copy(update={"draft_content": f"思维导图生成失败：{e}"})
 
     return state

@@ -124,5 +124,64 @@ if prompt := st.chat_input("输入消息..."):
                 st.session_state.is_onboarding = False
                 st.session_state.profile = fetch_profile()
                 st.toast("🎉 画像建立完成！现在可以开始生成个性化学习资源了。", icon="✅")
+
+            # 推荐处理：存入 session_state，下次渲染时显示
+            recommendations = result.get("metadata", {}).get("recommendations", [])
+            if recommendations:
+                st.session_state["last_recommendations"] = recommendations
+                st.session_state["last_kp_name"] = result.get("metadata", {}).get("kp_name", "学习路径")
+            else:
+                st.session_state.pop("last_recommendations", None)
         else:
             st.error("未收到有效回复，请稍后重试。")
+
+# ----------------------------------------------------------
+# 推荐区（每次渲染检查 session_state）
+# ----------------------------------------------------------
+if st.session_state.get("last_recommendations"):
+    recommendations = st.session_state["last_recommendations"]
+    st.success("📌 AI 为您推荐的下一步学习内容：")
+    for rec in recommendations[:3]:
+        rec_kp_name = rec.get("kp_name", rec.get("kp_id", "未知"))
+        reason = rec.get("reason", "")
+        col_r1, col_r2 = st.columns([3, 1])
+        with col_r1:
+            st.write(f"- **{rec_kp_name}**：{reason}")
+        with col_r2:
+            if st.button(f"生成", key=f"rec_{rec_kp_name}"):
+                st.session_state["current_kp_id"] = rec.get("kp_id")
+                st.session_state["current_kp_name"] = rec_kp_name
+                st.switch_page("pages/2_generate.py")
+
+    save_key = f"save_pathway_{len(recommendations)}"
+    if st.button("📌 保存为学习路径", key=save_key, type="secondary"):
+        _kp_name = st.session_state.get("last_kp_name", "学习路径")
+        try:
+            resp = httpx.post(
+                f"{API_BASE_URL}/pathways",
+                json={"name": f"AI 推荐 - {_kp_name}"},
+                params={"user_id": user_id},
+                timeout=10.0,
+            )
+            if resp.status_code == 200:
+                path_id = resp.json().get("id")
+                for i, rec in enumerate(recommendations):
+                    kp_id = rec.get("kp_id")
+                    if kp_id:
+                        try:
+                            httpx.post(
+                                f"{API_BASE_URL}/pathways/{path_id}/items",
+                                json={"kp_id": kp_id, "order_index": i},
+                                params={"user_id": user_id},
+                                timeout=10.0,
+                            )
+                        except Exception:
+                            pass
+                st.success("✅ 学习路径已创建！")
+                st.session_state.pop("last_recommendations", None)
+                if st.button("前往学习路径页 →", key="goto_pathway"):
+                    st.switch_page("pages/3_pathway.py")
+            else:
+                st.error("创建学习路径失败，请检查后端服务。")
+        except Exception as e:
+            st.error(f"请求异常: {e}")

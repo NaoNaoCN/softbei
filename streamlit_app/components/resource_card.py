@@ -5,9 +5,12 @@ streamlit_app/components/resource_card.py
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import streamlit as st
+
+logger = logging.getLogger(__name__)
 
 
 _TYPE_ICON = {
@@ -69,6 +72,11 @@ def _render_content(resource: dict[str, Any]) -> None:
             st.info("内容为空")
 
     elif r_type == "code":
+        logger.info(
+            "[resource_card] code render: content_json=%s content_path=%s",
+            type(content_json).__name__ if content_json else None,
+            content_path[:80] if content_path else None,
+        )
         code = (content_json or {}).get("code") or ""
         lang = (content_json or {}).get("language", "python")
         if code:

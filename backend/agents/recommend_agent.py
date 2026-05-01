@@ -6,12 +6,15 @@ RecommendAgent：基于学生画像和学习历史推荐下一步学习知识点
 from __future__ import annotations
 
 import json
+import logging
 
 from backend.models.schemas import AgentState
 from backend.services import profile as profile_svc
 from backend.services.llm import chat_completion
 from backend.db.crud import select as db_select
 from langchain_core.runnables import RunnableConfig
+
+_logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT = """你是一位智能学习顾问。
@@ -77,6 +80,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
         available_kps = ["（无数据库连接）"]
 
     kp_list = "\n".join(available_kps) if available_kps else "（无可用知识点）"
+    _logger.warning("[RecommendAgent] 开始推荐，available_kps=%d goal=%s", len(available_kps), goal or "未设定")
 
     # 构造 prompt
     prompt = SYSTEM_PROMPT.format(
@@ -93,7 +97,13 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
             temperature=0.7,
             max_tokens=2000,
         )
-        recommendations = json.loads(raw)
+        # 去除 LLM 可能返回的 markdown 代码块包裹
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
+            cleaned = cleaned.rsplit("```", 1)[0].strip()
+        recommendations = json.loads(cleaned)
+        _logger.warning("[RecommendAgent] 推荐生成成功，共 %d 条", len(recommendations) if isinstance(recommendations, list) else 0)
 
         # 确保是列表
         if not isinstance(recommendations, list):
@@ -102,6 +112,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
         # 更新 state
         new_metadata = dict(state.metadata) if state.metadata else {}
         new_metadata["recommendations"] = recommendations
+        new_metadata["kp_name"] = state.kp_id or ""  # 供前端构造路径名
 
         # 生成人类可读的推荐文本
         lines = []
@@ -126,11 +137,13 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
                 "metadata": new_metadata,
                 "final_content": "根据你的学习画像，推荐以下学习路径：\n\n" + readable,
             })
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        _logger.warning("[RecommendAgent] JSON 解析失败: %s，raw_preview=%.200s", e, raw if 'raw' in dir() else '')
         new_metadata = dict(state.metadata) if state.metadata else {}
         new_metadata["recommendations"] = []
         state = state.model_copy(update={"metadata": new_metadata})
     except Exception as e:
+        _logger.error("[RecommendAgent] 推荐生成失败: %s", e)
         new_metadata = dict(state.metadata) if state.metadata else {}
         new_metadata["recommendations"] = []
         state = state.model_copy(update={"metadata": new_metadata})

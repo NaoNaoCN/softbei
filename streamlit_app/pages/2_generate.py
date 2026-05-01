@@ -102,6 +102,41 @@ def create_chat_session(user_id: str) -> str | None:
     return None
 
 
+def _create_pathway_from_recs(user_id: str, kp_name: str, recommendations: list[dict]) -> bool:
+    """将 AI 推荐列表保存为一条新学习路径，返回是否成功。"""
+    try:
+        # 创建路径
+        resp = httpx.post(
+            f"{API_BASE_URL}/pathways",
+            json={"name": f"AI 推荐 - {kp_name}"},
+            params={"user_id": user_id},
+            timeout=10.0,
+        )
+        if resp.status_code != 200:
+            return False
+        path_id = resp.json().get("id")
+        if not path_id:
+            return False
+
+        # 逐条添加推荐节点
+        for i, rec in enumerate(recommendations):
+            kp_id = rec.get("kp_id")
+            if not kp_id:
+                continue
+            try:
+                httpx.post(
+                    f"{API_BASE_URL}/pathways/{path_id}/items",
+                    json={"kp_id": kp_id, "order_index": i},
+                    params={"user_id": user_id},
+                    timeout=10.0,
+                )
+            except Exception:
+                pass  # 静默跳过不存在的 kp_id
+        return True
+    except Exception:
+        return False
+
+
 # ----------------------------------------------------------
 # 页面主体
 # ----------------------------------------------------------
@@ -180,26 +215,48 @@ with tab_chat:
                 # 添加 AI 响应
                 st.session_state["chat_messages"].append({"role": "assistant", "content": content})
 
-                # 显示推荐
+                # 将推荐存入 session_state，rerun 后渲染
                 if recommendations:
-                    st.success("📌 AI 为您推荐的下一步学习内容：")
-                    for rec in recommendations[:3]:
-                        kp_name = rec.get("kp_name", rec.get("kp_id", "未知"))
-                        reason = rec.get("reason", "")
-                        col_r1, col_r2 = st.columns([3, 1])
-                        with col_r1:
-                            st.write(f"- **{kp_name}**：{reason}")
-                        with col_r2:
-                            if st.button(f"生成", key=f"rec_{kp_name}"):
-                                st.session_state["current_kp_id"] = rec.get("kp_id")
-                                st.switch_page("pages/2_generate.py")
+                    st.session_state["last_recommendations"] = recommendations
+                    st.session_state["last_kp_name"] = metadata.get("kp_name", "学习路径")
+                else:
+                    # 清空上一次的推荐，避免残留
+                    st.session_state.pop("last_recommendations", None)
             else:
                 st.session_state["chat_messages"].append({
                     "role": "assistant",
                     "content": "抱歉，无法连接到后端服务，请确保后端已启动。"
                 })
 
-        st.rerun()
+        # form submit 后 Streamlit 会自动 rerun，无需手动调用
+        # st.rerun() 会导致双重 rerun，使 session_state 赋值丢失
+
+    # 推荐区：每次渲染都检查 session_state（form submit 的自动 rerun 后生效）
+    _recs_debug = st.session_state.get("last_recommendations", [])
+    if _recs_debug:
+        recommendations = st.session_state["last_recommendations"]
+        st.success("📌 AI 为您推荐的下一步学习内容：")
+        for rec in recommendations[:3]:
+            rec_kp_name = rec.get("kp_name", rec.get("kp_id", "未知"))
+            reason = rec.get("reason", "")
+            col_r1, col_r2 = st.columns([3, 1])
+            with col_r1:
+                st.write(f"- **{rec_kp_name}**：{reason}")
+            with col_r2:
+                if st.button(f"生成", key=f"rec_{rec_kp_name}"):
+                    st.session_state["current_kp_id"] = rec.get("kp_id")
+                    st.switch_page("pages/2_generate.py")
+
+        save_key = f"save_pathway_{len(recommendations)}"
+        if st.button("📌 保存为学习路径", key=save_key, type="secondary"):
+            _kp_name = st.session_state.get("last_kp_name", "学习路径")
+            if _create_pathway_from_recs(user_id, _kp_name, recommendations):
+                st.success("✅ 学习路径已创建！")
+                st.session_state.pop("last_recommendations", None)
+                if st.button("前往学习路径页 →", key="goto_pathway"):
+                    st.switch_page("pages/3_pathway.py")
+            else:
+                st.error("创建学习路径失败，请检查后端服务。")
 
 # ----------------------------------------------------------
 # 直接生成模式

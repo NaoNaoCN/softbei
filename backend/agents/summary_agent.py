@@ -5,11 +5,15 @@ SummaryAgent：生成知识点精简总结（适合复习的要点提炼）。
 
 from __future__ import annotations
 
+import logging
+
 from backend.models.schemas import AgentState
 from backend.agents.utils import resolve_kp_name
 from backend.rag.retriever import retrieve_by_kp, format_context
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
+
+_logger = logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT = """你是一位学习总结专家。
@@ -36,13 +40,19 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     3. 写入 state.draft_content
     """
     kp_name = await resolve_kp_name(state, config)
+    _logger.info("[SummaryAgent] kp_name=%s", kp_name)
 
     # 检索相关文档
     try:
         chunks = await retrieve_by_kp(kp_name, n_results=5)
         context = format_context(chunks, max_tokens=3000)
         retrieved_texts = [c.text for c in chunks]
-    except Exception:
+        if chunks:
+            _logger.info("[SummaryAgent] RAG 检索到 %d 条参考资料", len(chunks))
+        else:
+            _logger.warning("[SummaryAgent] RAG 未检索到参考资料，降级为纯 LLM 生成")
+    except Exception as e:
+        _logger.warning("[SummaryAgent] RAG 检索异常: %s，降级为纯 LLM 生成", e)
         context = "（暂无参考资料）"
         retrieved_texts = []
 
@@ -58,8 +68,10 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
             temperature=0.7,
             max_tokens=1200,
         )
+        _logger.info("[SummaryAgent] 总结生成成功，draft_len=%d", len(draft))
         state = state.model_copy(update={"draft_content": draft})
     except Exception as e:
+        _logger.error("[SummaryAgent] 生成失败: %s", e)
         state = state.model_copy(update={"draft_content": f"总结生成失败：{e}"})
 
     return state

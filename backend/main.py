@@ -5,6 +5,7 @@ FastAPI 应用入口：路由注册、生命周期管理、中间件配置。
 
 from __future__ import annotations
 
+import logging
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -57,6 +58,9 @@ from backend.db.models import User, ChatSession, ChatMessage, KGNode, KGEdge, Qu
 # ===========================================================
 # JWT 配置（从 configs/config.yaml 读取）
 # ===========================================================
+
+# 将 backend.agents.* 的日志级别设为 INFO，确保 agent 执行链路可见
+logging.getLogger("backend.agents").setLevel(logging.INFO)
 from backend.config import config as app_config
 
 JWT_SECRET = app_config.jwt.secret
@@ -240,6 +244,12 @@ async def chat(
             import logging
             logging.getLogger(__name__).warning(f"资源保存失败: {e}")
 
+    import logging as _log
+    _log.getLogger(__name__).warning(
+        "[chat] returning metadata keys=%s recommendations_count=%d",
+        list(result.metadata.keys()),
+        len(result.metadata.get("recommendations", [])),
+    )
     return {
         "content": result.final_content,
         "metadata": result.metadata,

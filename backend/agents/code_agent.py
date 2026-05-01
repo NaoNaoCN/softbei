@@ -5,6 +5,8 @@ CodeAgent：生成代码示例或编程练习题（含参考答案）。
 
 from __future__ import annotations
 
+import logging
+
 from backend.models.schemas import AgentState
 from backend.agents.utils import resolve_kp_name
 from backend.rag.retriever import retrieve_by_kp, format_context
@@ -12,15 +14,25 @@ from backend.services import profile as profile_svc
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
 
+logger = logging.getLogger(__name__)
+
 
 SYSTEM_PROMPT = """你是一位编程教学专家。
-请为以下知识点生成一个代码示例或编程练习，要求：
+请为以下知识点生成一个编程练习（含完整参考答案），要求：
 - 使用 Python（除非学生有特殊要求）
-- 代码包含详细注释
-- 先给出题目描述，再给出参考答案
-- 若是练习题，在答案前用 "# ===== 参考答案 =====" 分隔
+- 题目描述简洁明了，控制在 10 行以内，不要过度展开
+- 参考答案必须是完整可运行的代码，包含详细注释
+- 用 "# ===== 参考答案 =====" 分隔题目和答案
+- 答案代码是最重要的部分，必须完整输出，不得省略
 
-以 Markdown 代码块格式输出。
+输出格式（Markdown）：
+## 题目描述
+（简要描述题目要求）
+
+# ===== 参考答案 =====
+```python
+（完整的参考答案代码）
+```
 
 参考资料：
 {context}
@@ -74,7 +86,11 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
         draft = await chat_completion(
             [{"role": "user", "content": prompt}],
             temperature=0.7,
-            max_tokens=3000,
+            max_tokens=5000,
+        )
+        logger.info(
+            "[code_agent] draft_len=%d has_fence=%s preview=%.200s",
+            len(draft), "```" in draft, draft,
         )
         state = state.model_copy(update={"draft_content": draft})
     except Exception as e:
