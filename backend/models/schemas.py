@@ -130,6 +130,8 @@ class ChatMessageOut(BaseModel):
 class ChatSessionOut(BaseModel):
     id: uuid.UUID
     title: Optional[str]
+    messages_table: Optional[str] = None
+    last_used_at: Optional[datetime] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
