@@ -55,7 +55,7 @@ def _profile_to_known_fields(profile) -> dict:
     """将 StudentProfileOut 转为非空字段字典。"""
     if profile is None:
         return {}
-    data = profile.model_dump(exclude_none=True)
+    data = profile.model_dump(exclude={"id", "user_id", "version", "updated_at"}, exclude_none=True)
     return {k: v for k, v in data.items() if v not in ([], "", None)}
 
 
