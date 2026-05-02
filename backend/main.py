@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.auth.hash_utils import hash_password, verify_password
 from backend.agents.graph import get_graph, invoke, stream_invoke
 from backend.db.database import close_db, get_session, health_check as db_health, init_db
+import backend.db.database as _db_module
 from backend.db.vector import health_check as vec_health, init_vector_db
 from backend.models.schemas import (
     ChatMessageIn,
@@ -54,6 +55,9 @@ from backend.services import profile as profile_svc
 from backend.services import resource as resource_svc
 from backend.services import document as document_svc
 from backend.db.models import User, ChatSession, ChatMessage, KGNode, KGEdge, QuizItem, QuizAttempt, LearningPath, LearningPathItem, ResourceMeta
+
+# 内存任务字典：{task_id: {status, progress, stage, doc_id, error, result}}
+_doc_import_tasks: dict[str, dict] = {}
 
 # ===========================================================
 # JWT 配置（从 configs/config.yaml 读取）
@@ -254,6 +258,7 @@ async def chat(
         "content": result.final_content,
         "metadata": result.metadata,
         "profile_complete": result.profile_complete,
+        "resource_type": result.resource_type.value if result.resource_type else None,
     }
 
 
@@ -721,7 +726,7 @@ async def import_document(
     try:
         content = await file.read()
         saved_path = document_svc.save_uploaded_file(content, file_name)
-        _log.info(f"[import_document] 文件 {file_name} 已保存到 {saved_path}，开始处理...")
+        _log.warning(f"[import_document] 文件 {file_name} 已保存到 {saved_path}，开始处理...")
         result = await document_svc.import_pdf(
             file_path=saved_path,
             user_id=user_id,
@@ -742,6 +747,91 @@ async def import_document(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"导入失败：{str(e)}",
         )
+
+
+@app.post("/documents/import/async", tags=["documents"])
+async def import_document_async(
+    user_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    title: Optional[str] = None,
+):
+    """
+    异步导入 PDF 文档。立即返回 task_id，前端轮询 /documents/import/{task_id}/status。
+    """
+    import logging
+    _log = logging.getLogger(__name__)
+    file_name = file.filename or "unknown.pdf"
+    if not file_name.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="只支持 PDF 格式文件",
+        )
+
+    content = await file.read()
+    try:
+        saved_path = document_svc.save_uploaded_file(content, file_name)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    task_id = str(uuid.uuid4())
+    _doc_import_tasks[task_id] = {
+        "status": "running",
+        "progress": 5,
+        "stage": "saving",
+        "doc_id": None,
+        "error": None,
+        "result": None,
+    }
+
+    async def _run_import():
+        def _cb(stage: str, pct: int):
+            _doc_import_tasks[task_id]["stage"] = stage
+            _doc_import_tasks[task_id]["progress"] = pct
+
+        try:
+            sf = _db_module._session_factory
+            if sf is None:
+                raise RuntimeError("Database not initialized.")
+            async with sf() as bg_db:
+                try:
+                    result = await document_svc.import_pdf_with_progress(
+                        file_path=saved_path,
+                        user_id=user_id,
+                        title=title,
+                        db=bg_db,
+                        progress_callback=_cb,
+                    )
+                    await bg_db.commit()
+                except Exception:
+                    await bg_db.rollback()
+                    raise
+            _doc_import_tasks[task_id]["status"] = "done"
+            _doc_import_tasks[task_id]["progress"] = 100
+            _doc_import_tasks[task_id]["stage"] = "done"
+            _doc_import_tasks[task_id]["doc_id"] = result.get("doc_id")
+            _doc_import_tasks[task_id]["result"] = result
+        except Exception as e:
+            _log.exception(f"[import_document_async] 后台任务失败: {e}")
+            _doc_import_tasks[task_id]["status"] = "failed"
+            _doc_import_tasks[task_id]["error"] = str(e)
+
+    background_tasks.add_task(_run_import)
+    return {
+        "task_id": task_id,
+        "status": "running",
+        "progress": 5,
+        "stage": "saving",
+    }
+
+
+@app.get("/documents/import/{task_id}/status", tags=["documents"])
+async def get_import_task_status(task_id: str):
+    """轮询异步 PDF 导入任务状态。"""
+    task = _doc_import_tasks.get(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="任务不存在或已过期")
+    return {"task_id": task_id, **task}
 
 
 @app.get("/documents", tags=["documents"])

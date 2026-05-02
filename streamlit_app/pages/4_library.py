@@ -3,8 +3,6 @@ streamlit_app/pages/4_library.py
 资源库页：浏览、搜索、筛选已生成的学习资源，支持预览和删除。
 """
 
-import time
-
 import httpx
 import streamlit as st
 
@@ -68,7 +66,7 @@ def delete_resource(resource_id: str) -> bool:
 
 
 def import_document(file_obj, file_name: str, title: str = None, user_id: str = None) -> dict | None:
-    """上传并导入 PDF 文档。"""
+    """上传并导入 PDF 文档（同步，保留向后兼容）。"""
     try:
         files = {"file": (file_name, file_obj, "application/pdf")}
         params = {}
@@ -88,6 +86,51 @@ def import_document(file_obj, file_name: str, title: str = None, user_id: str = 
             st.error(f"导入失败：{resp.text}")
     except Exception as e:
         st.error(f"导入失败：{e}")
+    return None
+
+
+def start_import_async(file_obj, file_name: str, title: str = None, user_id: str = None) -> dict | None:
+    """触发异步 PDF 导入，返回 {task_id, status, progress, stage}。"""
+    try:
+        files = {"file": (file_name, file_obj, "application/pdf")}
+        params = {"user_id": user_id} if user_id else {}
+        if title:
+            params["title"] = title
+        resp = httpx.post(
+            f"{API_BASE_URL}/documents/import/async",
+            files=files,
+            params=params,
+            timeout=30.0,
+        )
+        if resp.status_code == 200:
+            return resp.json()
+        else:
+            st.error(f"启动导入失败：{resp.text}")
+    except Exception as e:
+        st.error(f"启动导入失败：{e}")
+    return None
+
+
+def poll_import_status(task_id: str) -> dict | None:
+    """
+    轮询异步导入任务状态。
+    返回值：
+      - dict with status field  → 正常响应
+      - {"status": "not_found"} → 后端明确返回 404
+      - None                    → 网络/请求失败，调用方应跳过本次轮询
+    """
+    try:
+        resp = httpx.get(
+            f"{API_BASE_URL}/documents/import/{task_id}/status",
+            timeout=10.0,
+        )
+        if resp.status_code == 200:
+            return resp.json()
+        elif resp.status_code == 404:
+            return {"status": "not_found"}
+        # 其他 HTTP 错误也视为暂时失败，返回 None
+    except Exception:
+        pass
     return None
 
 
@@ -196,6 +239,59 @@ if "lib_preview_id" not in st.session_state:
 # ----------------------------------------------------------
 
 st.subheader("导入 PDF 文档")
+
+STAGE_LABELS = {
+    "saving": "保存文件",
+    "parsing": "解析 PDF",
+    "indexing": "向量索引",
+    "saving_record": "写入数据库",
+    "done": "完成",
+}
+
+
+@st.fragment(run_every=2)
+def _import_progress_fragment():
+    """只重跑这个 fragment，页面其他部分不受影响。"""
+    if "doc_import_task" not in st.session_state:
+        return
+
+    task_data = poll_import_status(st.session_state["doc_import_task"])
+    if task_data is None:
+        st.info("正在连接后端，请稍候…")
+        return
+
+    if task_data.get("status") == "not_found":
+        st.warning("导入任务状态丢失（服务可能已重启），请重新上传。")
+        del st.session_state["doc_import_task"]
+        return
+
+    task_status = task_data.get("status", "running")
+    progress = task_data.get("progress", 0)
+    stage = task_data.get("stage", "")
+    stage_label = STAGE_LABELS.get(stage, stage)
+
+    if task_status == "running":
+        st.progress(
+            min(progress, 100) / 100,
+            text=f"正在导入… {stage_label}（{progress}%）",
+        )
+    elif task_status == "done":
+        result = task_data.get("result") or {}
+        st.success(
+            f"导入成功！文档「{result.get('title', '')}」"
+            f"切分为 {result.get('chunks', 0)} 个文本块，"
+            f"已索引 {result.get('indexed', 0)} 个。"
+        )
+        del st.session_state["doc_import_task"]
+        # 完成后触发一次整页刷新，更新文档列表
+        st.rerun(scope="app")
+    elif task_status == "failed":
+        st.error(f"导入失败：{task_data.get('error', '未知错误')}")
+        del st.session_state["doc_import_task"]
+
+
+_import_progress_fragment()
+
 with st.expander("📤 上传 PDF 文件", expanded=False):
     uploaded_file = st.file_uploader("选择 PDF 文件", type=["pdf"])
     col_upload1, col_upload2 = st.columns([3, 1])
@@ -206,15 +302,12 @@ with st.expander("📤 上传 PDF 文件", expanded=False):
     if uploaded_file is not None:
         st.success(f"已选择：{uploaded_file.name}")
         if st.button("🚀 开始导入", use_container_width=True):
-            with st.spinner("正在解析并索引 PDF..."):
-                result = import_document(uploaded_file, uploaded_file.name, doc_title or None, user_id)
-                if result and result.get("success"):
-                    st.success(
-                        f"导入成功！\n"
-                        f"文档：「{result['title']}」\n"
-                        f"切分为 {result['chunks']} 个文本块，已索引 {result['indexed']} 个。"
-                    )
-                    st.rerun()
+            task_info = start_import_async(
+                uploaded_file, uploaded_file.name, doc_title or None, user_id
+            )
+            if task_info and task_info.get("task_id"):
+                st.session_state["doc_import_task"] = task_info["task_id"]
+                st.rerun()
     st.markdown("---")
 
 # 已导入文档列表（含知识图谱构建按钮）
@@ -227,57 +320,56 @@ if docs:
         kp_id = doc.get("kp_id", doc_id)
         task_key = f"kg_task_{doc_id}"
 
+        # 页面首次渲染时，尝试从后端恢复进行中的任务
+        if task_key not in st.session_state:
+            existing = check_kg_task_by_doc(kp_id)
+            if existing and existing.get("status") in ("pending", "running"):
+                st.session_state[task_key] = existing.get("task_id")
+
         with st.container(border=True):
             col_d1, col_d2, col_d3 = st.columns([4, 2, 1])
             with col_d1:
                 st.write(f"📄 **{doc_title}**")
             with col_d2:
-                # 检查是否有进行中的任务（刷新浏览器后恢复）
-                if task_key not in st.session_state:
-                    existing = check_kg_task_by_doc(doc_id)
-                    if existing and existing.get("status") in ("pending", "running"):
-                        st.session_state[task_key] = existing.get("task_id")
+                @st.fragment(run_every=2)
+                def _kg_progress_fragment(doc_id=doc_id, kp_id=kp_id, task_key=task_key):
+                    if task_key not in st.session_state:
+                        if st.button("🔗 构建知识图谱", key=f"kg_{doc_id}"):
+                            result = start_kg_build(kp_id)
+                            if result and result.get("task_id"):
+                                st.session_state[task_key] = result["task_id"]
+                                st.rerun(scope="fragment")
+                        return
 
-                if task_key in st.session_state:
-                    # 有进行中的任务，显示进度
                     task_id = st.session_state[task_key]
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
                     task_data = poll_kg_status(task_id)
-                    if task_data:
-                        progress = task_data.get("progress", 0)
-                        stage = task_data.get("stage", "")
-                        task_status = task_data.get("status", "")
-                        progress_bar.progress(
+                    if task_data is None:
+                        st.warning("无法获取任务状态")
+                        del st.session_state[task_key]
+                        return
+
+                    progress = task_data.get("progress", 0)
+                    stage = task_data.get("stage", "")
+                    task_status = task_data.get("status", "")
+
+                    if task_status == "done":
+                        st.progress(1.0, text="构建完成")
+                        st.success(
+                            f"知识图谱构建完成！"
+                            f"提取 {task_data.get('nodes_count', 0)} 个知识点，"
+                            f"{task_data.get('edges_count', 0)} 条关系。"
+                        )
+                        del st.session_state[task_key]
+                    elif task_status == "failed":
+                        st.error(f"构建失败：{task_data.get('error_msg', '未知错误')}")
+                        del st.session_state[task_key]
+                    else:
+                        st.progress(
                             min(progress, 100) / 100,
                             text=f"{stage}（{progress}%）",
                         )
-                        if task_status == "done":
-                            progress_bar.progress(1.0, text="构建完成")
-                            st.success(
-                                f"知识图谱构建完成！"
-                                f"提取 {task_data.get('nodes_count', 0)} 个知识点，"
-                                f"{task_data.get('edges_count', 0)} 条关系。"
-                            )
-                            del st.session_state[task_key]
-                        elif task_status == "failed":
-                            progress_bar.empty()
-                            st.error(f"构建失败：{task_data.get('error_msg', '未知错误')}")
-                            del st.session_state[task_key]
-                        else:
-                            # 仍在进行中，2 秒后自动刷新
-                            time.sleep(2)
-                            st.rerun()
-                    else:
-                        st.warning("无法获取任务状态")
-                        del st.session_state[task_key]
-                else:
-                    # 没有进行中的任务，显示构建按钮
-                    if st.button("🔗 构建知识图谱", key=f"kg_{doc_id}"):
-                        result = start_kg_build(doc_id)
-                        if result and result.get("task_id"):
-                            st.session_state[task_key] = result["task_id"]
-                            st.rerun()
+
+                _kg_progress_fragment()
             with col_d3:
                 if st.button("🗑️", key=f"del_doc_{doc_id}"):
                     if delete_document(doc_id, user_id):

@@ -6,7 +6,7 @@ backend/rag/indexer.py
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
+from typing import Callable, Optional
 
 from backend.db.vector import upsert_documents
 from backend.rag.loader import TextChunk
@@ -21,20 +21,24 @@ async def index_chunks(
     chunks: list[TextChunk],
     collection_name: Optional[str] = None,
     batch_size: int = 32,
+    progress_callback: Optional[Callable[[int, int], None]] = None,
 ) -> int:
     """
     将文本块批量嵌入并写入向量库。
 
-    :param chunks:          TextChunk 列表（来自 loader）
-    :param collection_name: 目标集合名，None 使用默认集合
-    :param batch_size:      每批嵌入请求的大小
-    :return:                成功写入的 chunk 数量
+    :param chunks:             TextChunk 列表（来自 loader）
+    :param collection_name:    目标集合名，None 使用默认集合
+    :param batch_size:         每批嵌入请求的大小
+    :param progress_callback:  可选回调 (batch_num, total_batches)，每批完成后调用
+    :return:                   成功写入的 chunk 数量
     """
     total = 0
     import logging
     _log = logging.getLogger(__name__)
     _log.info(f"[Indexer] 开始索引 {len(chunks)} 个文本块，batch_size={batch_size}")
-    for i in range(0, len(chunks), batch_size):
+    batches = list(range(0, len(chunks), batch_size))
+    total_batches = len(batches)
+    for batch_num, i in enumerate(batches, start=1):
         batch = chunks[i : i + batch_size]
         _log.info(f"[Indexer] 正在 embedding 第 {i+1}-{i+len(batch)}/{len(chunks)} 块...")
         embeddings = await _embed_batch([c.text for c in batch])
@@ -54,6 +58,8 @@ async def index_chunks(
             collection_name=collection_name,
         )
         total += len(batch)
+        if progress_callback is not None:
+            progress_callback(batch_num, total_batches)
     return total
 
 

@@ -96,7 +96,7 @@ def create_chat_session(user_id: str) -> str | None:
     try:
         resp = httpx.post(f"{API_BASE_URL}/chat/sessions", params={"user_id": user_id}, timeout=10.0)
         if resp.status_code == 200:
-            return resp.json().get("session_id")
+            return resp.json().get("id")
     except Exception:
         pass
     return None
@@ -147,7 +147,7 @@ if not st.session_state.get("user_id"):
 
 user_id = st.session_state["user_id"]
 
-# 初始化会话
+# 初始化会话（session_id 为 None 时也重新创建）
 if not st.session_state.get("session_id"):
     session_id = create_chat_session(user_id)
     if session_id:
@@ -174,10 +174,30 @@ with tab_chat:
         for msg in st.session_state["chat_messages"]:
             role = msg.get("role", "user")
             content = msg.get("content", "")
+            resource_type = msg.get("resource_type")
             if role == "user":
                 st.markdown(f"**👤 您**：{content}")
             else:
-                st.markdown(f"**🤖 AI**：{content}")
+                st.markdown(f"**🤖 AI**：")
+                if resource_type == "mindmap":
+                    import json as _json
+                    try:
+                        tree = _json.loads(content) if isinstance(content, str) else content
+                        render_mindmap(tree, height=450)
+                    except Exception:
+                        st.markdown(content)
+                elif resource_type == "quiz":
+                    import json as _json
+                    try:
+                        data = _json.loads(content) if isinstance(content, str) else content
+                        items = data.get("items", []) if isinstance(data, dict) else []
+                        for i, item in enumerate(items, 1):
+                            st.markdown(f"**第 {i} 题**")
+                            render_quiz_card(item, show_answer=False, interactive=False)
+                    except Exception:
+                        st.markdown(content)
+                else:
+                    st.markdown(content)
             st.markdown("---")
 
     # 输入框
@@ -210,10 +230,15 @@ with tab_chat:
             if result:
                 content = result.get("content", "抱歉，生成过程中出现问题。")
                 metadata = result.get("metadata", {})
+                resource_type = result.get("resource_type")
                 recommendations = metadata.get("recommendations", [])
 
-                # 添加 AI 响应
-                st.session_state["chat_messages"].append({"role": "assistant", "content": content})
+                # 添加 AI 响应（带 resource_type 供渲染分支使用）
+                st.session_state["chat_messages"].append({
+                    "role": "assistant",
+                    "content": content,
+                    "resource_type": resource_type,
+                })
 
                 # 将推荐存入 session_state，rerun 后渲染
                 if recommendations:
