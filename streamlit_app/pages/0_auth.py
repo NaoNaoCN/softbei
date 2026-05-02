@@ -60,8 +60,9 @@ def login(username: str, password: str) -> tuple[bool, str]:
 if st.session_state.get("user_id"):
     st.success(f"当前已登录：{st.session_state.get('username') or st.session_state['user_id'][:8]}")
     if st.button("退出登录"):
-        for key in ["user_id", "access_token", "session_id", "profile", "chat_history"]:
+        for key in ["user_id", "access_token", "session_id", "profile"]:
             st.session_state[key] = None
+        st.session_state["chat_messages"] = []
         st.rerun()
     st.stop()
 

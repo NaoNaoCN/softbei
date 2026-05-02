@@ -55,7 +55,7 @@ from backend.models.schemas import (
 from backend.services import profile as profile_svc
 from backend.services import resource as resource_svc
 from backend.services import document as document_svc
-from backend.db.models import User, ChatSession, ChatMessage, KGNode, KGEdge, QuizItem, QuizAttempt, LearningPath, LearningPathItem, ResourceMeta
+from backend.db.models import User, ChatSession, KGNode, KGEdge, QuizItem, QuizAttempt, LearningPath, LearningPathItem, ResourceMeta
 
 # 内存任务字典：{task_id: {status, progress, stage, doc_id, error, result}}
 _doc_import_tasks: dict[str, dict] = {}
@@ -274,7 +274,8 @@ async def chat(
                 await insert_message(chat_sess.messages_table, "user", body.content)
                 if result.final_content:
                     await insert_message(
-                        chat_sess.messages_table, "assistant", result.final_content
+                        chat_sess.messages_table, "assistant", result.final_content,
+                        resource_type=result.resource_type.value if result.resource_type else None,
                     )
     except Exception as e:
         logging.getLogger(__name__).warning(f"动态会话表写入失败: {e}")
@@ -313,6 +314,62 @@ async def chat(
         "profile_complete": result.profile_complete,
         "resource_type": result.resource_type.value if result.resource_type else None,
     }
+
+
+from pydantic import BaseModel
+
+
+class TitleIn(BaseModel):
+    title: str
+
+
+@app.get("/chat/{session_id}/messages", tags=["chat"])
+async def get_session_messages(
+    session_id: uuid.UUID,
+    db: AsyncSession = Depends(get_session),
+):
+    """读取指定会话的历史消息列表。"""
+    from backend.db.crud import select_by_id
+    from backend.db.dynamic_chat import read_messages
+
+    chat_sess = await select_by_id(db, ChatSession, session_id)
+    if not chat_sess:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not chat_sess.messages_table:
+        return []
+    return await read_messages(chat_sess.messages_table)
+
+
+@app.delete("/chat/sessions/{session_id}", tags=["chat"])
+async def delete_chat_session(
+    session_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_session),
+):
+    """删除会话及其动态消息表。"""
+    from backend.db.crud import select_by_id, delete_by_id
+    from backend.db.dynamic_chat import drop_session_table
+
+    chat_sess = await select_by_id(db, ChatSession, session_id)
+    if not chat_sess or chat_sess.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if chat_sess.messages_table:
+        await drop_session_table(chat_sess.messages_table)
+    await delete_by_id(db, ChatSession, session_id)
+    return {"deleted": True}
+
+
+@app.patch("/chat/sessions/{session_id}/title", tags=["chat"])
+async def update_session_title(
+    session_id: uuid.UUID,
+    body: TitleIn,
+    db: AsyncSession = Depends(get_session),
+):
+    """更新会话标题。"""
+    from backend.db.crud import update_by_id
+
+    await update_by_id(db, ChatSession, session_id, data={"title": body.title})
+    return {"ok": True}
 
 
 # ===========================================================

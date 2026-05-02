@@ -39,20 +39,21 @@ def build_table_name(username: str, session_id: str, created_at) -> str:
 async def create_session_table(table_name: str) -> None:
     """
     动态创建会话消息表。
-    表结构: id, session_id, role, content, created_at
+    表结构: id, session_id, role, content, resource_type, created_at
     """
     engine = get_engine()
-    
+
     sql = f"""
     CREATE TABLE IF NOT EXISTS {table_name} (
         id VARCHAR(32) PRIMARY KEY,
         session_id VARCHAR(32) NOT NULL,
         role VARCHAR(16) NOT NULL,
         content TEXT,
+        resource_type VARCHAR(16) DEFAULT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """
-    
+
     async with engine.begin() as conn:
         await conn.execute(text(sql))
         logger.info(f"创建会话表: {table_name}")
@@ -62,44 +63,81 @@ async def insert_message(
     table_name: str,
     role: str,
     content: str,
+    resource_type: Optional[str] = None,
     message_id: Optional[str] = None,
 ) -> str:
     """
     插入一条聊天消息到指定的会话表。
-    
+
     :param table_name: 消息表名（由 build_table_name 生成）
     :param role: "user" 或 "assistant"
     :param content: 消息内容
+    :param resource_type: 资源类型（如 "mindmap"、"quiz"），仅 assistant 消息有值
     :param message_id: 可选的消息 ID
     """
     import uuid
     from backend.db.database import get_engine
-    
+
     msg_id = message_id or str(uuid.uuid4()).replace("-", "")[:32]
     engine = get_engine()
-    
+
     # 确保表存在
     await create_session_table(table_name)
-    
+
     # 插入消息
     sql = f"""
-    INSERT INTO {table_name} (id, session_id, role, content, created_at)
-    VALUES (:id, :session_id, :role, :content, :created_at)
+    INSERT INTO {table_name} (id, session_id, role, content, resource_type, created_at)
+    VALUES (:id, :session_id, :role, :content, :resource_type, :created_at)
     """
-    
+
     async with engine.begin() as conn:
         await conn.execute(
             text(sql),
             {
                 "id": msg_id,
-                "session_id": "",  # 已在表名中体现
+                "session_id": table_name,
                 "role": role,
                 "content": content,
+                "resource_type": resource_type,
                 "created_at": datetime.now(),
             }
         )
-    
+
     return msg_id
+
+
+async def read_messages(table_name: str) -> list[dict]:
+    """
+    读取指定会话表的所有消息，按时间升序排列。
+
+    :return: [{"role", "content", "resource_type", "created_at"}]
+    """
+    engine = get_engine()
+    sql = f"SELECT role, content, resource_type, created_at FROM {table_name} ORDER BY created_at ASC"
+    try:
+        async with engine.begin() as conn:
+            result = await conn.execute(text(sql))
+            rows = result.fetchall()
+        return [
+            {
+                "role": row[0],
+                "content": row[1],
+                "resource_type": row[2],
+                "created_at": row[3].isoformat() if hasattr(row[3], "isoformat") else str(row[3]),
+            }
+            for row in rows
+        ]
+    except Exception as e:
+        logger.warning(f"读取会话表 {table_name} 失败: {e}")
+        return []
+
+
+async def drop_session_table(table_name: str) -> None:
+    """删除指定的会话消息表。"""
+    engine = get_engine()
+    async with engine.begin() as conn:
+        await conn.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
+        logger.info(f"删除会话表: {table_name}")
 
 
 async def cleanup_expired_sessions() -> None:

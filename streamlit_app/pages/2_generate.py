@@ -75,33 +75,6 @@ def fetch_resource(resource_id: str) -> dict | None:
     return None
 
 
-def chat_generate(user_id: str, session_id: str, message: str, stream: bool = False) -> dict | None:
-    """对话式生成资源（调用 /chat 接口）。"""
-    try:
-        resp = httpx.post(
-            f"{API_BASE_URL}/chat/{session_id}",
-            params={"user_id": user_id, "stream": stream},
-            json={"content": message},
-            timeout=60.0,
-        )
-        if resp.status_code == 200:
-            return resp.json()
-    except Exception:
-        pass
-    return None
-
-
-def create_chat_session(user_id: str) -> str | None:
-    """创建新的对话会话。"""
-    try:
-        resp = httpx.post(f"{API_BASE_URL}/chat/sessions", params={"user_id": user_id}, timeout=10.0)
-        if resp.status_code == 200:
-            return resp.json().get("id")
-    except Exception:
-        pass
-    return None
-
-
 def _create_pathway_from_recs(user_id: str, kp_name: str, recommendations: list[dict]) -> bool:
     """将 AI 推荐列表保存为一条新学习路径，返回是否成功。"""
     try:
@@ -147,12 +120,6 @@ if not st.session_state.get("user_id"):
 
 user_id = st.session_state["user_id"]
 
-# 初始化会话（session_id 为 None 时也重新创建）
-if not st.session_state.get("session_id"):
-    session_id = create_chat_session(user_id)
-    if session_id:
-        st.session_state["session_id"] = session_id
-
 # 模式选择
 tab_chat, tab_direct = st.tabs(["💬 对话式生成", "📋 直接生成"])
 
@@ -161,127 +128,11 @@ tab_chat, tab_direct = st.tabs(["💬 对话式生成", "📋 直接生成"])
 # ----------------------------------------------------------
 with tab_chat:
     st.markdown("""
-    通过自然语言与 AI 对话，描述您想生成的学习资源。
-    例如：「帮我生成一份关于梯度下降的思维导图」
+    对话式资源生成已整合到「智能对话」页面。
+    在对话中描述您的学习需求，AI 将自动生成相应资源。
     """)
-
-    # 聊天历史
-    if "chat_messages" not in st.session_state:
-        st.session_state["chat_messages"] = []
-
-    chat_container = st.container(border=True)
-    with chat_container:
-        for msg in st.session_state["chat_messages"]:
-            role = msg.get("role", "user")
-            content = msg.get("content", "")
-            resource_type = msg.get("resource_type")
-            if role == "user":
-                st.markdown(f"**👤 您**：{content}")
-            else:
-                st.markdown(f"**🤖 AI**：")
-                if resource_type == "mindmap":
-                    import json as _json
-                    try:
-                        tree = _json.loads(content) if isinstance(content, str) else content
-                        render_mindmap(tree, height=450)
-                    except Exception:
-                        st.markdown(content)
-                elif resource_type == "quiz":
-                    import json as _json
-                    try:
-                        data = _json.loads(content) if isinstance(content, str) else content
-                        items = data.get("items", []) if isinstance(data, dict) else []
-                        for i, item in enumerate(items, 1):
-                            st.markdown(f"**第 {i} 题**")
-                            render_quiz_card(item, show_answer=False, interactive=False)
-                    except Exception:
-                        st.markdown(content)
-                else:
-                    st.markdown(content)
-            st.markdown("---")
-
-    # 输入框
-    with st.form("chat_form", clear_on_submit=True):
-        user_input = st.text_area(
-            "输入您的学习需求...",
-            placeholder="例如：帮我生成一份关于机器学习概述的学习文档",
-            height=80,
-        )
-        col_send, col_clear = st.columns([1, 4])
-        with col_send:
-            submitted = st.form_submit_button("🚀 发送", type="primary")
-        with col_clear:
-            if st.form_submit_button("🗑️ 清空"):
-                st.session_state["chat_messages"] = []
-                st.rerun()
-
-    if submitted and user_input:
-        # 添加用户消息
-        st.session_state["chat_messages"].append({"role": "user", "content": user_input})
-
-        # 调用 chat 接口
-        session_id = st.session_state.get("session_id") or create_chat_session(user_id)
-        if session_id:
-            st.session_state["session_id"] = session_id
-
-            with st.spinner("AI 正在分析您的需求..."):
-                result = chat_generate(user_id, session_id, user_input)
-
-            if result:
-                content = result.get("content", "抱歉，生成过程中出现问题。")
-                metadata = result.get("metadata", {})
-                resource_type = result.get("resource_type")
-                recommendations = metadata.get("recommendations", [])
-
-                # 添加 AI 响应（带 resource_type 供渲染分支使用）
-                st.session_state["chat_messages"].append({
-                    "role": "assistant",
-                    "content": content,
-                    "resource_type": resource_type,
-                })
-
-                # 将推荐存入 session_state，rerun 后渲染
-                if recommendations:
-                    st.session_state["last_recommendations"] = recommendations
-                    st.session_state["last_kp_name"] = metadata.get("kp_name", "学习路径")
-                else:
-                    # 清空上一次的推荐，避免残留
-                    st.session_state.pop("last_recommendations", None)
-            else:
-                st.session_state["chat_messages"].append({
-                    "role": "assistant",
-                    "content": "抱歉，无法连接到后端服务，请确保后端已启动。"
-                })
-
-        # form submit 后 Streamlit 会自动 rerun，无需手动调用
-        # st.rerun() 会导致双重 rerun，使 session_state 赋值丢失
-
-    # 推荐区：每次渲染都检查 session_state（form submit 的自动 rerun 后生效）
-    _recs_debug = st.session_state.get("last_recommendations", [])
-    if _recs_debug:
-        recommendations = st.session_state["last_recommendations"]
-        st.success("📌 AI 为您推荐的下一步学习内容：")
-        for rec in recommendations[:3]:
-            rec_kp_name = rec.get("kp_name", rec.get("kp_id", "未知"))
-            reason = rec.get("reason", "")
-            col_r1, col_r2 = st.columns([3, 1])
-            with col_r1:
-                st.write(f"- **{rec_kp_name}**：{reason}")
-            with col_r2:
-                if st.button(f"生成", key=f"rec_{rec_kp_name}"):
-                    st.session_state["current_kp_id"] = rec.get("kp_id")
-                    st.switch_page("pages/2_generate.py")
-
-        save_key = f"save_pathway_{len(recommendations)}"
-        if st.button("📌 保存为学习路径", key=save_key, type="secondary"):
-            _kp_name = st.session_state.get("last_kp_name", "学习路径")
-            if _create_pathway_from_recs(user_id, _kp_name, recommendations):
-                st.success("✅ 学习路径已创建！")
-                st.session_state.pop("last_recommendations", None)
-                if st.button("前往学习路径页 →", key="goto_pathway"):
-                    st.switch_page("pages/3_pathway.py")
-            else:
-                st.error("创建学习路径失败，请检查后端服务。")
+    if st.button("💬 前往智能对话", type="primary", use_container_width=False):
+        st.switch_page("pages/6_chat.py")
 
 # ----------------------------------------------------------
 # 直接生成模式

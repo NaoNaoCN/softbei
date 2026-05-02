@@ -109,19 +109,6 @@ class ChatSession(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     user: Mapped["User"] = relationship(back_populates="sessions")
-    messages: Mapped[list["ChatMessage"]] = relationship(back_populates="session")
-
-
-class ChatMessage(Base):
-    __tablename__ = "chat_message"
-
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("chat_session.id"), nullable=False)
-    role: Mapped[str] = mapped_column(String(16), nullable=False)   # "user" | "assistant"
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
-    session: Mapped["ChatSession"] = relationship(back_populates="messages")
 
 
 # ----------------------------------------------------------

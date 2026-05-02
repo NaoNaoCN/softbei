@@ -41,7 +41,7 @@ def init_session_state() -> None:
         "access_token": None,     # JWT Token
         "session_id": None,       # 当前对话会话 ID
         "profile": None,          # 缓存的学生画像 dict
-        "chat_history": [],       # [{"role": "user"/"assistant", "content": "..."}]
+        "chat_messages": [],      # [{"role": "user"/"assistant", "content": "..."}]
         "current_kp_id": None,    # 当前选中的知识点 ID
         "is_onboarding": False,   # 是否处于画像初始化引导阶段
         "current_kp_name": None,  # 当前选中的知识点名称
@@ -93,8 +93,8 @@ with st.sidebar:
             st.info("👋 先来聊聊你的学习情况吧")
             if st.button("开始建立画像 →"):
                 # 预置引导消息，跳转到主页对话区
-                if not st.session_state.chat_history:
-                    st.session_state.chat_history = [{
+                if not st.session_state.chat_messages:
+                    st.session_state.chat_messages = [{
                         "role": "assistant",
                         "content": (
                             "你好！我是你的学习助手。请简单介绍一下你的专业、"
@@ -107,8 +107,8 @@ with st.sidebar:
 
         if st.button("退出登录"):
             for key in ["user_id", "access_token", "session_id", "profile",
-                        "chat_history", "is_onboarding"]:
-                st.session_state[key] = None if key != "chat_history" else []
+                        "chat_messages", "is_onboarding"]:
+                st.session_state[key] = None if key != "chat_messages" else []
             st.rerun()
     else:
         st.warning("请先登录")
