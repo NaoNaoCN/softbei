@@ -126,6 +126,7 @@ class KGNode(Base):
     )
     description: Mapped[str | None] = mapped_column(Text)
     course_id: Mapped[str | None] = mapped_column(String(64))
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
 
     out_edges: Mapped[list["KGEdge"]] = relationship(
         back_populates="source_node", foreign_keys="KGEdge.source_id"
@@ -250,7 +251,7 @@ class QuizAttempt(Base):
     user_answer: Mapped[str] = mapped_column(Text, nullable=False)
     is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
     score: Mapped[float | None] = mapped_column(Float)
-    submitted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     quiz_item: Mapped["QuizItem"] = relationship(back_populates="attempts")
 

@@ -37,10 +37,13 @@ def fetch_resources(
     return []
 
 
-def fetch_quiz_items(resource_id: str) -> list[dict]:
+def fetch_quiz_items(resource_id: str, user_id: str | None = None) -> list[dict]:
     """获取某资源的题目列表。"""
     try:
-        resp = httpx.get(f"{API_BASE_URL}/resources/{resource_id}/quiz", timeout=10.0)
+        params = {}
+        if user_id:
+            params["user_id"] = user_id
+        resp = httpx.get(f"{API_BASE_URL}/resources/{resource_id}/quiz", params=params, timeout=10.0)
         if resp.status_code == 200:
             return resp.json()
     except Exception:
@@ -121,7 +124,7 @@ with tab_exam:
 
         # 加载测验
         if resource_id and resource_id != "__manual__":
-            items = fetch_quiz_items(resource_id)
+            items = fetch_quiz_items(resource_id, user_id=user_id)
 
             if not items:
                 st.warning("该资源暂无题目或加载失败。")

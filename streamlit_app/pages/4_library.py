@@ -45,10 +45,13 @@ def fetch_resources(
     return []
 
 
-def fetch_resource(resource_id: str) -> dict | None:
+def fetch_resource(resource_id: str, user_id: str | None = None) -> dict | None:
     """获取单个资源详情。"""
     try:
-        resp = httpx.get(f"{API_BASE_URL}/resources/{resource_id}", timeout=10.0)
+        params = {}
+        if user_id:
+            params["user_id"] = user_id
+        resp = httpx.get(f"{API_BASE_URL}/resources/{resource_id}", params=params, timeout=10.0)
         if resp.status_code == 200:
             return resp.json()
     except Exception:
@@ -56,10 +59,13 @@ def fetch_resource(resource_id: str) -> dict | None:
     return None
 
 
-def delete_resource(resource_id: str) -> bool:
+def delete_resource(resource_id: str, user_id: str | None = None) -> bool:
     """删除资源。"""
     try:
-        resp = httpx.delete(f"{API_BASE_URL}/resources/{resource_id}", timeout=10.0)
+        params = {}
+        if user_id:
+            params["user_id"] = user_id
+        resp = httpx.delete(f"{API_BASE_URL}/resources/{resource_id}", params=params, timeout=10.0)
         return resp.status_code == 200
     except Exception:
         return False
@@ -430,7 +436,7 @@ st.markdown("---")
 
 # 预览区域
 if st.session_state["lib_preview_id"]:
-    preview_resource = fetch_resource(st.session_state["lib_preview_id"])
+    preview_resource = fetch_resource(st.session_state["lib_preview_id"], user_id=user_id)
     if preview_resource:
         st.subheader(f"📖 预览：{preview_resource.get('title', '无标题')}")
 
@@ -499,7 +505,7 @@ else:
                         st.switch_page("pages/5_evaluate.py")
                 with col_l5:
                     if st.button("🗑️", key=f"del_{res_id}"):
-                        if delete_resource(res_id):
+                        if delete_resource(res_id, user_id=user_id):
                             st.success("已删除")
                             st.rerun()
                         else:
@@ -530,7 +536,7 @@ else:
                             st.button("📝 测验", key=f"quiz_disabled_{res['id']}", disabled=True, use_container_width=True)
                     with col_g3:
                         if st.button("🗑️ 删除", key=f"del_g_{res['id']}", use_container_width=True):
-                            if delete_resource(res["id"]):
+                            if delete_resource(res["id"], user_id=user_id):
                                 st.success("已删除")
                                 st.rerun()
                             else:
