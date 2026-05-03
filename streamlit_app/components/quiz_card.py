@@ -26,7 +26,7 @@ def render_quiz_card(
     :return:            用户输入的答案（interactive=True 时有效），否则 None
     """
     q_type = item.get("question_type", "single")
-    difficulty = item.get("difficulty", 3)
+    difficulty = item.get("difficulty") or 3
     stem = item.get("stem", "")
     options = item.get("options") or []
     answer = item.get("answer")
