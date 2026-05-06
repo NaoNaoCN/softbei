@@ -71,6 +71,7 @@ def render_kg_graph(
     height: int = 700,
     on_click: bool = False,
     pathway_highlight: dict[str, set[str]] | None = None,
+    learned_ids: set[str] | None = None,
 ) -> str | None:
     """
     渲染知识图谱（ECharts graph 力导向布局）。
@@ -79,6 +80,7 @@ def render_kg_graph(
     :param height:            图表高度（像素）
     :param on_click:          是否启用点击事件回调
     :param pathway_highlight: 学习路径高亮配置，包含 completed / current / planned 三个节点 ID 集合
+    :param learned_ids:       已学习节点 ID 集合，用于"已学习"视图高亮
     :return:                  点击的节点 ID（如果 on_click=True），否则 None
     """
     if not graph_data:
@@ -183,6 +185,23 @@ def render_kg_graph(
                 node_cfg["symbolSize"] = max(size - 4, 6)
                 node_cfg["label"] = {"show": False}
 
+        elif learned_ids is not None:
+            if nid in learned_ids:
+                # 已学习：保持原色 + 绿色光晕
+                node_cfg["itemStyle"] = {
+                    "color": color_map.get(n["type"], "#999"),
+                    "shadowBlur": 10,
+                    "shadowColor": "#52c41a",
+                    "borderColor": "#52c41a",
+                    "borderWidth": 2,
+                }
+                node_cfg["label"] = {"show": True}
+            else:
+                # 未学习：变灰变暗
+                node_cfg["itemStyle"] = {"color": "#ccc", "opacity": 0.25}
+                node_cfg["symbolSize"] = max(size - 4, 6)
+                node_cfg["label"] = {"show": False}
+
         nodes.append(node_cfg)
 
     links = []
@@ -207,6 +226,14 @@ def render_kg_graph(
                     link_cfg["lineStyle"]["color"] = hl_colors["current"]
             else:
                 link_cfg["lineStyle"]["opacity"] = 0.06
+                link_cfg["lineStyle"]["width"] = 0.5
+        elif learned_ids is not None:
+            both_learned = sid in learned_ids and tid in learned_ids
+            if both_learned:
+                link_cfg["lineStyle"]["opacity"] = 0.8
+                link_cfg["lineStyle"]["color"] = "#52c41a"
+            else:
+                link_cfg["lineStyle"]["opacity"] = 0.08
                 link_cfg["lineStyle"]["width"] = 0.5
         links.append(link_cfg)
 
@@ -244,7 +271,18 @@ def render_kg_graph(
                 {"type": "text", "style": {"text": "待学习", "fontSize": 12, "fill": "#333"}, "left": 168, "top": 0},
             ]}
         ]
+    elif learned_ids is not None:
+        option["graphic"] = [
+            {"type": "group", "left": 20, "top": 10, "children": [
+                {"type": "circle", "shape": {"r": 6}, "style": {"fill": "#52c41a"}, "left": 0, "top": 2},
+                {"type": "text", "style": {"text": "已学习", "fontSize": 12, "fill": "#333"}, "left": 18, "top": 0},
+                {"type": "circle", "shape": {"r": 6}, "style": {"fill": "#ccc"}, "left": 75, "top": 2},
+                {"type": "text", "style": {"text": "未学习", "fontSize": 12, "fill": "#999"}, "left": 93, "top": 0},
+            ]}
+        ]
 
-    events = {"click": "function(params){return params.data ? params.data.id : null;}"} if on_click else {}
+    events = {"click": "function(params){if(!params.data) return null; return params.data.id || params.data.name || null;}"} if on_click else {}
     result = st_echarts(options=option, height=f"{height}px", events=events)
+    if on_click and isinstance(result, dict):
+        result = next(iter(result.values()), None)
     return result if on_click else None

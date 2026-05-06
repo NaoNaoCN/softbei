@@ -263,10 +263,10 @@ class TestMakeClient:
 
     @patch("backend.services.llm.config")
     def test_qwen(self, mock_config):
-        """qwen provider 应返回 qwen-plus 模型。"""        
+        """qwen provider 应返回 qwen3.5-flash 模型。"""        
         mock_config.llm.api_key = "test_key"
         client, model = _make_client("qwen")
-        assert model == "qwen-plus"
+        assert model == "qwen3.5-flash"
 
     @patch("backend.services.llm.config")
     def test_openai(self, mock_config):

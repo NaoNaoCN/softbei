@@ -462,6 +462,7 @@ async def get_kg_graph(
 async def build_kg_endpoint(
     doc_id: str,
     background_tasks: BackgroundTasks,
+    user_id: Optional[uuid.UUID] = None,
     db: AsyncSession = Depends(get_session),
 ):
     """异步构建知识图谱，立即返回任务 ID 供轮询。"""
@@ -478,7 +479,7 @@ async def build_kg_endpoint(
     })
 
     from backend.services.kg_builder import run_kg_build
-    background_tasks.add_task(run_kg_build, task.id, doc_id, db)
+    background_tasks.add_task(run_kg_build, task.id, doc_id, db, user_id)
 
     return KGBuildTaskOut(
         task_id=task.id,
@@ -1059,9 +1060,10 @@ async def add_record(
 @app.get("/records", response_model=list[LearningRecordOut], tags=["records"])
 async def list_records(
     user_id: uuid.UUID,
+    kp_id: Optional[str] = None,
     skip: int = 0,
     limit: int = 20,
     db: AsyncSession = Depends(get_session),
 ):
-    """获取用户的学习记录列表。"""
-    return await resource_svc.list_learning_records(user_id, db, skip, limit)
+    """获取用户的学习记录列表，可按 kp_id 过滤。"""
+    return await resource_svc.list_learning_records(user_id, db, skip, limit, kp_id)

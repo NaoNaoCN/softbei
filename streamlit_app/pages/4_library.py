@@ -168,6 +168,25 @@ def delete_document(doc_id: str, user_id: str) -> bool:
         return False
 
 
+def post_learning_record(user_id: str, resource_id: str | None, kp_id: str | None, action: str) -> None:
+    """写入学习记录（静默失败）。"""
+    try:
+        payload: dict = {"action": action}
+        if resource_id:
+            payload["resource_id"] = resource_id
+        if kp_id:
+            payload["kp_id"] = kp_id
+        httpx.post(
+            f"{API_BASE_URL}/records",
+            params={"user_id": user_id},
+            json=payload,
+            timeout=5.0,
+        )
+    except Exception:
+        pass
+
+
+
 def get_resource_stats(user_id: str) -> dict:
     """获取资源统计信息。"""
     try:
@@ -183,12 +202,15 @@ def get_resource_stats(user_id: str) -> dict:
     return {}
 
 
-def start_kg_build(doc_id: str) -> dict | None:
+def start_kg_build(doc_id: str, user_id: str | None = None) -> dict | None:
     """触发异步知识图谱构建，返回任务信息。"""
     try:
+        params = {"doc_id": doc_id}
+        if user_id:
+            params["user_id"] = user_id
         resp = httpx.post(
             f"{API_BASE_URL}/kg/build",
-            params={"doc_id": doc_id},
+            params=params,
             timeout=10.0,
         )
         if resp.status_code == 200:
@@ -341,7 +363,7 @@ if docs:
                 def _kg_progress_fragment(doc_id=doc_id, kp_id=kp_id, task_key=task_key):
                     if task_key not in st.session_state:
                         if st.button("🔗 构建知识图谱", key=f"kg_{doc_id}"):
-                            result = start_kg_build(kp_id)
+                            result = start_kg_build(kp_id, user_id)
                             if result and result.get("task_id"):
                                 st.session_state[task_key] = result["task_id"]
                                 st.rerun(scope="fragment")
@@ -498,6 +520,7 @@ else:
                 with col_l3:
                     if st.button("👁️ 预览", key=f"view_{res_id}"):
                         st.session_state["lib_preview_id"] = res_id
+                        post_learning_record(user_id, res_id, res.get("kp_id"), "view")
                         st.rerun()
                 with col_l4:
                     if st.button("📝 测验", key=f"quiz_{res_id}", disabled=r_type != "quiz"):
@@ -526,6 +549,7 @@ else:
                     with col_g1:
                         if st.button("👁️ 预览", key=f"view_g_{res['id']}", use_container_width=True):
                             st.session_state["lib_preview_id"] = res["id"]
+                            post_learning_record(user_id, res["id"], res.get("kp_id"), "view")
                             st.rerun()
                     with col_g2:
                         if r_type == "quiz":

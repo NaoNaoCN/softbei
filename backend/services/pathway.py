@@ -18,7 +18,7 @@ from backend.db.crud import (
     delete,
     delete_by_id,
 )
-from backend.db.models import LearningPath, LearningPathItem
+from backend.db.models import LearningPath, LearningPathItem, KGNode
 from backend.models.schemas import (
     LearningPathCreate,
     LearningPathUpdate,
@@ -139,6 +139,11 @@ async def add_pathway_item(
     if not path:
         return None
 
+    # 校验 kp_id 在知识图谱中存在
+    kp_node = await select_one(db, KGNode, filters={"id": data.kp_id})
+    if not kp_node:
+        return None
+
     item = await insert(
         db, LearningPathItem,
         data={
@@ -164,7 +169,7 @@ async def update_pathway_item(
 ) -> Optional[LearningPathItemOut]:
     """更新学习路径项（顺序/完成状态）。"""
     # 验证归属：item -> path -> user_id
-    item = await select_one(db, LearningPathItem, filters={"id": item_id})
+    item = await select_one(db, LearningPathItem, filters={"id": item_id}, loadRelations=["kp"])
     if not item:
         return None
     path = await select_one(db, LearningPath, filters={"id": item.path_id, "user_id": user_id})
@@ -181,7 +186,7 @@ async def update_pathway_item(
 
     await update_by_id(db, LearningPathItem, item_id, update_data)
     # 重新查询以获取更新后的数据
-    updated = await select_one(db, LearningPathItem, filters={"id": item_id})
+    updated = await select_one(db, LearningPathItem, filters={"id": item_id}, loadRelations=["kp"])
     return _item_to_out(updated)
 
 

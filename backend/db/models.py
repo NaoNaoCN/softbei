@@ -168,7 +168,7 @@ class ResourceMeta(Base):
     )
     title: Mapped[str | None] = mapped_column(String(256))
     content: Mapped[str | None] = mapped_column(Text)
-    content_json: Mapped[dict | None] = mapped_column(JSON)   # 思维导图等结构化内容
+    content_json: Mapped[dict | None] = mapped_column(JSON)   # 思维导图等结构化内容，与content字段互斥使用
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     user: Mapped["User"] = relationship(back_populates="resources")
