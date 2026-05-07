@@ -5,16 +5,13 @@ SummaryAgent：生成知识点精简总结（适合复习的要点提炼）。
 
 from __future__ import annotations
 
-import logging
+from loguru import logger  # noqa: F401
 
 from backend.models.schemas import AgentState
 from backend.agents.utils import resolve_kp_name
 from backend.rag.retriever import retrieve_by_kp, format_context
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
-
-_logger = logging.getLogger(__name__)
-
 
 SYSTEM_PROMPT = """你是一位学习总结专家。
 请根据参考资料，为以下知识点生成一份简洁的复习总结，要求：
@@ -40,7 +37,7 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     3. 写入 state.draft_content
     """
     kp_name = await resolve_kp_name(state, config)
-    _logger.info("[SummaryAgent] kp_name=%s", kp_name)
+    logger.info("[SummaryAgent] kp_name=%s", kp_name)
 
     # 检索相关文档
     try:
@@ -48,11 +45,11 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
         context = format_context(chunks, max_tokens=3000)
         retrieved_texts = [c.text for c in chunks]
         if chunks:
-            _logger.info("[SummaryAgent] RAG 检索到 %d 条参考资料", len(chunks))
+            logger.info("[SummaryAgent] RAG 检索到 %d 条参考资料", len(chunks))
         else:
-            _logger.warning("[SummaryAgent] RAG 未检索到参考资料，降级为纯 LLM 生成")
+            logger.warning("[SummaryAgent] RAG 未检索到参考资料，降级为纯 LLM 生成")
     except Exception as e:
-        _logger.warning("[SummaryAgent] RAG 检索异常: %s，降级为纯 LLM 生成", e)
+        logger.warning("[SummaryAgent] RAG 检索异常: %s，降级为纯 LLM 生成", e)
         context = "（暂无参考资料）"
         retrieved_texts = []
 
@@ -68,10 +65,10 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
             temperature=0.7,
             max_tokens=1200,
         )
-        _logger.info("[SummaryAgent] 总结生成成功，draft_len=%d", len(draft))
+        logger.info("[SummaryAgent] 总结生成成功，draft_len=%d", len(draft))
         state = state.model_copy(update={"draft_content": draft})
     except Exception as e:
-        _logger.error("[SummaryAgent] 生成失败: %s", e)
+        logger.error("[SummaryAgent] 生成失败: %s", e)
         state = state.model_copy(update={"draft_content": f"总结生成失败：{e}"})
 
     return state

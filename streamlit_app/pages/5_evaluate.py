@@ -48,6 +48,30 @@ def fetch_quiz_items(resource_id: str) -> list[dict]:
     return []
 
 
+def fetch_kg_nodes(root_id: str | None = None, depth: int = 5) -> list[dict]:
+    """获取知识图谱节点列表"""
+    try:
+        params = {"depth": depth}
+        if root_id:
+            params["root_id"] = root_id
+        resp = httpx.get(f"{API_BASE_URL}/kg/graph", params=params, timeout=10.0)
+        if resp.status_code == 200:
+            return resp.json().get("nodes", [])
+    except Exception:
+        pass
+    return []
+
+
+def build_item_kp_name_map() -> dict[str, str]:
+    """从 KG 图谱构建 kp_id → kp_name 映射"""
+    nodes = fetch_kg_nodes(depth=5)
+    return {
+        n["id"]: n["name"]
+        for n in nodes
+        if n.get("type") in ("Chapter", "KnowledgePoint", "SubPoint", "Concept")
+    }
+
+
 def submit_answer(user_id: str, quiz_item_id: str, user_answer) -> dict | None:
     """提交答案，返回批改结果。"""
     try:
@@ -241,6 +265,18 @@ with tab_weak:
                 else:
                     item_stats[item_id]["wrong_answer"] = attempt.get("user_answer", "")
 
+        # 构建 item_id → kp_name 映射
+        kp_name_map = build_item_kp_name_map()
+        item_kp_name = {}
+        quiz_resources = fetch_resources(user_id, resource_type="quiz", limit=100)
+        for res in quiz_resources:
+            quiz_items = fetch_quiz_items(res["id"])
+            for qi in quiz_items:
+                qi_id = qi.get("id")
+                kp_id = qi.get("kp_id")
+                if qi_id in item_stats and kp_id and kp_id in kp_name_map:
+                    item_kp_name[qi_id] = kp_name_map[kp_id]
+
         # 找出正确率低的题目
         weak_items = []
         for item_id, stats in item_stats.items():
@@ -255,11 +291,16 @@ with tab_weak:
             st.warning(f"发现 {len(weak_items)} 个薄弱知识点，建议加强学习：")
 
             for item_id, accuracy, wrong_answer in sorted(weak_items, key=lambda x: x[1]):
+                kp_name = item_kp_name.get(item_id, None)
+                title = f"❌ {kp_name or f'题目 {item_id[:8]}'}（正确率：{accuracy*100:.0f}%）"
                 col_w1, col_w2 = st.columns([3, 1])
                 with col_w1:
-                    with st.expander(f"❌ 题目 ...{item_id[:8]}（正确率：{accuracy*100:.0f}%）"):
+                    with st.expander(title):
                         st.write(f"错误答案: {wrong_answer}")
-                        if st.button(f"📖 去学习", key=f"weak_learn_{item_id}"):
+                        if st.button("📖 去学习", key=f"weak_learn_{item_id}"):
+                            if kp_name:
+                                st.session_state["current_kp_name"] = kp_name
+                            st.session_state["open_direct_tab"] = True
                             st.switch_page("pages/2_generate.py")
                 with col_w2:
                     st.progress(accuracy, text=f"{accuracy*100:.0f}%")

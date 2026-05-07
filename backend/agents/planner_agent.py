@@ -11,6 +11,7 @@ from backend.models.schemas import AgentState, ResourceType
 from backend.services import profile as profile_svc
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
+from loguru import logger  # noqa: F401
 
 
 SYSTEM_PROMPT = """你是一个学习计划分析助手。
@@ -45,8 +46,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     """
     # 如果已经预设了 resource_type 和 kp_id，直接跳过
     if state.resource_type and state.kp_id:
-        import logging
-        logging.getLogger(__name__).warning(
+        logger.warning(
             f"[PlannerAgent] 跳过分析（已预设 resource_type={state.resource_type}, kp_id={state.kp_id}）"
         )
         return state
@@ -103,8 +103,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
         if kp_id:
             state = state.model_copy(update={"kp_id": kp_id})
     except (json.JSONDecodeError, Exception) as e:
-        import logging
-        logging.getLogger(__name__).warning(f"[PlannerAgent] LLM 解析失败: {e}, raw={raw if 'raw' in dir() else 'N/A'}")
+        logger.warning(f"[PlannerAgent] LLM 解析失败: {e}, raw={raw if 'raw' in dir() else 'N/A'}")
         # 解析失败时默认生成文档
         state = state.model_copy(update={"resource_type": ResourceType.doc})
 
@@ -116,8 +115,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     if not state.kp_id:
         state = state.model_copy(update={"kp_id": state.user_message[:50]})
 
-    import logging
-    logging.getLogger(__name__).warning(f"[PlannerAgent] resource_type={state.resource_type}, kp_id={state.kp_id}")
+    logger.warning(f"[PlannerAgent] resource_type={state.resource_type}, kp_id={state.kp_id}")
 
     return state
 

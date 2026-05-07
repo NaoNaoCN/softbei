@@ -120,13 +120,25 @@ if not st.session_state.get("user_id"):
 
 user_id = st.session_state["user_id"]
 
+# 判断是否从薄弱分析跳转，直接进入"直接生成"模式
+if st.session_state.get("open_direct_tab"):
+    default_mode = 1  # 直接生成
+    st.session_state["open_direct_tab"] = False
+else:
+    default_mode = 0
+
 # 模式选择
-tab_chat, tab_direct = st.tabs(["💬 对话式生成", "📋 直接生成"])
+mode = st.radio(
+    "生成模式",
+    ["💬 对话式生成", "📋 直接生成"],
+    index=default_mode,
+    horizontal=True,
+)
 
 # ----------------------------------------------------------
 # 对话式生成模式
 # ----------------------------------------------------------
-with tab_chat:
+if mode == "💬 对话式生成":
     st.markdown("""
     对话式资源生成已整合到「智能对话」页面。
     在对话中描述您的学习需求，AI 将自动生成相应资源。
@@ -137,7 +149,7 @@ with tab_chat:
 # ----------------------------------------------------------
 # 直接生成模式
 # ----------------------------------------------------------
-with tab_direct:
+else:
     col_form, col_result = st.columns([1, 2])
 
     with col_form:

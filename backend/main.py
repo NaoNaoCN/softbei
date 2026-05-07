@@ -6,7 +6,6 @@ FastAPI 应用入口：路由注册、生命周期管理、中间件配置。
 from __future__ import annotations
 
 import asyncio
-import logging
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -20,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.hash_utils import hash_password, verify_password
 from backend.agents.graph import get_graph, invoke, stream_invoke
+from backend.middleware.logging_middleware import LoggingMiddleware
 from backend.db.database import close_db, get_session, health_check as db_health, init_db
 import backend.db.database as _db_module
 from backend.db.vector import health_check as vec_health, init_vector_db
@@ -43,6 +43,7 @@ from backend.models.schemas import (
     QuizAttemptOut,
     QuizItemOut,
     QuizSubmitIn,
+    QuestionType,
     ResourceMetaOut,
     StudentProfileIn,
     StudentProfileOut,
@@ -64,9 +65,8 @@ _doc_import_tasks: dict[str, dict] = {}
 # JWT 配置（从 configs/config.yaml 读取）
 # ===========================================================
 
-# 将 backend.agents.* 的日志级别设为 INFO，确保 agent 执行链路可见
-logging.getLogger("backend.agents").setLevel(logging.INFO)
 from backend.config import config as app_config
+from backend.logging_config import logger  # noqa: F401
 
 JWT_SECRET = app_config.jwt.secret
 JWT_ALGORITHM = app_config.jwt.algorithm
@@ -114,6 +114,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(LoggingMiddleware)
 
 
 # ===========================================================
@@ -230,7 +231,7 @@ async def create_chat_session(user_id: uuid.UUID, db: AsyncSession = Depends(get
     try:
         await create_session_table(table_name)
     except Exception as e:
-        logging.getLogger(__name__).warning(f"动态会话表创建失败: {e}")
+        logger.warning(f"动态会话表创建失败: {e}")
         table_name = None
 
     # 4. 回写 messages_table 字段
@@ -278,7 +279,7 @@ async def chat(
                         resource_type=result.resource_type.value if result.resource_type else None,
                     )
     except Exception as e:
-        logging.getLogger(__name__).warning(f"动态会话表写入失败: {e}")
+        logger.warning(f"动态会话表写入失败: {e}")
 
     # 如果生成了资源，持久化到 resource_meta 表
     if result.resource_type and result.draft_content:
@@ -299,11 +300,9 @@ async def chat(
                 "content": result.draft_content,
             })
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"资源保存失败: {e}")
+            logger.warning(f"资源保存失败: {e}")
 
-    import logging as _log
-    _log.getLogger(__name__).warning(
+    logger.warning(
         "[chat] returning metadata keys=%s recommendations_count=%d",
         list(result.metadata.keys()),
         len(result.metadata.get("recommendations", [])),
@@ -456,7 +455,7 @@ async def build_kg_endpoint(
     from backend.db.models import KGBuildTask
     from backend.models.schemas import KGBuildTaskOut
 
-    print(f"[POST /kg/build] 创建异步构建任务，doc_id={doc_id}")
+    logger.info(f"[POST /kg/build] 创建异步构建任务，doc_id={doc_id}")
     task = await insert(db, KGBuildTask, data={
         "doc_id": doc_id,
         "status": "pending",
@@ -630,7 +629,7 @@ async def get_quiz_items(resource_id: uuid.UUID, db: AsyncSession = Depends(get_
     return [
         QuizItemOut(
             id=item.id,
-            kp_id=None,
+            kp_id=item.kp_id,
             question_type=item.question_type,
             difficulty=None,
             stem=item.stem,
@@ -656,9 +655,31 @@ async def submit_quiz(
         raise HTTPException(status_code=404, detail="Quiz item not found")
 
     # 判分
-    user_answer_str = str(body.user_answer).strip().lower()
-    correct_answer_str = str(quiz_item.answer).strip().lower()
-    is_correct = user_answer_str == correct_answer_str
+    import re
+    import ast
+
+    def extract_letters(text: str) -> set[str]:
+        """从 'A. xxx, B. yyy' 这样的文本中提取出字母集合 {A, B}"""
+        return set(re.findall(r'\b([A-Z])\b', text))
+
+    if quiz_item.question_type == QuestionType.single:
+        user_letters = extract_letters(str(body.user_answer))
+        correct_letters = extract_letters(str(quiz_item.answer))
+        is_correct = user_letters == correct_letters
+    elif quiz_item.question_type == QuestionType.multi:
+        user_letters = extract_letters(str(body.user_answer))
+        # correct_answer 可能是 "['A', 'B', 'D']" 格式的字符串
+        try:
+            correct_list = ast.literal_eval(str(quiz_item.answer))
+            correct_letters = set(correct_list)
+        except Exception:
+            correct_letters = extract_letters(str(quiz_item.answer))
+        is_correct = user_letters == correct_letters
+    else:
+        # fill / short：直接字符串比较
+        is_correct = str(body.user_answer).strip().lower() == str(quiz_item.answer).strip().lower()
+
+    logger.info(f"[QuizSubmit] quiz_item_id={body.quiz_item_id}, question_type={quiz_item.question_type}, user_answer={body.user_answer!r}, correct_answer={quiz_item.answer!r}, is_correct={is_correct}")
     score = 1.0 if is_correct else 0.0
 
     attempt = await insert(
@@ -677,7 +698,7 @@ async def submit_quiz(
         user_answer=attempt.user_answer,
         is_correct=attempt.is_correct,
         score=attempt.score,
-        created_at=attempt.submitted_at,
+        created_at=attempt.created_at,
     )
 
 
@@ -824,8 +845,6 @@ async def import_document(
     - 索引到向量库（供 RAG 检索使用）
     - 创建资源记录到数据库
     """
-    import logging
-    _log = logging.getLogger(__name__)
     file_name = file.filename or "unknown.pdf"
     if not file_name.lower().endswith(".pdf"):
         raise HTTPException(
@@ -836,7 +855,7 @@ async def import_document(
     try:
         content = await file.read()
         saved_path = document_svc.save_uploaded_file(content, file_name)
-        _log.warning(f"[import_document] 文件 {file_name} 已保存到 {saved_path}，开始处理...")
+        logger.warning(f"[import_document] 文件 {file_name} 已保存到 {saved_path}，开始处理...")
         result = await document_svc.import_pdf(
             file_path=saved_path,
             user_id=user_id,
@@ -869,8 +888,6 @@ async def import_document_async(
     """
     异步导入 PDF 文档。立即返回 task_id，前端轮询 /documents/import/{task_id}/status。
     """
-    import logging
-    _log = logging.getLogger(__name__)
     file_name = file.filename or "unknown.pdf"
     if not file_name.lower().endswith(".pdf"):
         raise HTTPException(
@@ -922,7 +939,7 @@ async def import_document_async(
             _doc_import_tasks[task_id]["doc_id"] = result.get("doc_id")
             _doc_import_tasks[task_id]["result"] = result
         except Exception as e:
-            _log.exception(f"[import_document_async] 后台任务失败: {e}")
+            logger.exception(f"[import_document_async] 后台任务失败: {e}")
             _doc_import_tasks[task_id]["status"] = "failed"
             _doc_import_tasks[task_id]["error"] = str(e)
 

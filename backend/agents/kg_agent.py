@@ -5,15 +5,12 @@ KGAgent：从已导入文档自动构建知识图谱（KGNode + KGEdge）。
 
 from __future__ import annotations
 
-import logging
+from loguru import logger  # noqa: F401
 
 from langchain_core.runnables import RunnableConfig
 
 from backend.models.schemas import AgentState
 from backend.services.kg_builder import build_kg
-
-logger = logging.getLogger(__name__)
-
 
 async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     """

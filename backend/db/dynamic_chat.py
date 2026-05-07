@@ -9,8 +9,9 @@ backend/db/dynamic_chat.py
 from __future__ import annotations
 
 import asyncio
-import logging
 from datetime import datetime, timedelta
+
+from loguru import logger  # noqa: F401
 from typing import Optional
 
 from sqlalchemy import text
@@ -18,8 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.database import get_engine, Base
 from backend.db.models import ChatSession  # 导入以注册到 Base.metadata
-
-logger = logging.getLogger(__name__)
 
 # 会话表过期时间（天）
 SESSION_EXPIRY_DAYS = 30

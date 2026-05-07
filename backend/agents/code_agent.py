@@ -5,7 +5,7 @@ CodeAgent：生成代码示例或编程练习题（含参考答案）。
 
 from __future__ import annotations
 
-import logging
+from loguru import logger  # noqa: F401
 
 from backend.models.schemas import AgentState
 from backend.agents.utils import resolve_kp_name
@@ -13,9 +13,6 @@ from backend.rag.retriever import retrieve_by_kp, format_context
 from backend.services import profile as profile_svc
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
-
-logger = logging.getLogger(__name__)
-
 
 SYSTEM_PROMPT = """你是一位编程教学专家。
 请为以下知识点生成一个编程练习（含完整参考答案），要求：

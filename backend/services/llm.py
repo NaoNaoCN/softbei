@@ -7,15 +7,14 @@ LLM 调用服务层。
 
 from __future__ import annotations
 
-import logging
 from typing import AsyncGenerator, Optional
+
+from loguru import logger  # noqa: F401
 
 from openai import AsyncOpenAI, RateLimitError
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from backend.config import config
-
-logger = logging.getLogger(__name__)
 
 # ===========================================================
 # 异常处理
@@ -189,10 +188,10 @@ async def _local_embedding(text: str) -> list[float]:
     try:
         model = _get_embedding_model()
         result = model.encode(text).tolist()
-        logging.getLogger(__name__).info(f"[Embedding] 本地 BGE-M3 成功，维度={len(result)}")
+        logger.info(f"[Embedding] 本地 BGE-M3 成功，维度={len(result)}")
         return result
     except Exception as e:
-        logging.getLogger(__name__).warning(f"[Embedding] 本地 BGE-M3 失败: {e}，返回空向量，RAG 将降级。")
+        logger.warning(f"[Embedding] 本地 BGE-M3 失败: {e}，返回空向量，RAG 将降级。")
         return []
 
 

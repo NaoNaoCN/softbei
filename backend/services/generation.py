@@ -6,12 +6,11 @@ backend/services/generation.py
 from __future__ import annotations
 
 import json
-import logging
 import re
+
+from loguru import logger  # noqa: F401
 import uuid
 from typing import Any
-
-logger = logging.getLogger(__name__)
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
