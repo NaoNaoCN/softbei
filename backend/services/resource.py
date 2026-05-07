@@ -180,19 +180,12 @@ async def record_learning(
         data={
             "user_id": user_id,
             "resource_id": data.resource_id,
-            "action": "view",
+            "kp_id": data.kp_id,
+            "action": data.action,
             "duration_seconds": data.duration_seconds,
         },
     )
-    return LearningRecordOut(
-        id=record.id,
-        user_id=record.user_id,
-        resource_id=record.resource_id,
-        duration_seconds=record.duration_seconds,
-        rating=data.rating,
-        feedback=data.feedback,
-        created_at=record.recorded_at,
-    )
+    return LearningRecordOut.model_validate(record)
 
 
 async def list_learning_records(
@@ -200,21 +193,16 @@ async def list_learning_records(
     db: AsyncSession,
     skip: int = 0,
     limit: int = 20,
+    kp_id: Optional[str] = None,
 ) -> list[LearningRecordOut]:
     """列举用户的学习历史。"""
+    filters: dict = {"user_id": user_id}
+    if kp_id is not None:
+        filters["kp_id"] = kp_id
     records = await select(
         db, LearningRecord,
-        filters={"user_id": user_id},
+        filters=filters,
         limit=limit,
         offset=skip,
     )
-    return [
-        LearningRecordOut(
-            id=r.id,
-            user_id=r.user_id,
-            resource_id=r.resource_id,
-            duration_seconds=r.duration_seconds,
-            created_at=r.recorded_at,
-        )
-        for r in records
-    ]
+    return [LearningRecordOut.model_validate(r) for r in records]

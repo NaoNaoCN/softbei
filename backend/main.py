@@ -320,11 +320,13 @@ from pydantic import BaseModel
 
 class TitleIn(BaseModel):
     title: str
+    user_id: Optional[uuid.UUID] = None
 
 
 @app.get("/chat/{session_id}/messages", tags=["chat"])
 async def get_session_messages(
     session_id: uuid.UUID,
+    user_id: Optional[uuid.UUID] = None,
     db: AsyncSession = Depends(get_session),
 ):
     """读取指定会话的历史消息列表。"""
@@ -334,6 +336,8 @@ async def get_session_messages(
     chat_sess = await select_by_id(db, ChatSession, session_id)
     if not chat_sess:
         raise HTTPException(status_code=404, detail="Session not found")
+    if user_id and chat_sess.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     if not chat_sess.messages_table:
         return []
     return await read_messages(chat_sess.messages_table)
@@ -365,8 +369,12 @@ async def update_session_title(
     db: AsyncSession = Depends(get_session),
 ):
     """更新会话标题。"""
-    from backend.db.crud import update_by_id
+    from backend.db.crud import select_by_id, update_by_id
 
+    if body.user_id:
+        chat_sess = await select_by_id(db, ChatSession, session_id)
+        if not chat_sess or chat_sess.user_id != body.user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
     await update_by_id(db, ChatSession, session_id, data={"title": body.title})
     return {"ok": True}
 
@@ -379,13 +387,18 @@ async def update_session_title(
 async def get_kg_graph(
     root_id: Optional[str] = None,
     doc_id: Optional[str] = None,
+    user_id: Optional[uuid.UUID] = None,
     depth: int = 3,
     db: AsyncSession = Depends(get_session),
 ):
     """获取知识图谱子图，供前端 ECharts 渲染。支持按 doc_id 过滤 + depth 控制展开层数。"""
     from backend.db.crud import select as db_select
 
-    filters = {"course_id": doc_id} if doc_id else {}
+    filters: dict = {}
+    if doc_id:
+        filters["course_id"] = doc_id
+    if user_id:
+        filters["user_id"] = user_id
     all_nodes = await db_select(db, KGNode, filters=filters)
     node_map = {n.id: n for n in all_nodes}
     node_ids = set(node_map.keys())
@@ -448,6 +461,7 @@ async def get_kg_graph(
 async def build_kg_endpoint(
     doc_id: str,
     background_tasks: BackgroundTasks,
+    user_id: Optional[uuid.UUID] = None,
     db: AsyncSession = Depends(get_session),
 ):
     """异步构建知识图谱，立即返回任务 ID 供轮询。"""
@@ -464,7 +478,7 @@ async def build_kg_endpoint(
     })
 
     from backend.services.kg_builder import run_kg_build
-    background_tasks.add_task(run_kg_build, task.id, doc_id, db)
+    background_tasks.add_task(run_kg_build, task.id, doc_id, db, user_id)
 
     return KGBuildTaskOut(
         task_id=task.id,
@@ -602,17 +616,33 @@ async def get_resource_stats(user_id: uuid.UUID, db: AsyncSession = Depends(get_
 
 
 @app.get("/resources/{resource_id}", response_model=ResourceMetaOut, tags=["resources"])
-async def get_resource(resource_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
+async def get_resource(
+    resource_id: uuid.UUID,
+    user_id: Optional[uuid.UUID] = None,
+    db: AsyncSession = Depends(get_session),
+):
     """获取单个资源详情。"""
     res = await resource_svc.get_resource(resource_id, db)
     if not res:
         raise HTTPException(status_code=404)
+    if user_id and res.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     return res
 
 
 @app.delete("/resources/{resource_id}", tags=["resources"])
-async def delete_resource(resource_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
+async def delete_resource(
+    resource_id: uuid.UUID,
+    user_id: Optional[uuid.UUID] = None,
+    db: AsyncSession = Depends(get_session),
+):
     """删除资源。"""
+    if user_id:
+        res = await resource_svc.get_resource(resource_id, db)
+        if not res:
+            raise HTTPException(status_code=404)
+        if res.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
     await resource_svc.delete_resource(resource_id, db)
     return {"deleted": True}
 
@@ -622,9 +652,19 @@ async def delete_resource(resource_id: uuid.UUID, db: AsyncSession = Depends(get
 # ===========================================================
 
 @app.get("/resources/{resource_id}/quiz", response_model=list[QuizItemOut], tags=["quiz"])
-async def get_quiz_items(resource_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
+async def get_quiz_items(
+    resource_id: uuid.UUID,
+    user_id: Optional[uuid.UUID] = None,
+    db: AsyncSession = Depends(get_session),
+):
     """获取某资源下的所有题目。"""
     from backend.db.crud import select as db_select
+    if user_id:
+        res = await resource_svc.get_resource(resource_id, db)
+        if not res:
+            raise HTTPException(status_code=404)
+        if res.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
     quiz_items = await db_select(db, QuizItem, filters={"resource_id": resource_id})
     return [
         QuizItemOut(
@@ -747,9 +787,18 @@ async def create_pathway(
 @app.get("/pathways/{path_id}", response_model=LearningPathOut, tags=["pathway"])
 async def get_pathway(
     path_id: uuid.UUID,
+    user_id: Optional[uuid.UUID] = None,
     db: AsyncSession = Depends(get_session),
 ):
     """获取单条学习路径详情。"""
+    from backend.db.crud import select_one as db_select_one
+
+    if user_id:
+        path_row = await db_select_one(db, LearningPath, filters={"id": path_id})
+        if not path_row:
+            raise HTTPException(status_code=404, detail="Pathway not found")
+        if path_row.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
     result = await pathway_svc.get_pathway(path_id, db)
     if not result:
         raise HTTPException(status_code=404, detail="Pathway not found")
@@ -1028,9 +1077,10 @@ async def add_record(
 @app.get("/records", response_model=list[LearningRecordOut], tags=["records"])
 async def list_records(
     user_id: uuid.UUID,
+    kp_id: Optional[str] = None,
     skip: int = 0,
     limit: int = 20,
     db: AsyncSession = Depends(get_session),
 ):
-    """获取用户的学习记录列表。"""
-    return await resource_svc.list_learning_records(user_id, db, skip, limit)
+    """获取用户的学习记录列表，可按 kp_id 过滤。"""
+    return await resource_svc.list_learning_records(user_id, db, skip, limit, kp_id)

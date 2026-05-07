@@ -123,9 +123,9 @@ EDGE_EXTRACT_CROSS_PROMPT = """你是一位知识图谱构建专家。以下知�
 # 辅助函数
 # ----------------------------------------------------------
 
-def _make_node_id(name: str) -> str:
-    """生成节点 ID：kp_{hash(name)[:8]}"""
-    h = hashlib.md5(name.encode()).hexdigest()[:8]
+def _make_node_id(name: str, doc_id: str = "") -> str:
+    """生成节点 ID：kp_{hash(doc_id+name)[:12]}，包含 doc_id 避免跨文档同名冲突。"""
+    h = hashlib.md5(f"{doc_id}:{name}".encode()).hexdigest()[:12]
     return f"kp_{h}"
 
 
@@ -563,7 +563,7 @@ async def _extract_cross_edges(all_nodes: list[dict]) -> list[dict]:
 # 主入口
 # ----------------------------------------------------------
 
-async def build_kg(doc_id: str, db: AsyncSession, on_progress=None) -> dict[str, Any]:
+async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None) -> dict[str, Any]:
     """
     从已导入文档构建知识图谱。
 
@@ -687,7 +687,7 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None) -> dict[str,
     name_to_id: dict[str, str] = {}
     edge_count = 0
     for node in nodes:
-        node_id = _make_node_id(node["name"])
+        node_id = _make_node_id(node["name"], doc_id)
         name_to_id[node["name"]] = node_id
         db.add(KGNode(
             id=node_id,
@@ -695,6 +695,7 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None) -> dict[str,
             node_type=node["type"],
             description=node.get("description"),
             course_id=doc_id,
+            user_id=user_id,
         ))
     await db.flush()
 
@@ -710,6 +711,7 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None) -> dict[str,
         node_type="Course",
         description=f"课程文档：{course_title}",
         course_id=doc_id,
+        user_id=user_id,
     ))
     name_to_id[course_title] = course_node_id
     await db.flush()
@@ -717,7 +719,7 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None) -> dict[str,
     # 所有 Chapter 节点 → IS_PART_OF → Course
     for node in nodes:
         if node["type"] == "Chapter":
-            node_id = _make_node_id(node["name"])
+            node_id = _make_node_id(node["name"], doc_id)
             db.add(KGEdge(
                 source_id=node_id,
                 target_id=course_node_id,
@@ -750,7 +752,7 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None) -> dict[str,
 # 异步后台任务入口
 # ----------------------------------------------------------
 
-async def run_kg_build(task_id, doc_id: str, db: AsyncSession) -> None:
+async def run_kg_build(task_id, doc_id: str, db: AsyncSession, user_id=None) -> None:
     """后台执行 KG 构建，通过 KGBuildTask 记录进度。"""
     from backend.db.crud import update_by_id
     from backend.db.models import KGBuildTask
@@ -761,7 +763,7 @@ async def run_kg_build(task_id, doc_id: str, db: AsyncSession) -> None:
         })
 
     try:
-        result = await build_kg(doc_id, db, on_progress=on_progress)
+        result = await build_kg(doc_id, db, on_progress=on_progress, user_id=user_id)
         await update_by_id(db, KGBuildTask, task_id, {
             "status": "done",
             "progress": 100,

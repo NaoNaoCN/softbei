@@ -128,7 +128,8 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
             # 已有资源内容，推荐追加到末尾
             state = state.model_copy(update={
                 "metadata": new_metadata,
-                "final_content": state.final_content + "\n\n---\n\n**推荐下一步学习：**\n" + readable,
+                # "final_content": state.final_content + "\n\n---\n\n**推荐下一步学习：**\n" + readable,
+                "final_content": state.final_content
             })
         else:
             state = state.model_copy(update={

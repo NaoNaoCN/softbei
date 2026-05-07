@@ -59,7 +59,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     profile_ctx = ""
     if state.profile:
         profile_ctx = await profile_svc.build_profile_context(state.profile)
-
+    print(f"[PlannerAgent] profile_ctx={profile_ctx}")  # 调试输出
     # -- 2. 获取可用知识点列表 --
     kp_list = ""
     if db:
@@ -72,6 +72,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
             kp_list = "（知识点列表获取失败）"
 
     # -- 3. 调用 LLM 分析意图 --
+    print(f"[PlannerAgent] Analyzing intent.")
     kp_section = ""
     if kp_list:
         kp_section = f"可用知识点（优先从中选择）：\n{kp_list}"

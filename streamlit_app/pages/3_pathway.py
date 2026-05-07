@@ -18,7 +18,7 @@ st.title("🗺️ 学习路径 & 知识图谱")
 # 辅助函数
 # ----------------------------------------------------------
 
-def fetch_kg_graph(root_id: str | None = None, depth: int = 3, doc_id: str | None = None) -> dict | None:
+def fetch_kg_graph(root_id: str | None = None, depth: int = 3, doc_id: str | None = None, user_id: str | None = None) -> dict | None:
     """获取知识图谱数据。"""
     try:
         params = {"depth": depth}
@@ -26,6 +26,8 @@ def fetch_kg_graph(root_id: str | None = None, depth: int = 3, doc_id: str | Non
             params["root_id"] = root_id
         if doc_id:
             params["doc_id"] = doc_id
+        if user_id:
+            params["user_id"] = user_id
         resp = httpx.get(f"{API_BASE_URL}/kg/graph", params=params, timeout=15.0)
         if resp.status_code == 200:
             return resp.json()
@@ -58,12 +60,48 @@ def fetch_pathways(user_id: str) -> list[dict]:
     return []
 
 
-def fetch_learning_records(user_id: str, limit: int = 10) -> list[dict]:
-    """获取学习记录。"""
+def fetch_learning_records(user_id: str, limit: int = 10, kp_id: str | None = None) -> list[dict]:
+    """获取学习记录，可按 kp_id 过滤。"""
     try:
+        params: dict = {"user_id": user_id, "limit": limit}
+        if kp_id:
+            params["kp_id"] = kp_id
         resp = httpx.get(
             f"{API_BASE_URL}/records",
-            params={"user_id": user_id, "limit": limit},
+            params=params,
+            timeout=10.0,
+        )
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return []
+
+
+def post_learning_record(user_id: str, resource_id: str | None, kp_id: str | None, action: str) -> None:
+    """写入学习记录（静默失败）。"""
+    try:
+        payload: dict = {"action": action}
+        if resource_id:
+            payload["resource_id"] = resource_id
+        if kp_id:
+            payload["kp_id"] = kp_id
+        httpx.post(
+            f"{API_BASE_URL}/records",
+            params={"user_id": user_id},
+            json=payload,
+            timeout=5.0,
+        )
+    except Exception:
+        pass
+
+
+def fetch_node_resources(user_id: str, kp_id: str) -> list[dict]:
+    """获取节点关联的已生成资源列表。"""
+    try:
+        resp = httpx.get(
+            f"{API_BASE_URL}/resources",
+            params={"user_id": user_id, "kp_id": kp_id, "limit": 10},
             timeout=10.0,
         )
         if resp.status_code == 200:
@@ -116,22 +154,35 @@ tab_graph, tab_path, tab_records = st.tabs(["知识图谱", "我的学习路径"
 with tab_graph:
     # 文档选择器
     docs = fetch_documents(user_id)
-    doc_options = {"全部文档": None}
+    doc_options = {}
     for doc in docs:
         doc_title = doc.get("title", "无标题")
         doc_kp_id = doc.get("kp_id", "")
         if doc_kp_id:
             doc_options[doc_title] = doc_kp_id
+
+    if not doc_options:
+        st.info("暂无文档，请先前往「资源库」页面上传学习资料。")
+        st.stop()
+
     selected_doc_label = st.selectbox("选择文档", list(doc_options.keys()))
-    selected_doc_id = doc_options.get(selected_doc_label)
+    selected_doc_id = doc_options[selected_doc_label]
 
     # 筛选控制栏
+    col_view_mode, col_fullscreen = st.columns([3, 1])
+    with col_view_mode:
+        view_mode = st.radio("视图模式", ["默认", "已学习"], horizontal=True, key="kg_view_mode")
+    with col_fullscreen:
+        if st.button("🔍 全屏查看" if not st.session_state.get("kg_fullscreen") else "✖ 退出全屏", key="kg_fullscreen_btn"):
+            st.session_state["kg_fullscreen"] = not st.session_state.get("kg_fullscreen", False)
+            st.rerun()
+
     col_depth, col_root, col_type_filter, col_search, col_refresh = st.columns([1, 2, 1, 2, 1])
     with col_depth:
         depth = st.selectbox("展开深度", [1, 2, 3, 4, 5], index=2)
     with col_root:
         # 获取所有节点作为根节点选项
-        graph_data = fetch_kg_graph(depth=1, doc_id=selected_doc_id)
+        graph_data = fetch_kg_graph(depth=1, doc_id=selected_doc_id, user_id=user_id)
         root_options = ["全部"]
         if graph_data and "nodes" in graph_data:
             for node in graph_data["nodes"]:
@@ -156,7 +207,7 @@ with tab_graph:
                 root_id = node.get("id")
                 break
 
-    full_graph = fetch_kg_graph(root_id=root_id, depth=depth, doc_id=selected_doc_id)
+    full_graph = fetch_kg_graph(root_id=root_id, depth=depth, doc_id=selected_doc_id, user_id=user_id)
     if full_graph:
         # 按类型筛选
         if selected_type != "全部":
@@ -180,9 +231,24 @@ with tab_graph:
                 full_graph["edges"] = [e for e in full_graph["edges"] if e["source_id"] in keep_ids and e["target_id"] in keep_ids]
 
         from streamlit_app.components.mindmap import render_kg_graph
-        col_graph, col_detail = st.columns([3, 1])
-        with col_graph:
-            clicked_id = render_kg_graph(full_graph, on_click=True)
+        # 已学习视图数据准备
+        learned_ids = None
+        if view_mode == "已学习":
+            all_records = fetch_learning_records(user_id, limit=500)
+            learned_ids = {r["kp_id"] for r in all_records if r.get("action") == "complete"}
+            learned_count = len([n for n in full_graph.get("nodes", []) if n["id"] in learned_ids])
+            total_count = len(full_graph.get("nodes", []))
+            pct = int(learned_count / total_count * 100) if total_count else 0
+            st.info(f"已学习 **{learned_count}** / 共 **{total_count}** 个节点（{pct}%）")
+
+        graph_height = 900 if st.session_state.get("kg_fullscreen") else 700
+        if st.session_state.get("kg_fullscreen"):
+            clicked_id = render_kg_graph(full_graph, on_click=True, height=graph_height, learned_ids=learned_ids)
+            col_detail = st.expander("节点详情", expanded=False)
+        else:
+            col_graph, col_detail = st.columns([3, 1])
+            with col_graph:
+                clicked_id = render_kg_graph(full_graph, on_click=True, height=graph_height, learned_ids=learned_ids)
         with col_detail:
             # 节点详情侧边栏
             detail_id = clicked_id or st.session_state.get("selected_kg_node")
@@ -208,7 +274,37 @@ with tab_graph:
                             other_name = other_node["name"] if other_node else other_id
                             direction = "→" if e["source_id"] == detail_id else "←"
                             st.caption(f"{direction} {other_name} ({e.get('relation', '')})")
-                    if st.button("📖 生成学习资源", key="gen_from_kg"):
+
+                    # 关联资源
+                    st.markdown("---")
+                    node_resources = fetch_node_resources(user_id, detail_id)
+                    res_count = len(node_resources)
+                    res_badge = f"({res_count} 个资源)" if res_count > 0 else "(无资源)"
+                    st.markdown(f"**关联资源** `{res_badge}`")
+                    if node_resources:
+                        res_type_icons = {"document": "📄", "mindmap": "🗺️", "quiz": "📝", "code": "💻", "summary": "📋"}
+                        for res in node_resources:
+                            res_id = res.get("id", "")
+                            res_title = res.get("title", "未命名资源")
+                            res_type = res.get("resource_type", "")
+                            res_icon = res_type_icons.get(res_type, "📄")
+                            col_res_title, col_res_btn = st.columns([3, 1])
+                            with col_res_title:
+                                st.caption(f"{res_icon} {res_title}")
+                            with col_res_btn:
+                                if res_type == "quiz":
+                                    if st.button("📝", key=f"kg_quiz_{res_id}", help="前往测验"):
+                                        st.session_state["current_kp_id"] = res.get("kp_id")
+                                        st.switch_page("pages/5_evaluate.py")
+                                else:
+                                    if st.button("👁️", key=f"kg_prev_{res_id}", help="预览资源"):
+                                        st.session_state["lib_preview_id"] = res_id
+                                        st.switch_page("pages/4_library.py")
+                    else:
+                        st.caption("暂无关联资源，点击「生成学习资源」创建。")
+
+                    gen_label = "📖 补充生成资源" if node_resources else "📖 生成学习资源"
+                    if st.button(gen_label, key="gen_from_kg"):
                         st.session_state["current_kp_id"] = detail_id
                         st.session_state["current_kp_name"] = node_info["name"]
                         st.switch_page("pages/2_generate.py")
@@ -252,7 +348,7 @@ with tab_path:
             done = sum(1 for it in items if it.get("is_completed"))
             path_labels.append(f"{name}（{done}/{len(items)}）")
 
-        col_sel, col_prog = st.columns([2, 3])
+        col_sel, col_prog, col_del = st.columns([2, 3, 1])
         with col_sel:
             sel_idx = st.selectbox("选择学习路径", range(len(pathways)), format_func=lambda i: path_labels[i])
         cur_path = pathways[sel_idx]
@@ -262,6 +358,34 @@ with tab_path:
         with col_prog:
             st.write("")  # 垂直对齐
             st.progress(progress, text=f"完成进度：{done_count}/{len(cur_items)}")
+        with col_del:
+            st.write("")
+            if st.button("🗑️ 删除路径", key="delete_pathway", type="secondary"):
+                st.session_state["confirm_delete_path_id"] = cur_path["id"]
+
+        if st.session_state.get("confirm_delete_path_id") == cur_path["id"]:
+            st.warning(f"确认删除「{cur_path.get('name', '该路径')}」？此操作不可撤销。")
+            col_yes, col_no = st.columns(2)
+            with col_yes:
+                if st.button("✅ 确认删除", key="confirm_del_yes", type="primary"):
+                    try:
+                        resp = httpx.delete(
+                            f"{API_BASE_URL}/pathways/{cur_path['id']}",
+                            params={"user_id": user_id},
+                            timeout=10.0,
+                        )
+                        if resp.status_code == 200:
+                            st.session_state.pop("confirm_delete_path_id", None)
+                            st.success("路径已删除")
+                            st.rerun()
+                        else:
+                            st.error(f"删除失败（{resp.status_code}）")
+                    except Exception as e:
+                        st.error(f"请求异常：{e}")
+            with col_no:
+                if st.button("❌ 取消", key="confirm_del_no"):
+                    st.session_state.pop("confirm_delete_path_id", None)
+                    st.rerun()
 
         # ---------- 分类节点 ----------
         completed_ids: set[str] = set()
@@ -291,7 +415,7 @@ with tab_path:
         }
 
         # ---------- 获取知识图谱并渲染 ----------
-        path_graph = fetch_kg_graph(depth=5)
+        path_graph = fetch_kg_graph(depth=5, user_id=user_id)
         if path_graph and path_graph.get("nodes"):
             from streamlit_app.components.mindmap import render_kg_graph
 
@@ -323,17 +447,58 @@ with tab_path:
                         if isinstance(extra, dict) and extra.get("description"):
                             st.markdown(f"**描述:** {extra['description']}")
 
+                        # 关联资源
+                        st.markdown("---")
+                        node_resources = fetch_node_resources(user_id, detail_id)
+                        res_count = len(node_resources)
+                        res_badge = f"({res_count} 个资源)" if res_count > 0 else "(无资源)"
+                        st.markdown(f"**关联资源** `{res_badge}`")
+                        if node_resources:
+                            res_type_icons = {"document": "📄", "mindmap": "🗺️", "quiz": "📝", "code": "💻", "summary": "📋"}
+                            for res in node_resources:
+                                res_id = res.get("id", "")
+                                res_title = res.get("title", "未命名资源")
+                                res_type = res.get("resource_type", "")
+                                res_icon = res_type_icons.get(res_type, "📄")
+                                col_res_title, col_res_btn = st.columns([3, 1])
+                                with col_res_title:
+                                    st.caption(f"{res_icon} {res_title}")
+                                with col_res_btn:
+                                    if res_type == "quiz":
+                                        if st.button("📝", key=f"path_quiz_{res_id}", help="前往测验"):
+                                            st.session_state["current_kp_id"] = res.get("kp_id")
+                                            st.switch_page("pages/5_evaluate.py")
+                                    else:
+                                        if st.button("👁️", key=f"path_prev_{res_id}", help="预览资源"):
+                                            st.session_state["lib_preview_id"] = res_id
+                                            st.switch_page("pages/4_library.py")
+                        else:
+                            st.caption("暂无关联资源，点击下方按钮生成。")
+                        st.markdown("---")
+
                         # 操作按钮
                         all_path_ids = completed_ids | current_ids | planned_ids
                         cur_item = next((it for it in cur_items if it.get("kp_id") == detail_id), None)
 
                         if cur_item and detail_id not in completed_ids:
-                            if st.button("✅ 标记完成", key="mark_done", type="primary"):
-                                if mark_item_completed(cur_path["id"], cur_item["id"], user_id):
-                                    st.success("已标记为完成！")
-                                    st.rerun()
-                                else:
-                                    st.error("操作失败，请重试。")
+                            existing_records = fetch_learning_records(user_id, limit=1, kp_id=detail_id)
+                            if not existing_records:
+                                st.warning("该知识点尚无学习记录，确认标记为已完成？")
+                                if st.button("✅ 确认标记完成", key="mark_done_confirm", type="primary"):
+                                    if mark_item_completed(cur_path["id"], cur_item["id"], user_id):
+                                        post_learning_record(user_id, None, detail_id, "complete")
+                                        st.success("已标记为完成！")
+                                        st.rerun()
+                                    else:
+                                        st.error("操作失败，请重试。")
+                            else:
+                                if st.button("✅ 标记完成", key="mark_done", type="primary"):
+                                    if mark_item_completed(cur_path["id"], cur_item["id"], user_id):
+                                        post_learning_record(user_id, None, detail_id, "complete")
+                                        st.success("已标记为完成！")
+                                        st.rerun()
+                                    else:
+                                        st.error("操作失败，请重试。")
 
                         if detail_id not in all_path_ids:
                             if st.button("➕ 添加到路径", key="add_to_path"):
@@ -349,7 +514,8 @@ with tab_path:
                                 st.session_state["current_kp_name"] = node_info["name"]
                                 st.switch_page("pages/2_generate.py")
                         if detail_id not in all_path_ids:
-                            if st.button("📖 生成学习资源", key="path_gen"):
+                            path_gen_label = "📖 补充生成资源" if node_resources else "📖 生成学习资源"
+                            if st.button(path_gen_label, key="path_gen"):
                                 st.session_state["current_kp_id"] = detail_id
                                 st.session_state["current_kp_name"] = node_info["name"]
                                 st.switch_page("pages/2_generate.py")
@@ -398,7 +564,7 @@ with tab_records:
     else:
         # 统计信息
         col_stat1, col_stat2, col_stat3 = st.columns(3)
-        total_duration = sum(r.get("duration_seconds", 0) for r in records)
+        total_duration = sum(r.get("duration_seconds") or 0 for r in records)
         with col_stat1:
             st.metric("学习次数", len(records))
         with col_stat2:
@@ -413,14 +579,16 @@ with tab_records:
         for record in records:
             action = record.get("action", "unknown")
             action_icon = {"view": "👁️", "generate": "✨", "quiz": "📝", "complete": "✅"}.get(action, "📦")
-            resource_id = record.get("resource_id", "")[:8]
+            resource_id = (record.get("resource_id") or "")[:8]
+            kp_id_disp = record.get("kp_id") or ""
             duration = record.get("duration_seconds", 0)
-            created_at = record.get("created_at", "")[:16] if record.get("created_at") else "未知"
+            recorded_at = record.get("recorded_at", "")[:16] if record.get("recorded_at") else "未知"
 
             col_rec1, col_rec2, col_rec3 = st.columns([3, 1, 1])
             with col_rec1:
-                st.write(f"{action_icon} {action} | 资源ID: ...{resource_id}")
+                label = kp_id_disp if kp_id_disp else f"资源ID: ...{resource_id}"
+                st.write(f"{action_icon} {action} | {label}")
             with col_rec2:
                 st.write(f"⏱️ {duration}秒")
             with col_rec3:
-                st.write(f"🕐 {created_at}")
+                st.write(f"🕐 {recorded_at}")

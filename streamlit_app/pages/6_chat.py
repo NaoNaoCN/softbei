@@ -96,7 +96,11 @@ def fetch_sessions(user_id: str) -> list[dict]:
 def load_session_messages(session_id: str) -> list[dict]:
     """从后端加载指定会话的历史消息。"""
     try:
-        resp = httpx.get(f"{API_BASE_URL}/chat/{session_id}/messages", timeout=10.0)
+        resp = httpx.get(
+            f"{API_BASE_URL}/chat/{session_id}/messages",
+            params={"user_id": user_id},
+            timeout=10.0,
+        )
         if resp.status_code == 200:
             return resp.json() or []
     except Exception:
@@ -122,7 +126,7 @@ def update_session_title(session_id: str, title: str) -> None:
     try:
         httpx.patch(
             f"{API_BASE_URL}/chat/sessions/{session_id}/title",
-            json={"title": title},
+            json={"title": title, "user_id": user_id},
             timeout=10.0,
         )
     except Exception:

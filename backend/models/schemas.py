@@ -65,12 +65,13 @@ class CognitiveStyle(str, Enum):
 # 用户相关
 # ===========================================================
 
+# 入站数据（用户提交），包含 password，不含 id/created_at（这些还不存在）
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=2, max_length=64)
     password: str = Field(..., min_length=6)
     email: Optional[str] = None
 
-
+# 出站数据（API 响应），包含 id/created_at，故意没有 password，且有 from_attributes=True 用于从 ORM 对象直接构造
 class UserOut(BaseModel):
     id: uuid.UUID
     username: str
@@ -81,6 +82,11 @@ class UserOut(BaseModel):
 
 
 class TokenOut(BaseModel):
+    """
+    这是登录成功后返回给前端的响应体。
+    用户提交用户名+密码 → 后端验证通过 → 生成 JWT token → 用 TokenOut 包装后返回。
+    前端拿到 access_token 之后，后续每个请求都在 HTTP Header 里带上它
+    """
     user_id: uuid.UUID
     access_token: str
     token_type: str = "bearer"
@@ -296,16 +302,20 @@ class QuizAttemptOut(BaseModel):
 # ===========================================================
 
 class LearningRecordCreate(BaseModel):
-    resource_id: uuid.UUID
+    resource_id: Optional[uuid.UUID] = None
+    kp_id: Optional[str] = None
+    action: str = "view"          # "view" | "quiz" | "complete"
     duration_seconds: Optional[int] = None
-    rating: Optional[int] = Field(None, ge=1, le=5)
-    feedback: Optional[str] = None
 
 
-class LearningRecordOut(LearningRecordCreate):
+class LearningRecordOut(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID
-    created_at: datetime
+    resource_id: Optional[uuid.UUID] = None
+    kp_id: Optional[str] = None
+    action: str
+    duration_seconds: Optional[int] = None
+    recorded_at: datetime
 
     model_config = {"from_attributes": True}
 

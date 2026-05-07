@@ -52,7 +52,7 @@ def _make_client(provider: str) -> tuple[AsyncOpenAI, str]:
         return AsyncOpenAI(
             api_key=config.llm.api_key,
             base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        ), "qwen-plus"
+        ), "qwen3.5-flash"
 
     if provider == "openai":
         return AsyncOpenAI(

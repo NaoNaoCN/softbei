@@ -37,10 +37,13 @@ def fetch_resources(
     return []
 
 
-def fetch_quiz_items(resource_id: str) -> list[dict]:
+def fetch_quiz_items(resource_id: str, user_id: str | None = None) -> list[dict]:
     """获取某资源的题目列表。"""
     try:
-        resp = httpx.get(f"{API_BASE_URL}/resources/{resource_id}/quiz", timeout=10.0)
+        params = {}
+        if user_id:
+            params["user_id"] = user_id
+        resp = httpx.get(f"{API_BASE_URL}/resources/{resource_id}/quiz", params=params, timeout=10.0)
         if resp.status_code == 200:
             return resp.json()
     except Exception:
@@ -94,6 +97,25 @@ def submit_answer(user_id: str, quiz_item_id: str, user_answer) -> dict | None:
     return None
 
 
+def post_learning_record(user_id: str, resource_id: str | None, kp_id: str | None, action: str) -> None:
+    """写入学习记录（静默失败）。"""
+    try:
+        payload: dict = {"action": action}
+        if resource_id:
+            payload["resource_id"] = resource_id
+        if kp_id:
+            payload["kp_id"] = kp_id
+        httpx.post(
+            f"{API_BASE_URL}/records",
+            params={"user_id": user_id},
+            json=payload,
+            timeout=5.0,
+        )
+    except Exception:
+        pass
+
+
+
 def fetch_quiz_attempts(user_id: str, limit: int = 50) -> list[dict]:
     """获取用户的答题历史。"""
     try:
@@ -145,7 +167,7 @@ with tab_exam:
 
         # 加载测验
         if resource_id and resource_id != "__manual__":
-            items = fetch_quiz_items(resource_id)
+            items = fetch_quiz_items(resource_id, user_id=user_id)
 
             if not items:
                 st.warning("该资源暂无题目或加载失败。")
@@ -185,7 +207,18 @@ with tab_exam:
                         score = int(all_correct / total * 100) if total > 0 else 0
 
                         st.session_state["quiz_submitted"] = True
+                        st.session_state["quiz_last_score"] = score
                         st.success(f"答题完成！得分：{score}/100（{all_correct}/{total} 正确）")
+
+                        # 写入学习记录
+                        kp_id = st.session_state.get("current_kp_id")
+                        post_learning_record(user_id, resource_id, kp_id, "quiz")
+
+                        # 高分提示
+                        if score >= 60:
+                            st.info("✅ 得分达到 60 分，建议标记该知识点为已完成。")
+                            if st.button("🗺️ 前往学习路径标记完成"):
+                                st.switch_page("pages/3_pathway.py")
 
                         # 显示答案解析
                         st.markdown("---")

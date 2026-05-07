@@ -113,24 +113,28 @@ async def run_generation(
             from backend.models.schemas import LearningPathCreate, LearningPathItemCreate
             from backend.db.models import KGNode
 
-            existing = await pathway_svc.list_pathways(uuid.UUID(user_id), db)
-            if not existing:
-                new_path = await pathway_svc.create_pathway(
-                    uuid.UUID(user_id),
-                    LearningPathCreate(name=f"{kp_name} 学习路径"),
-                    db,
-                )
-                if new_path:
-                    for i, rec in enumerate(recommendations):
-                        rec_kp_id = rec.get("kp_id")
-                        if not rec_kp_id:
-                            continue
-                        node = await select_one(db, KGNode, filters={"id": rec_kp_id})
-                        if node:
+            # 先过滤出在知识图谱中真实存在的 kp_id
+            valid_recs = []
+            for rec in recommendations:
+                rec_kp_id = rec.get("kp_id")
+                if rec_kp_id and await select_one(db, KGNode, filters={"id": rec_kp_id}):
+                    valid_recs.append(rec)
+
+            # 只有存在有效节点时才创建路径，避免产生 0/0 的空路径
+            if valid_recs:
+                existing = await pathway_svc.list_pathways(uuid.UUID(user_id), db)
+                if not existing:
+                    new_path = await pathway_svc.create_pathway(
+                        uuid.UUID(user_id),
+                        LearningPathCreate(name=f"{kp_name} 学习路径"),
+                        db,
+                    )
+                    if new_path:
+                        for i, rec in enumerate(valid_recs):
                             await pathway_svc.add_pathway_item(
                                 uuid.UUID(new_path.id),
                                 uuid.UUID(user_id),
-                                LearningPathItemCreate(kp_id=rec_kp_id, order_index=i),
+                                LearningPathItemCreate(kp_id=rec["kp_id"], order_index=i),
                                 db,
                             )
     except Exception as e:
