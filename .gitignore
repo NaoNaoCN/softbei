@@ -54,4 +54,4 @@ logs/
 .streamlit/secrets.toml
 
 
-.md
+docs/*.md
