@@ -391,49 +391,80 @@ async def get_kg_graph(
     depth: int = 3,
     db: AsyncSession = Depends(get_session),
 ):
-    """获取知识图谱子图，供前端 ECharts 渲染。支持按 doc_id 过滤 + depth 控制展开层数。"""
-    from backend.db.crud import select as db_select
+    """获取知识图谱子图，供前端 ECharts 渲染。支持按 doc_id 过滤 + depth 控制展开层数。
 
-    filters: dict = {}
-    if doc_id:
-        filters["course_id"] = doc_id
-    if user_id:
-        filters["user_id"] = user_id
-    all_nodes = await db_select(db, KGNode, filters=filters)
-    node_map = {n.id: n for n in all_nodes}
-    node_ids = set(node_map.keys())
+    优化：depth 过滤下推到 DB 层，避免加载全量数据。
+    """
+    from sqlalchemy import select as sa_select, and_
+    from backend.db.models import KGNode, KGEdge
 
-    all_edges = await db_select(db, KGEdge)
-    edges_in_scope = [e for e in all_edges if e.source_id in node_ids and e.target_id in node_ids]
-
-    # depth 统一按节点类型层级过滤
     type_levels = ["Course", "Chapter", "KnowledgePoint", "SubPoint", "Concept"]
-    allowed_types = set(type_levels[:depth])
-    reachable = {nid for nid, n in node_map.items() if n.node_type in allowed_types}
+    allowed_types = type_levels[:depth]
 
-    # 如果指定了 root_id，进一步限制为该根节点的层级子树
-    if root_id and root_id in node_ids:
-        hierarchy_adj: dict[str, list[str]] = {nid: [] for nid in node_ids}
-        for e in edges_in_scope:
+    # 基础过滤条件
+    base_conditions = []
+    if doc_id:
+        base_conditions.append(KGNode.course_id == doc_id)
+    if user_id:
+        base_conditions.append(KGNode.user_id == user_id)
+
+    if root_id:
+        # 有 root_id：加载所有节点建立邻接表，再 BFS 扩展
+        all_nodes = await db.execute(
+            sa_select(KGNode).where(and_(*base_conditions)) if base_conditions
+            else sa_select(KGNode)
+        )
+        all_nodes = all_nodes.scalars().all()
+        node_map = {n.id: n for n in all_nodes}
+
+        # 建立邻接表（只看 IS_PART_OF / CONTAINS 关系）
+        children_adj: dict[str, set[str]] = {n.id: set() for n in all_nodes}
+        parent_adj: dict[str, set[str]] = {n.id: set() for n in all_nodes}
+        for e in await db.execute(sa_select(KGEdge)):
+            e = e[0]
             if e.relation in ("IS_PART_OF", "CONTAINS"):
-                hierarchy_adj[e.target_id].append(e.source_id)
-                hierarchy_adj[e.source_id].append(e.target_id)
-        # BFS 找出 root 的所有后代
+                children_adj.setdefault(e.source_id, set()).add(e.target_id)
+                parent_adj.setdefault(e.target_id, set()).add(e.source_id)
+
+        # BFS 找 root 的所有后代（不限层级，先找完全部子树）
         descendants: set[str] = {root_id}
         frontier = [root_id]
         while frontier:
             next_frontier = []
             for nid in frontier:
-                for child in hierarchy_adj.get(nid, []):
-                    if child not in descendants:
+                for child in children_adj.get(nid, []):
+                    if child not in descendants and child in node_map:
                         descendants.add(child)
                         next_frontier.append(child)
             frontier = next_frontier
-        reachable = reachable & descendants
 
-    # 过滤节点和边
-    filtered_nodes = [n for n in all_nodes if n.id in reachable]
-    filtered_edges = [e for e in edges_in_scope if e.source_id in reachable and e.target_id in reachable]
+        # 再按 depth 类型过滤（只保留 allowed_types 的节点）
+        reachable = {nid for nid in descendants if node_map[nid].node_type in allowed_types}
+
+        # 如果 root 自身类型不在 allowed_types，也加入（作为入口）
+        if root_id in descendants and root_id in node_map:
+            reachable.add(root_id)
+    else:
+        # 无 root_id：直接按 node_type 过滤，大幅减少加载量
+        conditions = base_conditions + [KGNode.node_type.in_(allowed_types)]
+        all_nodes = await db.execute(
+            sa_select(KGNode).where(and_(*conditions)) if conditions
+            else sa_select(KGNode).where(KGNode.node_type.in_(allowed_types))
+        )
+        all_nodes = all_nodes.scalars().all()
+        node_map = {n.id: n for n in all_nodes}
+        reachable = set(node_map.keys())
+
+    # 加载关联边（只看两端节点都在 reachable 里的）
+    if reachable:
+        edges_result = await db.execute(
+            sa_select(KGEdge).where(
+                and_(KGEdge.source_id.in_(reachable), KGEdge.target_id.in_(reachable))
+            )
+        )
+        filtered_edges = edges_result.scalars().all()
+    else:
+        filtered_edges = []
 
     kg_nodes = [
         KGNodeOut(
@@ -444,7 +475,7 @@ async def get_kg_graph(
             is_core=False,
             extra={"description": n.description or ""},
         )
-        for n in filtered_nodes
+        for n in all_nodes if n.id in reachable
     ]
     kg_edges = [
         KGEdgeOut(

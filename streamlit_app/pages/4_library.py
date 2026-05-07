@@ -282,7 +282,6 @@ STAGE_LABELS = {
 }
 
 
-@st.fragment(run_every=2)
 def _import_progress_fragment():
     """只重跑这个 fragment，页面其他部分不受影响。"""
     if "doc_import_task" not in st.session_state:
@@ -364,7 +363,7 @@ if docs:
             with col_d1:
                 st.write(f"📄 **{doc_title}**")
             with col_d2:
-                @st.fragment(run_every=2)
+                @st.fragment
                 def _kg_progress_fragment(doc_id=doc_id, kp_id=kp_id, task_key=task_key):
                     if task_key not in st.session_state:
                         if st.button("🔗 构建知识图谱", key=f"kg_{doc_id}"):
@@ -401,6 +400,8 @@ if docs:
                             min(progress, 100) / 100,
                             text=f"{stage}（{progress}%）",
                         )
+                        if st.button("🔄 刷新", key=f"refresh_kg_{doc_id}"):
+                            st.rerun(scope="fragment")
 
                 _kg_progress_fragment()
             with col_d3:
