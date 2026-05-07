@@ -1,5 +1,5 @@
 """
-tests/test_models.py
+tests/db/test_models.py
 backend/db/models.py 单元测试。
 测试 ORM 模型定义、字段类型、关系和约束。
 """
@@ -48,7 +48,6 @@ class TestModelRegistration:
             "student_profile",
             "profile_history",
             "chat_session",
-            "chat_message",
             "kg_node",
             "kg_edge",
             "resource_meta",
@@ -116,24 +115,14 @@ class TestStudentProfileModel:
 
 
 # ===========================================================
-# ChatSession / ChatMessage 模型测试
+# ChatSession 模型测试
 # ===========================================================
 
 class TestChatModels:
-    """ChatSession / ChatMessage 模型测试。"""
+    """ChatSession 模型测试（ChatMessage 使用动态表，不属于 ORM 模型）。"""
 
     def test_session_tablename(self):
         assert models.ChatSession.__tablename__ == "chat_session"
-
-    def test_message_tablename(self):
-        assert models.ChatMessage.__tablename__ == "chat_message"
-
-    def test_message_role_length(self):
-        """role 字段长度为 16。"""
-        cols = {c.name: c for c in inspect(models.ChatMessage).columns}
-        # SQLAlchemy 2.x String 类型通过 type.length 访问
-        str_type = cols["role"].type
-        assert str_type.length == 16
 
 
 # ===========================================================

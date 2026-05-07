@@ -1,5 +1,5 @@
 """
-tests/test_graph.py
+tests/graph/test_graph.py
 backend/agents/graph.py 单元测试。
 """
 

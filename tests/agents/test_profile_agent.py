@@ -1,5 +1,5 @@
 """
-tests/test_profile_agent.py
+tests/agents/test_profile_agent.py
 backend/agents/profile_agent.py 单元测试。
 """
 

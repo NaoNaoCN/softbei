@@ -1,5 +1,5 @@
 """
-tests/test_crud.py
+tests/db/test_crud.py
 backend/db/crud.py 单元测试。
 使用 SQLite 内存数据库进行测试。
 """
@@ -25,7 +25,7 @@ from backend.db.crud import (
     delete,
     delete_by_id,
 )
-from backend.db.models import User, StudentProfile, ChatSession, ChatMessage
+from backend.db.models import User, StudentProfile, ChatSession
 
 
 # ===========================================================
@@ -327,38 +327,3 @@ class TestDeleteById:
         """按不存在的 ID 删除。"""
         success = await delete_by_id(db_session, User, uuid.uuid4())
         assert success is False
-
-
-# ===========================================================
-# loadRelations tests（关系预加载）
-# ===========================================================
-
-class TestLoadRelations:
-    """loadRelations 关系预加载测试。"""
-
-    async def test_load_relation(self, db_session: AsyncSession):
-        """预加载 ChatSession 的 messages 关系。"""
-        user = await insert(db_session, User, data={"username": "testuser", "hashed_password": "h"})
-        session = await insert(
-            db_session, ChatSession,
-            data={"user_id": user.id, "title": "Test Session"},
-        )
-        await insert(
-            db_session, ChatMessage,
-            data={"session_id": session.id, "role": "user", "content": "Hello"},
-        )
-        await insert(
-            db_session, ChatMessage,
-            data={"session_id": session.id, "role": "assistant", "content": "Hi there"},
-        )
-
-        # 不预加载关系时，messages 不会自动加载
-        sessions = await select(db_session, ChatSession, filters={"user_id": user.id})
-        assert len(sessions) == 1
-        # lazy loading 可能触发，需要预加载
-        sessions_loaded = await select(
-            db_session, ChatSession,
-            filters={"user_id": user.id},
-            loadRelations=["messages"],
-        )
-        assert len(sessions_loaded[0].messages) == 2

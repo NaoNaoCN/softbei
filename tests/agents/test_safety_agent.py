@@ -1,5 +1,5 @@
 """
-tests/test_safety_agent.py
+tests/agents/test_safety_agent.py
 backend/agents/safety_agent.py 单元测试。
 """
 

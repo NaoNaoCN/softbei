@@ -1,5 +1,5 @@
 """
-tests/test_rag.py
+tests/rag/test_rag.py
 RAG 模块（loader / retriever）测试。
 """
 
