@@ -14,6 +14,7 @@ st.set_page_config(page_title="我的画像", page_icon="🧠")
 st.title("🧠 我的学习画像")
 
 
+@st.cache_data(ttl=300, show_spinner="加载画像...")
 def fetch_profile(user_id: str) -> dict | None:
     """从后端获取当前画像。"""
     try:

@@ -18,12 +18,13 @@ init_session_state()
 # 辅助函数
 # ----------------------------------------------------------
 
-def fetch_resources(
+@st.cache_data(ttl=300, show_spinner="加载资源列表...")
+def fetch_resources_cached(
     user_id: str,
     resource_type: str = "quiz",
-    limit: int = 50,
+    limit: int = 100,
 ) -> list[dict]:
-    """获取用户的测验资源列表。"""
+    """获取用户的资源列表（缓存 5 分钟）。"""
     try:
         resp = httpx.get(
             f"{API_BASE_URL}/resources",
@@ -37,13 +38,11 @@ def fetch_resources(
     return []
 
 
-def fetch_quiz_items(resource_id: str, user_id: str | None = None) -> list[dict]:
-    """获取某资源的题目列表。"""
+@st.cache_data(ttl=60, show_spinner="加载题目...")
+def fetch_quiz_items_cached(resource_id: str) -> list[dict]:
+    """获取某资源的题目列表（缓存 1 分钟）。"""
     try:
-        params = {}
-        if user_id:
-            params["user_id"] = user_id
-        resp = httpx.get(f"{API_BASE_URL}/resources/{resource_id}/quiz", params=params, timeout=10.0)
+        resp = httpx.get(f"{API_BASE_URL}/resources/{resource_id}/quiz", timeout=10.0)
         if resp.status_code == 200:
             return resp.json()
     except Exception:
@@ -51,13 +50,11 @@ def fetch_quiz_items(resource_id: str, user_id: str | None = None) -> list[dict]
     return []
 
 
-def fetch_kg_nodes(root_id: str | None = None, depth: int = 5) -> list[dict]:
-    """获取知识图谱节点列表"""
+@st.cache_data(ttl=3600, show_spinner="加载知识图谱...")
+def fetch_kg_nodes_cached(depth: int = 5) -> list[dict]:
+    """获取知识图谱节点列表（缓存 1 小时）。"""
     try:
-        params = {"depth": depth}
-        if root_id:
-            params["root_id"] = root_id
-        resp = httpx.get(f"{API_BASE_URL}/kg/graph", params=params, timeout=10.0)
+        resp = httpx.get(f"{API_BASE_URL}/kg/graph", params={"depth": depth}, timeout=10.0)
         if resp.status_code == 200:
             return resp.json().get("nodes", [])
     except Exception:
@@ -65,9 +62,10 @@ def fetch_kg_nodes(root_id: str | None = None, depth: int = 5) -> list[dict]:
     return []
 
 
-def build_item_kp_name_map() -> dict[str, str]:
-    """从 KG 图谱构建 kp_id → kp_name 映射"""
-    nodes = fetch_kg_nodes(depth=5)
+@st.cache_data(ttl=3600, show_spinner=False)
+def build_item_kp_name_map_cached() -> dict[str, str]:
+    """从 KG 图谱构建 kp_id → kp_name 映射（缓存 1 小时）。"""
+    nodes = fetch_kg_nodes_cached(depth=5)
     return {
         n["id"]: n["name"]
         for n in nodes
@@ -75,6 +73,7 @@ def build_item_kp_name_map() -> dict[str, str]:
     }
 
 
+@st.cache_data(ttl=60, show_spinner="提交答案...")
 def submit_answer(user_id: str, quiz_item_id: str, user_answer) -> dict | None:
     """提交答案，返回批改结果。"""
     try:
@@ -116,6 +115,7 @@ def post_learning_record(user_id: str, resource_id: str | None, kp_id: str | Non
 
 
 
+@st.cache_data(ttl=60, show_spinner="加载答题历史...")
 def fetch_quiz_attempts(user_id: str, limit: int = 50) -> list[dict]:
     """获取用户的答题历史。"""
     try:
@@ -147,7 +147,7 @@ with tab_exam:
     st.subheader("选择测验资源")
 
     # 获取用户的测验资源
-    quiz_resources = fetch_resources(user_id, resource_type="quiz")
+    quiz_resources = fetch_resources_cached(user_id, resource_type="quiz")
 
     if not quiz_resources:
         st.info("暂无测验资源，请先在「生成资源」页面创建测验题目。")
@@ -167,7 +167,7 @@ with tab_exam:
 
         # 加载测验
         if resource_id and resource_id != "__manual__":
-            items = fetch_quiz_items(resource_id, user_id=user_id)
+            items = fetch_quiz_items_cached(resource_id)
 
             if not items:
                 st.warning("该资源暂无题目或加载失败。")
@@ -299,11 +299,11 @@ with tab_weak:
                     item_stats[item_id]["wrong_answer"] = attempt.get("user_answer", "")
 
         # 构建 item_id → kp_name 映射
-        kp_name_map = build_item_kp_name_map()
+        kp_name_map = build_item_kp_name_map_cached()
         item_kp_name = {}
-        quiz_resources = fetch_resources(user_id, resource_type="quiz", limit=100)
+        quiz_resources = fetch_resources_cached(user_id, resource_type="quiz", limit=100)
         for res in quiz_resources:
-            quiz_items = fetch_quiz_items(res["id"])
+            quiz_items = fetch_quiz_items_cached(res["id"])
             for qi in quiz_items:
                 qi_id = qi.get("id")
                 kp_id = qi.get("kp_id")

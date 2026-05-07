@@ -606,12 +606,18 @@ async def list_resources(
 
 @app.get("/resources/stats", tags=["resources"])
 async def get_resource_stats(user_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
-    """返回用户的资源统计：按类型计数的字典。"""
-    from backend.db.crud import count
+    """返回用户的资源统计：按类型计数的字典。一次 GROUP BY 替代 5 次 COUNT 查询。"""
+    from sqlalchemy import func, select
 
-    stats = {}
-    for rt in ["doc", "mindmap", "quiz", "code", "summary"]:
-        stats[rt] = await count(db, ResourceMeta, {"user_id": user_id, "resource_type": rt})
+    rows = await db.execute(
+        select(ResourceMeta.resource_type, func.count(ResourceMeta.id))
+        .where(ResourceMeta.user_id == user_id)
+        .group_by(ResourceMeta.resource_type)
+    )
+    stats = {rt: 0 for rt in ["doc", "mindmap", "quiz", "code", "summary"]}
+    for rt, cnt in rows.all():
+        if rt in stats:
+            stats[rt] = cnt
     return stats
 
 

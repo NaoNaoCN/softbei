@@ -51,6 +51,7 @@ def init_session_state() -> None:
             st.session_state[key] = value
 
 
+@st.cache_data(ttl=300, show_spinner="加载画像...")
 def _fetch_profile(user_id: str) -> dict | None:
     try:
         resp = httpx.get(f"{API_BASE_URL}/profile", params={"user_id": user_id}, timeout=5)

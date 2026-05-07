@@ -21,6 +21,7 @@ st.title("📚 我的资源库")
 # 辅助函数
 # ----------------------------------------------------------
 
+@st.cache_data(ttl=300, show_spinner="加载资源列表...")
 def fetch_resources(
     user_id: str,
     resource_type: str | None = None,
@@ -45,6 +46,7 @@ def fetch_resources(
     return []
 
 
+@st.cache_data(ttl=300, show_spinner="加载资源...")
 def fetch_resource(resource_id: str, user_id: str | None = None) -> dict | None:
     """获取单个资源详情。"""
     try:
@@ -140,6 +142,7 @@ def poll_import_status(task_id: str) -> dict | None:
     return None
 
 
+@st.cache_data(ttl=300, show_spinner="加载文档列表...")
 def fetch_documents(user_id: str, skip: int = 0, limit: int = 20) -> list[dict]:
     """获取文档列表。"""
     try:
@@ -187,6 +190,7 @@ def post_learning_record(user_id: str, resource_id: str | None, kp_id: str | Non
 
 
 
+@st.cache_data(ttl=300, show_spinner="加载统计数据...")
 def get_resource_stats(user_id: str) -> dict:
     """获取资源统计信息。"""
     try:
@@ -233,6 +237,7 @@ def poll_kg_status(task_id: str) -> dict | None:
     return None
 
 
+@st.cache_data(ttl=60, show_spinner=False)
 def check_kg_task_by_doc(doc_id: str) -> dict | None:
     """按 doc_id 查询最新构建任务状态（刷新后恢复跟踪）。"""
     try:

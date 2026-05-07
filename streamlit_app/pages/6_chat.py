@@ -81,6 +81,7 @@ def fetch_profile() -> dict | None:
     return None
 
 
+@st.cache_data(ttl=60, show_spinner="加载会话列表...")
 def fetch_sessions(user_id: str) -> list[dict]:
     """获取用户的会话列表，按 last_used_at 降序排列。"""
     try:

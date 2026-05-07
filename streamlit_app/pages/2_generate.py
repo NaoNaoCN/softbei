@@ -23,6 +23,7 @@ st.title("✨ 生成学习资源")
 # 辅助函数
 # ----------------------------------------------------------
 
+@st.cache_data(ttl=3600, show_spinner="加载知识图谱...")
 def fetch_kg_nodes(root_id: str | None = None, depth: int = 2) -> list[dict]:
     """获取知识图谱节点列表供下拉选择。"""
     try:
@@ -64,6 +65,7 @@ def poll_task_status(task_id: str) -> dict | None:
     return None
 
 
+@st.cache_data(ttl=300, show_spinner="加载资源...")
 def fetch_resource(resource_id: str) -> dict | None:
     """获取已生成资源详情。"""
     try:
