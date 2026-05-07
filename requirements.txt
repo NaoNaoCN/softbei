@@ -9,9 +9,8 @@ python-multipart>=0.0.9
 pydantic>=2.6.0
 pydantic-settings>=2.2.0
 
-# ---- 前端 ----
-streamlit>=1.35.0
-streamlit-echarts>=0.4.0
+# ---- 前端（HTML/CSS/JS，由 FastAPI StaticFiles 提供）----
+# （前端代码在 html-test/ 目录，无需 pip 安装）
 
 # ---- LLM & Agent ----
 langchain>=0.2.0

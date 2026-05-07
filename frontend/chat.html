@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能对话 - 个性化学习助手</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #F5F7FA;
+            color: #1A1A2E;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .layout {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 240px;
+            background: #EEF4FB;
+            border-right: 1px solid #E0E6ED;
+            padding: 24px 16px;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+        .sidebar-logo {
+            font-size: 18px;
+            font-weight: 700;
+            color: #1976D2;
+            margin-bottom: 24px;
+            padding-left: 8px;
+        }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            color: #1A1A2E;
+            text-decoration: none;
+            margin-bottom: 4px;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+        .nav-item:hover { background: #E3F2FD; color: #1976D2; }
+        .nav-item.active { background: #1976D2; color: #fff; }
+        .nav-item .icon { font-size: 18px; width: 24px; text-align: center; }
+
+        /* Chat Area */
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* Chat Header */
+        .chat-header {
+            padding: 20px 32px;
+            border-bottom: 1px solid #E0E6ED;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .chat-header-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1A1A2E;
+        }
+        .chat-header-sub {
+            font-size: 13px;
+            color: #6B7280;
+            margin-top: 2px;
+        }
+
+        /* Onboarding Banner */
+        .onboarding-banner {
+            padding: 12px 32px;
+            background: #E3F2FD;
+            border-bottom: 1px solid #E0E6ED;
+            font-size: 14px;
+            color: #1565C0;
+        }
+
+        /* Session Sidebar */
+        .session-panel {
+            width: 260px;
+            border-right: 1px solid #E0E6ED;
+            background: #F5F7FA;
+            display: flex;
+            flex-direction: column;
+        }
+        .session-header {
+            padding: 16px;
+            border-bottom: 1px solid #E0E6ED;
+        }
+        .btn-new-chat {
+            width: 100%;
+            padding: 10px;
+            background: #1976D2;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-new-chat:hover { background: #1565C0; }
+        .session-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+        .session-label {
+            font-size: 12px;
+            color: #6B7280;
+            padding: 8px 8px 4px;
+            font-weight: 500;
+        }
+        .session-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 2px;
+            transition: all 0.2s;
+        }
+        .session-item:hover { background: #E3F2FD; }
+        .session-item.active { background: #1976D2; color: #fff; }
+        .session-title {
+            font-size: 13px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 150px;
+        }
+        .session-delete {
+            opacity: 0;
+            font-size: 12px;
+            color: #E53935;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .session-item:hover .session-delete { opacity: 1; }
+        .session-item.active .session-delete { color: #fff; }
+
+        /* Messages Area */
+        .messages-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .message {
+            max-width: 70%;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .message.user { align-self: flex-end; }
+        .message.assistant { align-self: flex-start; }
+        .message-bubble {
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .message.user .message-bubble {
+            background: #1976D2;
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+        .message.assistant .message-bubble {
+            background: #fff;
+            border: 1px solid #E0E6ED;
+            border-bottom-left-radius: 4px;
+        }
+        .message-time {
+            font-size: 11px;
+            color: #9CA3AF;
+            padding: 0 4px;
+        }
+        .message.user .message-time { text-align: right; }
+
+        /* AI Recommendations */
+        .recommendations-panel {
+            margin: 16px 0;
+            padding: 16px;
+            background: #fff;
+            border: 1px solid #E0E6ED;
+            border-radius: 12px;
+        }
+        .recommendations-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #1A1A2E;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .recommendation-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #F0F0F0;
+        }
+        .recommendation-item:last-child { border-bottom: none; }
+        .rec-info { flex: 1; }
+        .rec-name { font-size: 14px; font-weight: 500; margin-bottom: 2px; }
+        .rec-reason { font-size: 12px; color: #6B7280; }
+        .btn-rec {
+            padding: 6px 16px;
+            background: #E3F2FD;
+            color: #1976D2;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-rec:hover { background: #1976D2; color: #fff; }
+        .btn-save-pathway {
+            margin-top: 12px;
+            width: 100%;
+            padding: 10px;
+            background: #fff;
+            color: #1976D2;
+            border: 1px solid #1976D2;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-save-pathway:hover { background: #1976D2; color: #fff; }
+
+        /* Input Area */
+        .input-area {
+            padding: 16px 32px;
+            border-top: 1px solid #E0E6ED;
+            background: #fff;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .chat-input {
+            flex: 1;
+            padding: 12px 20px;
+            border: 1px solid #E0E6ED;
+            border-radius: 24px;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s;
+        }
+        .chat-input:focus { border-color: #1976D2; box-shadow: 0 0 0 3px rgba(25,118,210,0.1); }
+        .chat-send {
+            width: 48px;
+            height: 48px;
+            background: #1976D2;
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            font-size: 20px;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .chat-send:hover { background: #1565C0; }
+
+        /* Chat Container Layout */
+        .chat-container {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        .chat-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-logo">个性化学习助手</div>
+            <a href="index.html" class="nav-item"><span class="icon">🏠</span><span>首页</span></a>
+            <a href="chat.html" class="nav-item active"><span class="icon">💬</span><span>智能对话</span></a>
+            <a href="profile.html" class="nav-item"><span class="icon">👤</span><span>我的画像</span></a>
+            <a href="generate.html" class="nav-item"><span class="icon">✨</span><span>生成资源</span></a>
+            <a href="pathway.html" class="nav-item"><span class="icon">🗺️</span><span>学习路径</span></a>
+            <a href="library.html" class="nav-item"><span class="icon">📚</span><span>资源库</span></a>
+            <a href="evaluate.html" class="nav-item"><span class="icon">📝</span><span>学习评估</span></a>
+        </nav>
+
+        <!-- Chat Container -->
+        <div class="chat-area">
+            <!-- Header -->
+            <div class="chat-header">
+                <div>
+                    <div class="chat-header-title">智能对话</div>
+                    <div class="chat-header-sub">描述您的学习需求，AI 将自动生成相应资源</div>
+                </div>
+            </div>
+
+            <!-- Onboarding Banner (show when applicable) -->
+            <div class="onboarding-banner">
+                正在了解你的学习情况，请回答几个问题帮助我为你定制学习方案。
+            </div>
+
+            <!-- Chat Main -->
+            <div class="chat-container">
+                <!-- Session Panel -->
+                <div class="session-panel">
+                    <div class="session-header">
+                        <button class="btn-new-chat">+ 新建会话</button>
+                    </div>
+                    <div class="session-list" id="session-list">
+                        <div class="session-label">历史会话</div>
+                        <div id="sessions-container"></div>
+                    </div>
+                </div>
+
+                <!-- Messages -->
+                <div class="chat-main">
+                    <div class="messages-area" id="messages-area"></div>
+
+                    <!-- Input Area -->
+                    <div class="input-area">
+                        <input type="text" class="chat-input" id="chat-input" placeholder="输入消息..." onkeypress="if(event.key==='Enter') sendMessage()">
+                        <button class="chat-send" onclick="sendMessage()">&#9654;</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { isLoggedIn, getUserId, getChatSessions, createChatSession, getChatMessages, sendChatMessage, deleteChatSession } from './assets/api.js';
+
+        if (!isLoggedIn()) {
+            window.location.href = 'auth.html';
+        }
+
+        const userId = getUserId();
+        let activeSessionId = null;
+        let sessions = [];
+
+        function formatTime(dateStr) {
+            const d = new Date(dateStr);
+            return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function renderSessions() {
+            const container = document.getElementById('sessions-container');
+            if (!sessions.length) {
+                container.innerHTML = '<div style="padding:12px 8px;font-size:13px;color:#6B7280;">暂无会话记录</div>';
+                return;
+            }
+            container.innerHTML = sessions.map(s => `
+                <div class="session-item ${s.session_id === activeSessionId ? 'active' : ''}" onclick="loadSession('${s.session_id}')">
+                    <span class="session-title">${s.title || '新会话'}</span>
+                    <button class="session-delete" onclick="event.stopPropagation(); handleDeleteSession('${s.session_id}')">删除</button>
+                </div>
+            `).join('');
+        }
+
+        function renderMessages(messages) {
+            const area = document.getElementById('messages-area');
+            if (!messages || !messages.length) {
+                area.innerHTML = '<div style="padding:40px;text-align:center;color:#6B7280;font-size:14px;">发送消息开始对话</div>';
+                return;
+            }
+            area.innerHTML = messages.map(m => `
+                <div class="message ${m.role}">
+                    <div class="message-bubble">${m.content}</div>
+                    <div class="message-time">${formatTime(m.created_at)}</div>
+                </div>
+            `).join('');
+            area.scrollTop = area.scrollHeight;
+        }
+
+        async function loadSessions() {
+            sessions = await getChatSessions(userId) || [];
+            renderSessions();
+        }
+
+        async function loadSession(sessionId) {
+            activeSessionId = sessionId;
+            renderSessions();
+            const messages = await getChatMessages(sessionId, userId);
+            renderMessages(messages);
+        }
+
+        async function handleNewChat() {
+            const session = await createChatSession(userId);
+            if (session && session.session_id) {
+                await loadSessions();
+                loadSession(session.session_id);
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const content = input.value.trim();
+            if (!content || !activeSessionId) return;
+
+            // Append user message immediately
+            const area = document.getElementById('messages-area');
+            area.innerHTML += `
+                <div class="message user">
+                    <div class="message-bubble">${content}</div>
+                    <div class="message-time">${formatTime(new Date().toISOString())}</div>
+                </div>
+            `;
+            input.value = '';
+            area.scrollTop = area.scrollHeight;
+
+            // Send to backend
+            const response = await sendChatMessage(activeSessionId, userId, content);
+            if (response) {
+                await loadSession(activeSessionId);
+            }
+        }
+
+        async function handleDeleteSession(sessionId) {
+            if (!confirm('确定删除该会话？')) return;
+            await deleteChatSession(sessionId, userId);
+            if (activeSessionId === sessionId) {
+                activeSessionId = null;
+                document.getElementById('messages-area').innerHTML = '<div style="padding:40px;text-align:center;color:#6B7280;font-size:14px;">发送消息开始对话</div>';
+            }
+            await loadSessions();
+        }
+
+        window.loadSession = loadSession;
+        window.sendMessage = sendMessage;
+        window.handleDeleteSession = handleDeleteSession;
+
+        document.querySelector('.btn-new-chat').addEventListener('click', handleNewChat);
+
+        loadSessions();
+    </script>
+</body>
+</html>

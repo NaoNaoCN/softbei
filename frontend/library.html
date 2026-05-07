@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>资源库 - 个性化学习助手</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #F5F7FA;
+            color: #1A1A2E;
+            min-height: 100vh;
+        }
+        .layout { display: flex; min-height: 100vh; }
+        .sidebar {
+            width: 240px;
+            background: #EEF4FB;
+            border-right: 1px solid #E0E6ED;
+            padding: 24px 16px;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .sidebar-logo { font-size: 18px; font-weight: 700; color: #1976D2; margin-bottom: 24px; padding-left: 8px; }
+        .nav-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 12px 16px; border-radius: 8px;
+            color: #1A1A2E; text-decoration: none;
+            margin-bottom: 4px; transition: all 0.2s; font-size: 14px;
+        }
+        .nav-item:hover { background: #E3F2FD; color: #1976D2; }
+        .nav-item.active { background: #1976D2; color: #fff; }
+        .nav-item .icon { font-size: 18px; width: 24px; text-align: center; }
+
+        .main { margin-left: 240px; padding: 32px 40px; flex: 1; }
+        .page-title {
+            font-size: 28px; font-weight: 700; color: #1976D2;
+            margin-bottom: 8px; padding-bottom: 12px; border-bottom: 3px solid #1976D2;
+        }
+        .page-subtitle { font-size: 14px; color: #6B7280; margin-bottom: 32px; }
+
+        /* Stats Bar */
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-item {
+            background: #fff;
+            border: 1px solid #E0E6ED;
+            border-radius: 10px;
+            padding: 16px;
+            text-align: center;
+        }
+        .stat-value { font-size: 28px; font-weight: 700; color: #1976D2; }
+        .stat-label { font-size: 12px; color: #6B7280; margin-top: 4px; }
+
+        /* Filter Bar */
+        .filter-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .filter-select {
+            padding: 8px 14px;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #fff;
+            cursor: pointer;
+            outline: none;
+            min-width: 120px;
+        }
+        .filter-input {
+            padding: 8px 14px;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            flex: 1;
+            max-width: 200px;
+        }
+        .filter-input:focus { border-color: #1976D2; }
+        .btn-refresh {
+            padding: 8px 16px;
+            background: #fff;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-refresh:hover { border-color: #1976D2; color: #1976D2; }
+        .view-toggle {
+            display: flex;
+            gap: 4px;
+            margin-left: auto;
+        }
+        .view-btn {
+            padding: 8px 14px;
+            border: 1px solid #E0E6ED;
+            background: #fff;
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .view-btn.active { background: #1976D2; color: #fff; border-color: #1976D2; }
+        .view-btn:hover:not(.active) { border-color: #1976D2; }
+
+        /* Card */
+        .card {
+            background: #fff;
+            border: 1px solid #E0E6ED;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            transition: all 0.2s;
+        }
+        .card:hover { border-color: #1976D2; box-shadow: 0 2px 8px rgba(25,118,210,0.08); }
+
+        /* Document Import Section */
+        .import-section {
+            background: #fff;
+            border: 1px solid #E0E6ED;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        .import-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #1A1A2E;
+            margin-bottom: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .import-area {
+            border: 2px dashed #E0E6ED;
+            border-radius: 12px;
+            padding: 32px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .import-area:hover { border-color: #1976D2; background: #F5F7FA; }
+        .import-icon { font-size: 32px; margin-bottom: 8px; }
+        .import-text { font-size: 14px; color: #6B7280; }
+        .import-form {
+            display: none;
+            margin-top: 16px;
+        }
+        .form-row { display: flex; gap: 12px; margin-bottom: 12px; }
+        .form-input {
+            flex: 1;
+            padding: 10px 14px;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+        }
+        .form-input:focus { border-color: #1976D2; }
+        .btn-primary {
+            padding: 10px 24px;
+            background: #1976D2;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-primary:hover { background: #1565C0; }
+
+        /* Document List */
+        .doc-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            background: #fff;
+            border: 1px solid #E0E6ED;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+        }
+        .doc-item:hover { border-color: #1976D2; }
+        .doc-info { display: flex; align-items: center; gap: 12px; }
+        .doc-icon { font-size: 24px; }
+        .doc-name { font-weight: 500; font-size: 14px; margin-bottom: 2px; }
+        .doc-meta { font-size: 12px; color: #6B7280; }
+        .doc-actions { display: flex; gap: 8px; }
+        .btn-build-kg {
+            padding: 6px 14px;
+            background: #E3F2FD;
+            color: #1976D2;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-build-kg:hover { background: #1976D2; color: #fff; }
+        .btn-delete {
+            padding: 6px 14px;
+            background: #fff;
+            color: #E53935;
+            border: 1px solid #FFCDD2;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-delete:hover { background: #E53935; color: #fff; border-color: #E53935; }
+
+        /* Resource List */
+        .resource-list { display: flex; flex-direction: column; gap: 12px; }
+        .resource-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px;
+            background: #fff;
+            border: 1px solid #E0E6ED;
+            border-radius: 10px;
+            transition: all 0.2s;
+        }
+        .resource-item:hover { border-color: #1976D2; }
+        .resource-info { display: flex; align-items: center; gap: 14px; }
+        .resource-icon {
+            width: 44px; height: 44px;
+            background: #E3F2FD;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+        }
+        .resource-title { font-weight: 500; font-size: 14px; margin-bottom: 3px; }
+        .resource-meta { font-size: 12px; color: #6B7280; }
+        .resource-actions { display: flex; gap: 8px; }
+        .btn-sm {
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid;
+        }
+        .btn-sm-outline { background: #fff; color: #6B7280; border-color: #E0E6ED; }
+        .btn-sm-outline:hover { border-color: #1976D2; color: #1976D2; }
+        .btn-sm-danger { background: #fff; color: #E53935; border-color: #FFCDD2; }
+        .btn-sm-danger:hover { background: #E53935; color: #fff; border-color: #E53935; }
+
+        /* Pagination */
+        .pagination { display: flex; justify-content: center; align-items: center; gap: 16px; padding: 24px 0; }
+        .page-btn {
+            padding: 8px 16px;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+            background: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .page-btn:hover { border-color: #1976D2; color: #1976D2; }
+        .page-info { font-size: 14px; color: #6B7280; }
+
+        /* Empty State */
+        .empty-state { text-align: center; padding: 60px 20px; color: #6B7280; }
+        .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+        .empty-text { font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <nav class="sidebar">
+            <div class="sidebar-logo">个性化学习助手</div>
+            <a href="index.html" class="nav-item"><span class="icon">🏠</span><span>首页</span></a>
+            <a href="chat.html" class="nav-item"><span class="icon">💬</span><span>智能对话</span></a>
+            <a href="profile.html" class="nav-item"><span class="icon">👤</span><span>我的画像</span></a>
+            <a href="generate.html" class="nav-item"><span class="icon">✨</span><span>生成资源</span></a>
+            <a href="pathway.html" class="nav-item"><span class="icon">🗺️</span><span>学习路径</span></a>
+            <a href="library.html" class="nav-item active"><span class="icon">📚</span><span>资源库</span></a>
+            <a href="evaluate.html" class="nav-item"><span class="icon">📝</span><span>学习评估</span></a>
+        </nav>
+
+        <main class="main">
+            <h1 class="page-title">我的资源库</h1>
+            <p class="page-subtitle">浏览、管理和搜索已生成的学习资源，预览内容或删除不需要的资源。</p>
+
+            <!-- Stats Bar -->
+            <div class="stats-bar" id="stats-bar">
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-doc">-</div>
+                    <div class="stat-label">学习文档</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-mindmap">-</div>
+                    <div class="stat-label">思维导图</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-quiz">-</div>
+                    <div class="stat-label">测验</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-code">-</div>
+                    <div class="stat-label">代码示例</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-summary">-</div>
+                    <div class="stat-label">知识总结</div>
+                </div>
+            </div>
+
+            <!-- Document Import -->
+            <div class="import-section">
+                <div class="import-title" onclick="document.getElementById('import-form').style.display=document.getElementById('import-form').style.display=='none'?'block':'none'">
+                    <span>上传 PDF 文件</span>
+                    <span id="import-arrow">▼</span>
+                </div>
+                <div class="import-area" onclick="document.getElementById('file-input').click()">
+                    <div class="import-icon">&#128196;</div>
+                    <div class="import-text">点击选择 PDF 文件或拖拽到此处上传</div>
+                    <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="handleFileSelect(this)">
+                </div>
+                <div class="import-form" id="import-form">
+                    <div class="form-row">
+                        <input type="text" class="form-input" id="import-title" placeholder="文档标题（可选）">
+                        <button class="btn-primary" id="import-btn" onclick="handleImport()">开始导入</button>
+                    </div>
+                    <div id="import-status" style="font-size:13px;color:#6B7280;display:none;"></div>
+                </div>
+            </div>
+
+            <!-- Filter Bar -->
+            <div class="filter-bar">
+                <select class="filter-select" id="type-filter">
+                    <option value="">全部类型</option>
+                    <option value="doc">学习文档</option>
+                    <option value="mindmap">思维导图</option>
+                    <option value="quiz">测验</option>
+                    <option value="code">代码示例</option>
+                    <option value="summary">知识总结</option>
+                </select>
+                <input type="text" class="filter-input" id="search-input" placeholder="搜索资源标题...">
+                <button class="btn-refresh" onclick="loadResources()">刷新</button>
+            </div>
+
+            <!-- Resource List -->
+            <div class="resource-list" id="resource-list"></div>
+
+            <!-- Pagination -->
+            <div class="pagination" id="pagination"></div>
+        </main>
+    </div>
+
+    <script type="module">
+        import { isLoggedIn, getUserId, getResourceStats, getResources, deleteResource, importDocumentAsync, getImportStatus } from './assets/api.js';
+
+        if (!isLoggedIn()) {
+            window.location.href = 'auth.html';
+        }
+
+        const userId = getUserId();
+        let currentPage = 1;
+        let currentFilter = '';
+        let currentSearch = '';
+        const pageSize = 20;
+
+        const TYPE_MAP = { doc: '学习文档', mindmap: '思维导图', quiz: '测验', code: '代码示例', summary: '知识总结' };
+        const ICON_MAP = { doc: '&#128196;', mindmap: '&#128203;', quiz: '&#128221;', code: '&#128187;', summary: '&#128203;' };
+
+        async function loadStats() {
+            const stats = await getResourceStats(userId);
+            if (!stats) return;
+            document.getElementById('stat-doc').textContent = stats.doc || 0;
+            document.getElementById('stat-mindmap').textContent = stats.mindmap || 0;
+            document.getElementById('stat-quiz').textContent = stats.quiz || 0;
+            document.getElementById('stat-code').textContent = stats.code || 0;
+            document.getElementById('stat-summary').textContent = stats.summary || 0;
+        }
+
+        async function loadResources() {
+            currentFilter = document.getElementById('type-filter').value;
+            currentSearch = document.getElementById('search-input').value;
+            const data = await getResources(userId, { resource_type: currentFilter, skip: (currentPage - 1) * pageSize, limit: pageSize });
+            const list = document.getElementById('resource-list');
+            if (!data || !data.items || !data.items.length) {
+                list.innerHTML = '<div class="empty-state"><div class="empty-icon">&#128218;</div><div class="empty-text">暂无资源</div></div>';
+                document.getElementById('pagination').innerHTML = '';
+                return;
+            }
+            let items = data.items;
+            if (currentSearch) {
+                items = items.filter(r => r.title && r.title.includes(currentSearch));
+            }
+            list.innerHTML = items.map(r => `
+                <div class="resource-item">
+                    <div class="resource-info">
+                        <div class="resource-icon">${ICON_MAP[r.resource_type] || '&#128196;'}</div>
+                        <div>
+                            <div class="resource-title">${r.title || '未命名'}</div>
+                            <div class="resource-meta">${TYPE_MAP[r.resource_type] || r.resource_type} · ${r.created_at ? new Date(r.created_at).toLocaleDateString('zh-CN') : ''}</div>
+                        </div>
+                    </div>
+                    <div class="resource-actions">
+                        <button class="btn-sm btn-sm-outline" onclick="location.href='library.html'">预览</button>
+                        ${r.resource_type === 'quiz' ? '<button class="btn-sm btn-sm-outline" onclick="location.href=\'evaluate.html\'">测验</button>' : ''}
+                        <button class="btn-sm btn-sm-danger" onclick="handleDelete('${r.id}')">删除</button>
+                    </div>
+                </div>
+            `).join('');
+
+            const total = data.total || 0;
+            const totalPages = Math.ceil(total / pageSize);
+            document.getElementById('pagination').innerHTML = `
+                <button class="page-btn" onclick="changePage(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>上一页</button>
+                <span class="page-info">第 ${currentPage} / ${totalPages} 页</span>
+                <button class="page-btn" onclick="changePage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>下一页</button>
+            `;
+        }
+
+        function changePage(p) {
+            currentPage = p;
+            loadResources();
+        }
+
+        async function handleDelete(id) {
+            if (!confirm('确定删除该资源？')) return;
+            const ok = await deleteResource(id, userId);
+            if (ok) loadResources();
+            else alert('删除失败');
+        }
+
+        function handleFileSelect(input) {
+            if (input.files[0]) {
+                document.querySelector('.import-form').style.display = 'block';
+                document.querySelector('.import-text').textContent = input.files[0].name;
+            }
+        }
+
+        async function handleImport() {
+            const fileInput = document.getElementById('file-input');
+            const file = fileInput.files[0];
+            if (!file) return;
+            const title = document.getElementById('import-title').value.trim();
+            const btn = document.getElementById('import-btn');
+            const status = document.getElementById('import-status');
+            btn.disabled = true;
+            btn.textContent = '导入中...';
+            status.style.display = 'block';
+            status.textContent = '正在上传并解析文档...';
+            try {
+                const result = await importDocumentAsync(userId, file, title);
+                if (result && result.task_id) {
+                    status.textContent = '文档已提交，正在后台处理...';
+                    // Poll
+                    const poll = async () => {
+                        const s = await getImportStatus(result.task_id);
+                        if (!s) return setTimeout(poll, 2000);
+                        if (s.status === 'completed') {
+                            status.textContent = '导入完成！';
+                            btn.disabled = false;
+                            btn.textContent = '开始导入';
+                            loadResources();
+                        } else if (s.status === 'failed') {
+                            status.textContent = '导入失败: ' + (s.error || '');
+                            btn.disabled = false;
+                            btn.textContent = '开始导入';
+                        } else {
+                            status.textContent = s.status_message || '处理中...';
+                            setTimeout(poll, 2000);
+                        }
+                    };
+                    poll();
+                } else {
+                    throw new Error(result?.detail || '导入失败');
+                }
+            } catch (e) {
+                status.textContent = '导入失败: ' + e.message;
+                btn.disabled = false;
+                btn.textContent = '开始导入';
+            }
+        }
+
+        window.handleDelete = handleDelete;
+        window.handleFileSelect = handleFileSelect;
+        window.handleImport = handleImport;
+        window.changePage = changePage;
+
+        loadStats();
+        loadResources();
+    </script>
+</body>
+</html>

@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>生成资源 - 个性化学习助手</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #F5F7FA;
+            color: #1A1A2E;
+            min-height: 100vh;
+        }
+        .layout {
+            display: flex;
+            min-height: 100vh;
+        }
+        /* Sidebar */
+        .sidebar {
+            width: 240px;
+            background: #EEF4FB;
+            border-right: 1px solid #E0E6ED;
+            padding: 24px 16px;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .sidebar-logo {
+            font-size: 18px;
+            font-weight: 700;
+            color: #1976D2;
+            margin-bottom: 24px;
+            padding-left: 8px;
+        }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            color: #1A1A2E;
+            text-decoration: none;
+            margin-bottom: 4px;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+        .nav-item:hover { background: #E3F2FD; color: #1976D2; }
+        .nav-item.active { background: #1976D2; color: #fff; }
+        .nav-item .icon { font-size: 18px; width: 24px; text-align: center; }
+
+        /* Main */
+        .main {
+            margin-left: 240px;
+            padding: 32px 40px;
+            flex: 1;
+        }
+        .page-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1976D2;
+            margin-bottom: 8px;
+            padding-bottom: 12px;
+            border-bottom: 3px solid #1976D2;
+        }
+        .page-subtitle {
+            font-size: 14px;
+            color: #6B7280;
+            margin-bottom: 32px;
+        }
+
+        /* Mode Tabs */
+        .mode-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 24px;
+        }
+        .mode-tab {
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            border: 1px solid #E0E6ED;
+            background: #fff;
+            color: #6B7280;
+            transition: all 0.2s;
+        }
+        .mode-tab:hover { border-color: #1976D2; color: #1976D2; }
+        .mode-tab.active {
+            background: #1976D2;
+            color: #fff;
+            border-color: #1976D2;
+        }
+
+        /* Content Grid */
+        .content-grid {
+            display: grid;
+            grid-template-columns: 340px 1fr;
+            gap: 24px;
+        }
+
+        /* Form Card */
+        .form-card {
+            background: #fff;
+            border: 1px solid #E0E6ED;
+            border-radius: 12px;
+            padding: 24px;
+            position: sticky;
+            top: 32px;
+        }
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1A1A2E;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 6px;
+        }
+        .form-select {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #fff;
+            cursor: pointer;
+            outline: none;
+        }
+        .form-select:focus { border-color: #1976D2; }
+        .form-radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .form-radio {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .form-radio:hover { border-color: #1976D2; }
+        .form-radio.selected {
+            border-color: #1976D2;
+            background: #E3F2FD;
+        }
+        .form-radio input { display: none; }
+        .form-radio-icon { font-size: 20px; }
+        .form-radio-text { font-size: 14px; font-weight: 500; }
+        .btn-primary {
+            width: 100%;
+            padding: 12px;
+            background: #1976D2;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-primary:hover { background: #1565C0; }
+        .btn-primary:disabled { background: #BDBDBD; cursor: not-allowed; }
+        .advanced-toggle {
+            font-size: 13px;
+            color: #1976D2;
+            cursor: pointer;
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .advanced-options {
+            margin-top: 12px;
+            padding: 16px;
+            background: #F5F7FA;
+            border-radius: 8px;
+            display: none;
+        }
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: #6B7280;
+            margin-bottom: 8px;
+        }
+
+        /* Result Card */
+        .result-card {
+            background: #fff;
+            border: 1px solid #E0E6ED;
+            border-radius: 12px;
+            padding: 24px;
+            min-height: 400px;
+        }
+        .result-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1A1A2E;
+            margin-bottom: 20px;
+        }
+        .result-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 300px;
+            color: #6B7280;
+            text-align: center;
+        }
+        .result-empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+        .result-empty-text { font-size: 14px; }
+        .result-item { margin-bottom: 24px; }
+        .result-item-title { font-weight: 600; margin-bottom: 8px; color: #1A1A2E; }
+        .result-item-content { background: #F5F7FA; border-radius: 8px; padding: 16px; font-size: 14px; line-height: 1.6; }
+        .result-actions { display: flex; gap: 12px; margin-top: 16px; }
+        .btn-secondary {
+            padding: 10px 20px;
+            background: #fff;
+            color: #1A1A2E;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-secondary:hover { border-color: #1976D2; color: #1976D2; }
+
+        /* Progress */
+        .progress-container { text-align: center; padding: 40px; }
+        .progress-text { font-size: 14px; color: #6B7280; margin-top: 12px; }
+        .progress-bar { height: 8px; background: #E0E6ED; border-radius: 4px; overflow: hidden; margin-top: 16px; }
+        .progress-fill { height: 100%; background: #1976D2; border-radius: 4px; transition: width 0.3s; }
+
+        /* Success State */
+        .result-success {
+            text-align: center;
+            padding: 20px;
+        }
+        .result-success-icon { font-size: 48px; margin-bottom: 16px; }
+        .result-success-title { font-size: 18px; font-weight: 600; color: #1A1A2E; margin-bottom: 8px; }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-logo">个性化学习助手</div>
+            <a href="index.html" class="nav-item">
+                <span class="icon">🏠</span><span>首页</span>
+            </a>
+            <a href="chat.html" class="nav-item">
+                <span class="icon">💬</span><span>智能对话</span>
+            </a>
+            <a href="profile.html" class="nav-item">
+                <span class="icon">👤</span><span>我的画像</span>
+            </a>
+            <a href="generate.html" class="nav-item active">
+                <span class="icon">✨</span><span>生成资源</span>
+            </a>
+            <a href="pathway.html" class="nav-item">
+                <span class="icon">🗺️</span><span>学习路径</span>
+            </a>
+            <a href="library.html" class="nav-item">
+                <span class="icon">📚</span><span>资源库</span>
+            </a>
+            <a href="evaluate.html" class="nav-item">
+                <span class="icon">📝</span><span>学习评估</span>
+            </a>
+        </nav>
+
+        <!-- Main -->
+        <main class="main">
+            <h1 class="page-title">生成学习资源</h1>
+            <p class="page-subtitle">选择知识点和资源类型，系统将自动为您生成个性化学习内容。</p>
+
+            <!-- Mode Tabs -->
+            <div class="mode-tabs">
+                <div class="mode-tab" onclick="this.classList.add('active');this.nextElementSibling.classList.remove('active');document.getElementById('direct-mode').style.display='none';document.getElementById('chat-mode-hint').style.display='block';">对话式生成</div>
+                <div class="mode-tab active" onclick="this.classList.add('active');this.previousElementSibling.classList.remove('active');document.getElementById('chat-mode-hint').style.display='none';document.getElementById('direct-mode').style.display='grid';">直接生成</div>
+            </div>
+
+            <!-- Chat Mode Hint -->
+            <div id="chat-mode-hint" class="form-card" style="display:none;">
+                <div style="text-align:center;padding:20px;">
+                    <div style="font-size:48px;margin-bottom:16px;">💬</div>
+                    <div style="font-size:16px;font-weight:600;margin-bottom:8px;">对话式生成</div>
+                    <div style="font-size:14px;color:#6B7280;margin-bottom:20px;">在「智能对话」页面描述您的学习需求，AI 将自动分析并生成相应资源。</div>
+                    <button class="btn-primary" onclick="location.href='chat.html'" style="width:auto;padding:12px 24px;">前往智能对话</button>
+                </div>
+            </div>
+
+            <!-- Content Grid -->
+            <div class="content-grid" id="direct-mode">
+                <!-- Form -->
+                <div class="form-card">
+                    <div class="card-title">生成配置</div>
+
+                    <div class="form-group">
+                        <label class="form-label">选择知识点</label>
+                        <select class="form-select" id="kp-select">
+                            <option value="">加载中...</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">资源类型</label>
+                        <div class="form-radio-group">
+                            <label class="form-radio selected">
+                                <input type="radio" name="resource_type" value="doc" checked>
+                                <span class="form-radio-icon">📄</span>
+                                <span class="form-radio-text">学习文档</span>
+                            </label>
+                            <label class="form-radio">
+                                <input type="radio" name="resource_type" value="mindmap">
+                                <span class="form-radio-icon">🗺️</span>
+                                <span class="form-radio-text">思维导图</span>
+                            </label>
+                            <label class="form-radio">
+                                <input type="radio" name="resource_type" value="quiz">
+                                <span class="form-radio-icon">📝</span>
+                                <span class="form-radio-text">测验题目</span>
+                            </label>
+                            <label class="form-radio">
+                                <input type="radio" name="resource_type" value="code">
+                                <span class="form-radio-icon">💻</span>
+                                <span class="form-radio-text">代码示例</span>
+                            </label>
+                            <label class="form-radio">
+                                <input type="radio" name="resource_type" value="summary">
+                                <span class="form-radio-icon">📋</span>
+                                <span class="form-radio-text">知识总结</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="advanced-toggle" onclick="document.getElementById('adv-options').style.display=document.getElementById('adv-options').style.display=='none'?'block':'none'">
+                        ⚙️ 高级选项
+                    </div>
+                    <div class="advanced-options" id="adv-options">
+                        <div class="slider-label">
+                            <span>创意度</span>
+                            <span>0.7</span>
+                        </div>
+                        <input type="range" min="0" max="100" value="70" style="width:100%">
+                        <div style="font-size:12px;color:#6B7280;margin-top:4px;">较低的值会使生成结果更确定性，较高的值会更有创意。</div>
+                    </div>
+
+                    <button class="btn-primary" id="generate-btn" style="margin-top:20px;" onclick="handleGenerate()">开始生成</button>
+                </div>
+
+                <!-- Result -->
+                <div class="result-card" id="result-card">
+                    <div class="result-title">生成结果</div>
+                    <div class="result-empty" id="result-empty">
+                        <div class="result-empty-icon">&#10024;</div>
+                        <div class="result-empty-text">配置参数后点击「开始生成」<br>系统将为您创建个性化学习资源</div>
+                    </div>
+                    <div id="result-content" style="display:none;"></div>
+                    <div id="result-progress" style="display:none;">
+                        <div class="progress-container">
+                            <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+                            <div class="progress-text" id="progress-text">生成中，请稍候...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        import { isLoggedIn, getUserId, getKgGraph, startGeneration, getTaskStatus } from './assets/api.js';
+
+        if (!isLoggedIn()) {
+            window.location.href = 'auth.html';
+        }
+
+        const userId = getUserId();
+
+        async function loadKgNodes() {
+            const graph = await getKgGraph({ depth: 2 });
+            const select = document.getElementById('kp-select');
+            if (graph && graph.nodes) {
+                select.innerHTML = graph.nodes.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
+            } else {
+                select.innerHTML = '<option value="">暂无可用知识点</option>';
+            }
+        }
+
+        async function handleGenerate() {
+            const kpId = document.getElementById('kp-select').value;
+            const resourceType = document.querySelector('input[name="resource_type"]:checked')?.value || 'doc';
+
+            if (!kpId) {
+                alert('请选择知识点');
+                return;
+            }
+
+            document.getElementById('result-empty').style.display = 'none';
+            document.getElementById('result-progress').style.display = 'block';
+            document.getElementById('result-content').style.display = 'none';
+
+            const btn = document.getElementById('generate-btn');
+            btn.disabled = true;
+            btn.textContent = '生成中...';
+
+            try {
+                const task = await startGeneration(userId, kpId, resourceType);
+                if (!task || !task.task_id) {
+                    throw new Error('生成任务创建失败');
+                }
+
+                // Poll status
+                let attempts = 0;
+                const poll = async () => {
+                    if (attempts++ > 60) {
+                        alert('生成超时，请稍后刷新页面查看结果');
+                        btn.disabled = false;
+                        btn.textContent = '开始生成';
+                        return;
+                    }
+                    const status = await getTaskStatus(task.task_id);
+                    if (!status) return poll();
+                    const pct = status.progress || 0;
+                    document.getElementById('progress-fill').style.width = pct + '%';
+                    document.getElementById('progress-text').textContent = status.status_message || `生成中... ${pct}%`;
+                    if (status.status === 'completed') {
+                        btn.disabled = false;
+                        btn.textContent = '开始生成';
+                        document.getElementById('result-progress').style.display = 'none';
+                        document.getElementById('result-content').style.display = 'block';
+                        document.getElementById('result-content').innerHTML = `
+                            <div class="result-success">
+                                <div class="result-success-icon">&#10004;</div>
+                                <div class="result-success-title">资源生成完成</div>
+                                <div style="font-size:14px;color:#6B7280;margin-top:8px;">资源 ID: ${task.task_id}</div>
+                            </div>
+                        `;
+                    } else if (status.status === 'failed') {
+                        btn.disabled = false;
+                        btn.textContent = '开始生成';
+                        document.getElementById('result-progress').style.display = 'none';
+                        document.getElementById('result-empty').style.display = 'flex';
+                        alert('生成失败: ' + (status.error || '未知错误'));
+                    } else {
+                        setTimeout(poll, 1500);
+                    }
+                };
+                poll();
+            } catch (e) {
+                alert('生成失败: ' + e.message);
+                btn.disabled = false;
+                btn.textContent = '开始生成';
+                document.getElementById('result-empty').style.display = 'flex';
+                document.getElementById('result-progress').style.display = 'none';
+            }
+        }
+
+        loadKgNodes();
+    </script>
+</body>
+</html>

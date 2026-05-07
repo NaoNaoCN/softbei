@@ -116,6 +116,13 @@ app.add_middleware(
 )
 app.add_middleware(LoggingMiddleware)
 
+# 静态文件服务：挂载 frontend 目录到 /app 路径
+from pathlib import Path
+html_dir = Path(__file__).parent.parent / "frontend"
+if html_dir.exists():
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/app", StaticFiles(directory=str(html_dir), html=True), name="html")
+
 
 # ===========================================================
 # 健康检查

@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学习路径 - 个性化学习助手</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #F5F7FA;
+            color: #1A1A2E;
+            min-height: 100vh;
+        }
+        .layout { display: flex; min-height: 100vh; }
+        .sidebar {
+            width: 240px;
+            background: #EEF4FB;
+            border-right: 1px solid #E0E6ED;
+            padding: 24px 16px;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .sidebar-logo { font-size: 18px; font-weight: 700; color: #1976D2; margin-bottom: 24px; padding-left: 8px; }
+        .nav-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 12px 16px; border-radius: 8px;
+            color: #1A1A2E; text-decoration: none;
+            margin-bottom: 4px; transition: all 0.2s; font-size: 14px;
+        }
+        .nav-item:hover { background: #E3F2FD; color: #1976D2; }
+        .nav-item.active { background: #1976D2; color: #fff; }
+        .nav-item .icon { font-size: 18px; width: 24px; text-align: center; }
+
+        .main { margin-left: 240px; padding: 32px 40px; flex: 1; }
+        .page-title {
+            font-size: 28px; font-weight: 700; color: #1976D2;
+            margin-bottom: 8px; padding-bottom: 12px; border-bottom: 3px solid #1976D2;
+        }
+        .page-subtitle { font-size: 14px; color: #6B7280; margin-bottom: 32px; }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #E0E6ED;
+            margin-bottom: 24px;
+            gap: 4px;
+        }
+        .tab {
+            padding: 10px 24px;
+            font-size: 14px; font-weight: 500;
+            color: #6B7280; cursor: pointer;
+            border: none; background: none;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px; transition: all 0.2s;
+            border-radius: 6px 6px 0 0;
+        }
+        .tab:hover { color: #1976D2; }
+        .tab.active { color: #1976D2; border-bottom-color: #1976D2; background: #E3F2FD; }
+
+        /* KG Graph Container */
+        .kg-container {
+            background: #fff;
+            border: 1px solid #E0E6ED;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+            min-height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .kg-placeholder {
+            text-align: center;
+            color: #6B7280;
+        }
+        .kg-placeholder-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
+        .kg-placeholder-text { font-size: 14px; }
+
+        /* KG Filter Bar */
+        .kg-filter {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .filter-select {
+            padding: 8px 14px;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #fff;
+            cursor: pointer;
+            outline: none;
+            min-width: 120px;
+        }
+        .btn-secondary {
+            padding: 8px 16px;
+            background: #fff;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-secondary:hover { border-color: #1976D2; color: #1976D2; }
+
+        /* Pathway Cards */
+        .pathway-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+        .pathway-card {
+            background: #fff;
+            border: 1px solid #E0E6ED;
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.2s;
+        }
+        .pathway-card:hover { border-color: #1976D2; box-shadow: 0 4px 12px rgba(25,118,210,0.08); }
+        .pathway-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+        .pathway-title { font-size: 16px; font-weight: 600; color: #1A1A2E; }
+        .pathway-meta { font-size: 12px; color: #6B7280; margin-top: 4px; }
+        .btn-delete {
+            padding: 6px 12px;
+            background: #fff;
+            color: #E53935;
+            border: 1px solid #FFCDD2;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-delete:hover { background: #E53935; color: #fff; border-color: #E53935; }
+
+        /* Pathway Steps */
+        .pathway-steps {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .step-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            background: #F5F7FA;
+            border-left: 3px solid #E0E6ED;
+        }
+        .step-item.completed { background: #E8F5E9; border-left-color: #43A047; }
+        .step-item.in-progress { background: #FFF3E0; border-left-color: #F57C00; }
+        .step-item.pending { background: #E3F2FD; border-left-color: #1976D2; }
+        .step-status { font-size: 12px; }
+        .step-item.completed .step-status { color: #43A047; }
+        .step-item.in-progress .step-status { color: #F57C00; }
+        .step-item.pending .step-status { color: #1976D2; }
+
+        .pathway-actions { display: flex; gap: 8px; }
+        .btn-primary {
+            padding: 8px 16px;
+            background: #1976D2;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-primary:hover { background: #1565C0; }
+        .btn-outline {
+            padding: 8px 16px;
+            background: #fff;
+            color: #1A1A2E;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-outline:hover { border-color: #1976D2; color: #1976D2; }
+
+        /* Node List */
+        .node-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .node-item {
+            background: #fff;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .node-item:hover { border-color: #1976D2; background: #F5F7FA; }
+        .node-icon { font-size: 24px; margin-bottom: 6px; }
+        .node-name { font-size: 13px; font-weight: 500; color: #1A1A2E; }
+        .node-type { font-size: 11px; color: #6B7280; margin-top: 2px; }
+
+        /* Learning Records */
+        .records-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: #fff;
+            border: 1px solid #E0E6ED;
+            border-radius: 10px;
+            padding: 16px;
+            text-align: center;
+        }
+        .stat-value { font-size: 24px; font-weight: 700; color: #1976D2; }
+        .stat-label { font-size: 13px; color: #6B7280; margin-top: 4px; }
+
+        .record-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            background: #fff;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        .record-info { display: flex; align-items: center; gap: 12px; }
+        .record-icon { font-size: 18px; }
+        .record-action { font-size: 14px; font-weight: 500; }
+        .record-target { font-size: 12px; color: #6B7280; }
+        .record-time { font-size: 12px; color: #9CA3AF; }
+
+        /* Progress */
+        .pathway-progress {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .progress-bar { flex: 1; height: 8px; background: #E0E6ED; border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; background: #43A047; border-radius: 4px; transition: width 0.3s; }
+        .progress-text { font-size: 13px; color: #6B7280; white-space: nowrap; }
+
+        .form-input {
+            padding: 8px 14px;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+        }
+        .form-input:focus { border-color: #1976D2; }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <nav class="sidebar">
+            <div class="sidebar-logo">个性化学习助手</div>
+            <a href="index.html" class="nav-item"><span class="icon">🏠</span><span>首页</span></a>
+            <a href="chat.html" class="nav-item"><span class="icon">💬</span><span>智能对话</span></a>
+            <a href="profile.html" class="nav-item"><span class="icon">👤</span><span>我的画像</span></a>
+            <a href="generate.html" class="nav-item"><span class="icon">✨</span><span>生成资源</span></a>
+            <a href="pathway.html" class="nav-item active"><span class="icon">🗺️</span><span>学习路径</span></a>
+            <a href="library.html" class="nav-item"><span class="icon">📚</span><span>资源库</span></a>
+            <a href="evaluate.html" class="nav-item"><span class="icon">📝</span><span>学习评估</span></a>
+        </nav>
+
+        <main class="main">
+            <h1 class="page-title">学习路径 & 知识图谱</h1>
+            <p class="page-subtitle">查看知识图谱结构，规划和管理个性化学习路径，高效达成学习目标。</p>
+
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(this, 'kg')">知识图谱</button>
+                <button class="tab" onclick="switchTab(this, 'pathways')">我的路径</button>
+                <button class="tab" onclick="switchTab(this, 'records')">学习记录</button>
+            </div>
+
+            <!-- KG Tab -->
+            <div id="tab-kg">
+                <!-- KG Filter Bar -->
+                <div class="kg-filter">
+                    <select class="filter-select" id="kg-depth">
+                        <option value="1">展开深度：1</option>
+                        <option value="2" selected>展开深度：2</option>
+                        <option value="3">展开深度：3</option>
+                        <option value="4">展开深度：4</option>
+                        <option value="5">展开深度：5</option>
+                    </select>
+                    <button class="btn-secondary" onclick="loadKgGraph()">刷新图谱</button>
+                    <button class="btn-secondary" onclick="window.open(location.href, '_blank')">全屏查看</button>
+                </div>
+
+                <!-- KG Graph -->
+                <div class="kg-container">
+                    <div id="kg-chart" style="width:100%;height:400px;"></div>
+                    <div class="kg-placeholder" id="kg-placeholder">
+                        <div class="kg-placeholder-icon">&#128203;</div>
+                        <div class="kg-placeholder-text">知识图谱加载中，请稍候...</div>
+                    </div>
+                </div>
+
+                <!-- Node List -->
+                <div style="margin-top:24px;">
+                    <div style="font-size:15px;font-weight:600;color:#1A1A2E;margin-bottom:12px;">知识点列表</div>
+                    <div class="node-grid" id="node-grid"></div>
+                </div>
+            </div>
+
+            <!-- Pathways Tab -->
+            <div id="tab-pathways" style="display:none;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                    <div style="font-size:16px;font-weight:600;">我的学习路径</div>
+                    <button class="btn-primary" id="btn-create-pathway" onclick="showCreatePathway()">+ 创建学习路径</button>
+                </div>
+                <div id="create-pathway-form" style="display:none;background:#fff;border:1px solid #E0E6ED;border-radius:12px;padding:20px;margin-bottom:20px;">
+                    <div style="font-size:15px;font-weight:600;margin-bottom:12px;">新建学习路径</div>
+                    <div style="display:flex;gap:12px;">
+                        <input type="text" class="form-input" id="pathway-name" placeholder="路径名称，如：Python 系统学习" style="flex:1;">
+                        <button class="btn-primary" onclick="handleCreatePathway()">创建</button>
+                        <button class="btn-secondary" onclick="document.getElementById('create-pathway-form').style.display='none'">取消</button>
+                    </div>
+                </div>
+                <div class="pathway-grid" id="pathway-grid"></div>
+            </div>
+
+            <!-- Records Tab -->
+            <div id="tab-records" style="display:none;">
+                <div class="records-stats" id="records-stats"></div>
+                <div id="records-list"></div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        import { isLoggedIn, getUserId, getKgGraph, getPathways, createPathway, deletePathway, getLearningRecords } from './assets/api.js';
+
+        if (!isLoggedIn()) {
+            window.location.href = 'auth.html';
+        }
+
+        const userId = getUserId();
+
+        function switchTab(btn, tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('tab-kg').style.display = tab === 'kg' ? 'block' : 'none';
+            document.getElementById('tab-pathways').style.display = tab === 'pathways' ? 'block' : 'none';
+            document.getElementById('tab-records').style.display = tab === 'records' ? 'block' : 'none';
+            if (tab === 'kg') loadKgGraph();
+            else if (tab === 'pathways') loadPathways();
+            else if (tab === 'records') loadRecords();
+        }
+
+        async function loadKgGraph() {
+            const depth = parseInt(document.getElementById('kg-depth').value);
+            const graph = await getKgGraph({ depth });
+            const chartDiv = document.getElementById('kg-chart');
+            const placeholder = document.getElementById('kg-placeholder');
+            if (!graph || !graph.nodes || !graph.nodes.length) {
+                placeholder.style.display = 'flex';
+                chartDiv.style.display = 'none';
+                return;
+            }
+            placeholder.style.display = 'none';
+            chartDiv.style.display = 'block';
+
+            // Render simple node list
+            const grid = document.getElementById('node-grid');
+            grid.innerHTML = graph.nodes.map(n => `
+                <div class="node-item">
+                    <div class="node-icon">&#128196;</div>
+                    <div class="node-name">${n.name}</div>
+                    <div class="node-type">${n.node_type || '知识点'}</div>
+                </div>
+            `).join('');
+
+            // If echarts is available, render it
+            if (typeof echarts !== 'undefined') {
+                chartDiv.style.height = '400px';
+                const chart = echarts.init(chartDiv);
+                const nodes = graph.nodes.map(n => ({ name: n.name, id: n.id }));
+                const edges = (graph.edges || []).map(e => ({ source: e.from, target: e.to }));
+                chart.setOption({
+                    tooltip: {},
+                    series: [{
+                        type: 'graph',
+                        layout: 'force',
+                        symbolSize: 40,
+                        roam: true,
+                        label: { show: true, fontSize: 12 },
+                        data: nodes,
+                        links: edges,
+                        lineStyle: { color: '#E0E6ED', width: 1.5 },
+                    }]
+                });
+            }
+        }
+
+        async function loadPathways() {
+            const pathways = await getPathways(userId) || [];
+            const grid = document.getElementById('pathway-grid');
+            if (!pathways.length) {
+                grid.innerHTML = '<div style="padding:40px;text-align:center;color:#6B7280;font-size:14px;grid-column:1/-1;">暂无学习路径，<a href="chat.html" style="color:#1976D2;">前往对话生成</a></div>';
+                return;
+            }
+            grid.innerHTML = pathways.map(p => {
+                const items = p.items || [];
+                const completed = items.filter(i => i.is_completed).length;
+                const pct = items.length ? Math.round(completed / items.length * 100) : 0;
+                return `
+                <div class="pathway-card">
+                    <div class="pathway-header">
+                        <div>
+                            <div class="pathway-title">${p.name || '未命名路径'}</div>
+                            <div class="pathway-meta">${items.length} 个知识点 · ${p.created_at ? new Date(p.created_at).toLocaleDateString() : ''}</div>
+                        </div>
+                        <button class="btn-delete" onclick="handleDeletePathway('${p.id}')">删除</button>
+                    </div>
+                    <div class="pathway-progress">
+                        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+                        <span class="progress-text">${completed}/${items.length} 完成</span>
+                    </div>
+                    <div class="pathway-steps">
+                        ${items.map((item, idx) => {
+                            const cls = item.is_completed ? 'completed' : (idx < completed ? 'in-progress' : 'pending');
+                            const label = item.is_completed ? '已完成' : (idx < completed ? '进行中' : '待学习');
+                            return `<div class="step-item ${cls}"><span>${idx+1}. ${item.kp_name || item.kp_id}</span><span class="step-status">${label}</span></div>`;
+                        }).join('')}
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function showCreatePathway() {
+            document.getElementById('create-pathway-form').style.display = 'block';
+        }
+
+        async function handleCreatePathway() {
+            const name = document.getElementById('pathway-name').value.trim();
+            if (!name) return;
+            await createPathway(userId, name);
+            document.getElementById('pathway-name').value = '';
+            document.getElementById('create-pathway-form').style.display = 'none';
+            await loadPathways();
+        }
+
+        async function handleDeletePathway(id) {
+            if (!confirm('确定删除该路径？')) return;
+            await deletePathway(id, userId);
+            await loadPathways();
+        }
+
+        async function loadRecords() {
+            const records = await getLearningRecords(userId, { limit: 50 }) || [];
+            const stats = document.getElementById('records-stats');
+            const list = document.getElementById('records-list');
+            stats.innerHTML = `
+                <div class="stat-card"><div class="stat-value">${records.length}</div><div class="stat-label">学习记录</div></div>
+                <div class="stat-card"><div class="stat-value">${records.filter(r => r.action === 'complete').length}</div><div class="stat-label">完成项目</div></div>
+                <div class="stat-card"><div class="stat-value">${records.filter(r => r.action === 'start').length}</div><div class="stat-label">开始学习</div></div>
+            `;
+            if (!records.length) {
+                list.innerHTML = '<div style="padding:40px;text-align:center;color:#6B7280;">暂无学习记录</div>';
+                return;
+            }
+            list.innerHTML = records.map(r => `
+                <div class="record-item">
+                    <div class="record-info">
+                        <div class="record-icon">${r.action === 'complete' ? '&#10004;' : '&#9654;'}</div>
+                        <div>
+                            <div class="record-action">${r.action === 'complete' ? '完成学习' : '开始学习'}</div>
+                            <div class="record-target">${r.kp_name || r.kp_id || ''}</div>
+                        </div>
+                    </div>
+                    <div class="record-time">${r.created_at ? new Date(r.created_at).toLocaleString() : ''}</div>
+                </div>
+            `).join('');
+        }
+
+        window.switchTab = switchTab;
+        window.loadKgGraph = loadKgGraph;
+        window.showCreatePathway = showCreatePathway;
+        window.handleCreatePathway = handleCreatePathway;
+        window.handleDeletePathway = handleDeletePathway;
+
+        loadKgGraph();
+    </script>
+</body>
+</html>

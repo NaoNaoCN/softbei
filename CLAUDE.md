@@ -12,11 +12,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install dependencies
 pip install -r requirements.txt
 
-# Run backend (port 8000)
-uvicorn backend.main:app --reload --port 8000
+# Run backend + open frontend (http://localhost:8000/app)
+./start.ps1
 
-# Run frontend
-streamlit run streamlit_app/app.py
+# Or run backend only (frontend at http://localhost:8000/app)
+uvicorn backend.main:app --reload --port 8000
 
 # Build knowledge base vector index
 python -m backend.rag.indexer
@@ -36,7 +36,7 @@ pytest tests/test_schemas.py::test_user_create -v
 
 ## Architecture
 
-**Stack:** FastAPI (async) + Streamlit frontend + LangGraph agents + ChromaDB (RAG) + SQLAlchemy 2.0 (async ORM)
+**Stack:** FastAPI (async) + HTML/CSS/JS frontend + LangGraph agents + ChromaDB (RAG) + SQLAlchemy 2.0 (async ORM)
 
 **LLM & Config:** Provider/model configured in `configs/config.yaml` via `${ENV_VAR}` substitution. Currently uses Qwen (`qwen3.5-flash`) via DashScope. Multi-provider support (spark/deepseek/qwen/openai) in `backend/services/llm.py`. Config is a module-level singleton: `from backend.config import config`.
 
@@ -67,7 +67,7 @@ Resource generation is triggered via `POST /generate`, runs as a background task
 
 ### Frontend
 
-Streamlit multi-page app. Pages: `0_auth`, `1_profile`, `2_chat`, `3_pathway`, `4_library`, `5_evaluate`. Reusable components in `streamlit_app/components/` (mindmap via ECharts, quiz cards, resource cards). Global session state and sidebar managed in `streamlit_app/app.py`.
+HTML/CSS/JS frontend served via FastAPI StaticFiles at `/app`. Pages: `index`, `auth`, `chat`, `profile`, `generate`, `pathway`, `library`, `evaluate`. API layer in `html-test/assets/api.js`. Auth: JWT stored in localStorage, user_id passed as query param.
 
 ## Key Conventions
 

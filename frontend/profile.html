@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的画像 - 个性化学习助手</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #F5F7FA;
+            color: #1A1A2E;
+            min-height: 100vh;
+        }
+        .layout { display: flex; min-height: 100vh; }
+        .sidebar {
+            width: 240px;
+            background: #EEF4FB;
+            border-right: 1px solid #E0E6ED;
+            padding: 24px 16px;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        .sidebar-logo { font-size: 18px; font-weight: 700; color: #1976D2; margin-bottom: 24px; padding-left: 8px; }
+        .nav-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 12px 16px; border-radius: 8px;
+            color: #1A1A2E; text-decoration: none;
+            margin-bottom: 4px; transition: all 0.2s; font-size: 14px;
+        }
+        .nav-item:hover { background: #E3F2FD; color: #1976D2; }
+        .nav-item.active { background: #1976D2; color: #fff; }
+        .nav-item .icon { font-size: 18px; width: 24px; text-align: center; }
+
+        .main { margin-left: 240px; padding: 32px 40px; flex: 1; }
+        .page-title {
+            font-size: 28px; font-weight: 700; color: #1976D2;
+            margin-bottom: 8px; padding-bottom: 12px; border-bottom: 3px solid #1976D2;
+        }
+        .page-subtitle { font-size: 14px; color: #6B7280; margin-bottom: 32px; }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #E0E6ED;
+            margin-bottom: 24px;
+            gap: 4px;
+        }
+        .tab {
+            padding: 10px 24px;
+            font-size: 14px; font-weight: 500;
+            color: #6B7280; cursor: pointer;
+            border: none; background: none;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px; transition: all 0.2s;
+            border-radius: 6px 6px 0 0;
+        }
+        .tab:hover { color: #1976D2; }
+        .tab.active { color: #1976D2; border-bottom-color: #1976D2; background: #E3F2FD; }
+
+        /* Profile View Card */
+        .card {
+            background: #fff;
+            border: 1px solid #E0E6ED;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .card-title {
+            font-size: 16px; font-weight: 600; color: #1A1A2E; margin-bottom: 20px;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+        .stat-item {
+            background: #fff;
+            border: 1px solid #E0E6ED;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+        .stat-value { font-size: 28px; font-weight: 700; color: #1976D2; }
+        .stat-label { font-size: 13px; color: #6B7280; margin-top: 6px; }
+
+        /* Profile Info Grid */
+        .profile-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+        .profile-item {
+            background: #F5F7FA;
+            border-radius: 10px;
+            padding: 16px 20px;
+        }
+        .profile-label {
+            font-size: 12px;
+            color: #6B7280;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+        .profile-value {
+            font-size: 16px;
+            font-weight: 500;
+            color: #1A1A2E;
+        }
+
+        /* Tags */
+        .tags-section { margin-top: 24px; }
+        .tags-title {
+            font-size: 14px; font-weight: 600; color: #1A1A2E; margin-bottom: 12px;
+        }
+        .tags-list { display: flex; gap: 8px; flex-wrap: wrap; }
+        .tag {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 16px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .tag-success { background: #E8F5E9; color: #43A047; }
+        .tag-warning { background: #FFF3E0; color: #F57C00; }
+        .tag-info { background: #E3F2FD; color: #1976D2; }
+        .tag-default { background: #F5F7FA; color: #6B7280; }
+
+        /* Form */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+        .form-group { margin-bottom: 16px; }
+        .form-label {
+            display: block;
+            font-size: 14px; font-weight: 500;
+            margin-bottom: 6px;
+        }
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            border-color: #1976D2;
+            box-shadow: 0 0 0 3px rgba(25,118,210,0.1);
+        }
+        .form-textarea { resize: vertical; min-height: 80px; }
+        .form-full { grid-column: 1 / -1; }
+
+        .btn-primary {
+            padding: 12px 32px;
+            background: #1976D2;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px; font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-primary:hover { background: #1565C0; }
+        .btn-secondary {
+            padding: 12px 32px;
+            background: #fff;
+            color: #1A1A2E;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+            font-size: 15px; font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-secondary:hover { border-color: #1976D2; color: #1976D2; }
+        .form-actions { display: flex; gap: 12px; margin-top: 24px; }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <nav class="sidebar">
+            <div class="sidebar-logo">个性化学习助手</div>
+            <a href="index.html" class="nav-item"><span class="icon">🏠</span><span>首页</span></a>
+            <a href="chat.html" class="nav-item"><span class="icon">💬</span><span>智能对话</span></a>
+            <a href="profile.html" class="nav-item active"><span class="icon">👤</span><span>我的画像</span></a>
+            <a href="generate.html" class="nav-item"><span class="icon">✨</span><span>生成资源</span></a>
+            <a href="pathway.html" class="nav-item"><span class="icon">🗺️</span><span>学习路径</span></a>
+            <a href="library.html" class="nav-item"><span class="icon">📚</span><span>资源库</span></a>
+            <a href="evaluate.html" class="nav-item"><span class="icon">📝</span><span>学习评估</span></a>
+        </nav>
+
+        <main class="main">
+            <h1 class="page-title">我的学习画像</h1>
+            <p class="page-subtitle">查看和管理您的个性化学习画像，系统将根据画像为您推荐最合适的学习资源和路径。</p>
+
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab active" onclick="this.classList.add('active');this.nextElementSibling.classList.remove('active');document.getElementById('view-panel').style.display='block';document.getElementById('edit-panel').style.display='none';">查看画像</button>
+                <button class="tab" onclick="this.classList.add('active');this.previousElementSibling.classList.remove('active');document.getElementById('edit-panel').style.display='block';document.getElementById('view-panel').style.display='none';">编辑画像</button>
+            </div>
+
+            <!-- View Panel -->
+            <div id="view-panel">
+                <!-- Stats -->
+                <div class="stats-grid" id="stats-grid" style="display:none;">
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-mastered-count">-</div>
+                        <div class="stat-label">已掌握知识点</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-weak-count">-</div>
+                        <div class="stat-label">薄弱知识点</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-daily-display">-</div>
+                        <div class="stat-label">每日学习时间（分钟）</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">v2</div>
+                        <div class="stat-label">画像版本</div>
+                    </div>
+                </div>
+
+                <!-- Profile Card -->
+                <div class="card">
+                    <div class="card-title">基本信息</div>
+                    <div class="profile-grid">
+                        <div class="profile-item">
+                            <div class="profile-label">专业</div>
+                            <div class="profile-value" id="view-major">-</div>
+                        </div>
+                        <div class="profile-item">
+                            <div class="profile-label">认知风格</div>
+                            <div class="profile-value" id="view-cognitive">-</div>
+                        </div>
+                        <div class="profile-item">
+                            <div class="profile-label">每日学习时间</div>
+                            <div class="profile-value" id="view-daily">-</div>
+                        </div>
+                        <div class="profile-item">
+                            <div class="profile-label">画像版本</div>
+                            <div class="profile-value">v2</div>
+                        </div>
+                    </div>
+
+                    <div class="tags-section">
+                        <div class="tags-title">学习目标</div>
+                        <div style="background:#F5F7FA;border-radius:8px;padding:14px 16px;font-size:14px;color:#1A1A2E;line-height:1.6;" id="view-goal">暂无</div>
+                    </div>
+
+                    <div class="tags-section">
+                        <div class="tags-title">已掌握知识点</div>
+                        <div class="tags-list" id="view-mastered"></div>
+                    </div>
+
+                    <div class="tags-section">
+                        <div class="tags-title">薄弱知识点</div>
+                        <div class="tags-list" id="view-weak"></div>
+                    </div>
+
+                    <div class="tags-section">
+                        <div class="tags-title">易错点</div>
+                        <div class="tags-list" id="view-error"></div>
+                    </div>
+                </div>
+
+                <div style="text-align:right;margin-top:16px;">
+                    <button class="btn-primary" onclick="document.querySelectorAll('.tab')[1].click();">编辑画像</button>
+                </div>
+            </div>
+
+            <!-- Edit Panel -->
+            <div id="edit-panel" style="display:none;">
+                <div class="card">
+                    <div class="card-title">编辑学习画像</div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label">专业</label>
+                            <input type="text" class="form-input" id="edit-major" placeholder="请输入专业">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">每日学习时间（分钟）</label>
+                            <select class="form-select" id="edit-daily-time">
+                                <option value="30">30 分钟</option>
+                                <option value="60" selected>60 分钟</option>
+                                <option value="90">90 分钟</option>
+                                <option value="120">120 分钟</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">认知风格</label>
+                            <select class="form-select" id="edit-cognitive">
+                                <option value="视觉型">视觉型</option>
+                                <option value="听觉型">听觉型</option>
+                                <option value="阅读型">阅读型</option>
+                                <option value="动手型">动手型</option>
+                            </select>
+                        </div>
+                        <div class="form-group form-full">
+                            <label class="form-label">学习目标</label>
+                            <textarea class="form-textarea" id="edit-goal" placeholder="请输入学习目标"></textarea>
+                        </div>
+                        <div class="form-group form-full">
+                            <label class="form-label">已掌握知识点（用逗号分隔）</label>
+                            <textarea class="form-textarea" id="edit-mastered" placeholder="例如：Python 基础语法, 变量与数据类型"></textarea>
+                        </div>
+                        <div class="form-group form-full">
+                            <label class="form-label">薄弱知识点（用逗号分隔）</label>
+                            <textarea class="form-textarea" id="edit-weak" placeholder="例如：递归算法, 动态规划"></textarea>
+                        </div>
+                        <div class="form-group form-full">
+                            <label class="form-label">易错点（用逗号分隔）</label>
+                            <textarea class="form-textarea" id="edit-error" placeholder="例如：深拷贝与浅拷贝区别"></textarea>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn-primary" id="save-btn">保存修改</button>
+                        <button class="btn-secondary" onclick="document.querySelectorAll('.tab')[0].click();">取消</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        import { isLoggedIn, getUserId, getProfile, updateProfile } from './assets/api.js';
+
+        if (!isLoggedIn()) {
+            window.location.href = 'auth.html';
+        }
+
+        const userId = getUserId();
+
+        // Form field ids
+        const FIELD_IDS = {
+            major: 'edit-major',
+            daily_time_minutes: 'edit-daily-time',
+            cognitive_style: 'edit-cognitive',
+            learning_goal: 'edit-goal',
+            knowledge_mastered: 'edit-mastered',
+            knowledge_weak: 'edit-weak',
+            knowledge_frequent_error: 'edit-error',
+        };
+
+        async function loadProfile() {
+            const profile = await getProfile(userId);
+            if (!profile) return;
+
+            // View panel
+            document.getElementById('view-major').textContent = profile.major || '未设置';
+            document.getElementById('view-cognitive').textContent = profile.cognitive_style || '未设置';
+            document.getElementById('view-daily').textContent = profile.daily_time_minutes ? `${profile.daily_time_minutes} 分钟` : '未设置';
+            document.getElementById('view-goal').textContent = profile.learning_goal || '暂无';
+
+            const mastered = profile.knowledge_mastered || [];
+            document.getElementById('view-mastered').innerHTML = mastered.length
+                ? mastered.map(k => `<span class="tag tag-success">${k}</span>`).join('')
+                : '<span style="color:#6B7280;font-size:13px;">暂无</span>';
+
+            const weak = profile.knowledge_weak || [];
+            document.getElementById('view-weak').innerHTML = weak.length
+                ? weak.map(k => `<span class="tag tag-warning">${k}</span>`).join('')
+                : '<span style="color:#6B7280;font-size:13px;">暂无</span>';
+
+            const errors = profile.knowledge_frequent_error || [];
+            document.getElementById('view-error').innerHTML = errors.length
+                ? errors.map(k => `<span class="tag tag-default">${k}</span>`).join('')
+                : '<span style="color:#6B7280;font-size:13px;">暂无</span>';
+
+            // Stats
+            document.getElementById('stat-mastered-count').textContent = mastered.length;
+            document.getElementById('stat-weak-count').textContent = weak.length;
+            document.getElementById('stat-daily-display').textContent = profile.daily_time_minutes || '-';
+            document.getElementById('stats-grid').style.display = 'grid';
+
+            // Edit form
+            document.getElementById('edit-major').value = profile.major || '';
+            document.getElementById('edit-daily-time').value = profile.daily_time_minutes ? String(profile.daily_time_minutes) : '60';
+            document.getElementById('edit-cognitive').value = profile.cognitive_style || '视觉型';
+            document.getElementById('edit-goal').value = profile.learning_goal || '';
+            document.getElementById('edit-mastered').value = (profile.knowledge_mastered || []).join(', ');
+            document.getElementById('edit-weak').value = (profile.knowledge_weak || []).join(', ');
+            document.getElementById('edit-error').value = (profile.knowledge_frequent_error || []).join(', ');
+        }
+
+        async function handleSave() {
+            const data = {
+                major: document.getElementById('edit-major').value.trim(),
+                daily_time_minutes: parseInt(document.getElementById('edit-daily-time').value) || 60,
+                cognitive_style: document.getElementById('edit-cognitive').value,
+                learning_goal: document.getElementById('edit-goal').value.trim(),
+                knowledge_mastered: document.getElementById('edit-mastered').value.split(',').map(s => s.trim()).filter(Boolean),
+                knowledge_weak: document.getElementById('edit-weak').value.split(',').map(s => s.trim()).filter(Boolean),
+                knowledge_frequent_error: document.getElementById('edit-error').value.split(',').map(s => s.trim()).filter(Boolean),
+            };
+            const btn = document.getElementById('save-btn');
+            btn.disabled = true;
+            btn.textContent = '保存中...';
+            try {
+                await updateProfile(userId, data);
+                alert('保存成功！');
+                loadProfile();
+                document.querySelectorAll('.tab')[0].click();
+            } catch (e) {
+                alert('保存失败，请稍后重试');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '保存修改';
+            }
+        }
+
+        document.getElementById('save-btn').addEventListener('click', handleSave);
+        loadProfile();
+    </script>
+</body>
+</html>
