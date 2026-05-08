@@ -53,7 +53,7 @@ def _make_client(provider: str) -> tuple[AsyncOpenAI, str]:
         return AsyncOpenAI(
             api_key=config.llm.api_key,
             base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        ), "qwen3.5-flash"
+        ), "qwen3.5-plus-2026-02-15"
 
     if provider == "openai":
         return AsyncOpenAI(
@@ -109,12 +109,14 @@ async def chat_completion(
     _provider = provider or config.llm.provider
     client, default_model = _make_client(_provider)
     _model = model or default_model
+    extra_body = {"enable_thinking": False} if _provider == "qwen" else {}
     try:
         response = await client.chat.completions.create(
             model=_model,
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
+            extra_body=extra_body,
         )
         return response.choices[0].message.content or ""
     except RateLimitError as e:
