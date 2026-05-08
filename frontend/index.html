@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>个性化学习助手</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -46,7 +47,7 @@
         }
         .nav-item:hover { background: #E3F2FD; color: #1976D2; }
         .nav-item.active { background: #1976D2; color: #fff; }
-        .nav-item .icon { font-size: 18px; width: 24px; text-align: center; }
+        .nav-item .icon { width: 24px; height: 18px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .sidebar-footer {
             margin-top: auto;
             padding-top: 16px;
@@ -210,13 +211,13 @@
     <!-- Sidebar -->
     <nav class="sidebar">
         <div class="sidebar-logo">个性化学习助手</div>
-        <a href="index.html" class="nav-item active"><span class="icon">🏠</span><span>首页</span></a>
-        <a href="chat.html" class="nav-item"><span class="icon">💬</span><span>智能对话</span></a>
-        <a href="profile.html" class="nav-item"><span class="icon">👤</span><span>我的画像</span></a>
-        <a href="generate.html" class="nav-item"><span class="icon">✨</span><span>生成资源</span></a>
-        <a href="pathway.html" class="nav-item"><span class="icon">🗺️</span><span>学习路径</span></a>
-        <a href="library.html" class="nav-item"><span class="icon">📚</span><span>资源库</span></a>
-        <a href="evaluate.html" class="nav-item"><span class="icon">📝</span><span>学习评估</span></a>
+        <a href="index.html" class="nav-item active"><span class="icon"><i data-lucide="home"></i></span><span>首页</span></a>
+        <a href="chat.html" class="nav-item"><span class="icon"><i data-lucide="message-circle"></i></span><span>智能对话</span></a>
+        <a href="profile.html" class="nav-item"><span class="icon"><i data-lucide="user"></i></span><span>我的画像</span></a>
+        <a href="generate.html" class="nav-item"><span class="icon"><i data-lucide="sparkles"></i></span><span>生成资源</span></a>
+        <a href="pathway.html" class="nav-item"><span class="icon"><i data-lucide="map"></i></span><span>学习路径</span></a>
+        <a href="library.html" class="nav-item"><span class="icon"><i data-lucide="book-open"></i></span><span>资源库</span></a>
+        <a href="evaluate.html" class="nav-item"><span class="icon"><i data-lucide="clipboard-check"></i></span><span>学习评估</span></a>
         <div class="sidebar-footer">
             <div class="user-info" id="user-info">加载中...</div>
             <button class="btn-logout" onclick="handleLogout()">退出登录</button>
@@ -253,22 +254,22 @@
             <div class="card-title">快捷入口</div>
             <div class="feature-grid">
                 <a href="generate.html" class="feature-card">
-                    <div class="feature-icon">✨</div>
+                    <div class="feature-icon"><i data-lucide="sparkles"></i></div>
                     <div class="feature-title">生成资源</div>
                     <div class="feature-desc">生成学习文档、思维导图、测验题目、代码示例等个性化学习资源。</div>
                 </a>
                 <a href="library.html" class="feature-card">
-                    <div class="feature-icon">📚</div>
+                    <div class="feature-icon"><i data-lucide="book-open"></i></div>
                     <div class="feature-title">资源库</div>
                     <div class="feature-desc">浏览、管理和搜索已生成的学习资源，支持预览和删除。</div>
                 </a>
                 <a href="evaluate.html" class="feature-card">
-                    <div class="feature-icon">📝</div>
+                    <div class="feature-icon"><i data-lucide="clipboard-check"></i></div>
                     <div class="feature-title">学习评估</div>
                     <div class="feature-desc">完成测验题目，了解答题历史和薄弱知识点，针对性提升。</div>
                 </a>
                 <a href="pathway.html" class="feature-card">
-                    <div class="feature-icon">🗺️</div>
+                    <div class="feature-icon"><i data-lucide="map"></i></div>
                     <div class="feature-title">学习路径</div>
                     <div class="feature-desc">查看知识图谱，规划和管理个性化学习路径，高效达成目标。</div>
                 </a>
@@ -383,5 +384,6 @@
         loadProfile();
         loadPathways();
     </script>
+    <script>lucide.createIcons();</script>
 </body>
 </html>

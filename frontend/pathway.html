@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>学习路径 - 个性化学习助手</title>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -32,7 +33,7 @@
         }
         .nav-item:hover { background: #E3F2FD; color: #1976D2; }
         .nav-item.active { background: #1976D2; color: #fff; }
-        .nav-item .icon { font-size: 18px; width: 24px; text-align: center; }
+        .nav-item .icon { width: 24px; height: 18px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
         .main { margin-left: 240px; padding: 32px 40px; flex: 1; }
         .page-title {
@@ -76,7 +77,7 @@
             text-align: center;
             color: #6B7280;
         }
-        .kg-placeholder-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
+        .kg-placeholder-icon { width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.5; display: inline-flex; align-items: center; justify-content: center; }
         .kg-placeholder-text { font-size: 14px; }
 
         /* KG Filter Bar */
@@ -208,7 +209,7 @@
             transition: all 0.2s;
         }
         .node-item:hover { border-color: #1976D2; background: #F5F7FA; }
-        .node-icon { font-size: 24px; margin-bottom: 6px; }
+        .node-icon { width: 24px; height: 24px; margin-bottom: 6px; display: inline-flex; align-items: center; justify-content: center; }
         .node-name { font-size: 13px; font-weight: 500; color: #1A1A2E; }
         .node-type { font-size: 11px; color: #6B7280; margin-top: 2px; }
 
@@ -240,7 +241,7 @@
             margin-bottom: 10px;
         }
         .record-info { display: flex; align-items: center; gap: 12px; }
-        .record-icon { font-size: 18px; }
+        .record-icon { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; }
         .record-action { font-size: 14px; font-weight: 500; }
         .record-target { font-size: 12px; color: #6B7280; }
         .record-time { font-size: 12px; color: #9CA3AF; }
@@ -270,13 +271,13 @@
     <div class="layout">
         <nav class="sidebar">
             <div class="sidebar-logo">个性化学习助手</div>
-            <a href="index.html" class="nav-item"><span class="icon">🏠</span><span>首页</span></a>
-            <a href="chat.html" class="nav-item"><span class="icon">💬</span><span>智能对话</span></a>
-            <a href="profile.html" class="nav-item"><span class="icon">👤</span><span>我的画像</span></a>
-            <a href="generate.html" class="nav-item"><span class="icon">✨</span><span>生成资源</span></a>
-            <a href="pathway.html" class="nav-item active"><span class="icon">🗺️</span><span>学习路径</span></a>
-            <a href="library.html" class="nav-item"><span class="icon">📚</span><span>资源库</span></a>
-            <a href="evaluate.html" class="nav-item"><span class="icon">📝</span><span>学习评估</span></a>
+            <a href="index.html" class="nav-item"><span class="icon"><i data-lucide="home"></i></span><span>首页</span></a>
+            <a href="chat.html" class="nav-item"><span class="icon"><i data-lucide="message-circle"></i></span><span>智能对话</span></a>
+            <a href="profile.html" class="nav-item"><span class="icon"><i data-lucide="user"></i></span><span>我的画像</span></a>
+            <a href="generate.html" class="nav-item"><span class="icon"><i data-lucide="sparkles"></i></span><span>生成资源</span></a>
+            <a href="pathway.html" class="nav-item active"><span class="icon"><i data-lucide="map"></i></span><span>学习路径</span></a>
+            <a href="library.html" class="nav-item"><span class="icon"><i data-lucide="book-open"></i></span><span>资源库</span></a>
+            <a href="evaluate.html" class="nav-item"><span class="icon"><i data-lucide="clipboard-check"></i></span><span>学习评估</span></a>
         </nav>
 
         <main class="main">
@@ -309,7 +310,7 @@
                 <div class="kg-container" style="display:flex;flex-direction:row;align-items:flex-start;gap:12px;">
                     <div id="kg-chart" style="width:100%;height:500px;"></div>
                     <div class="kg-placeholder" id="kg-placeholder" style="display:none;">
-                        <div class="kg-placeholder-icon">&#128203;</div>
+                        <div class="kg-placeholder-icon"><i data-lucide="git-branch"></i></div>
                         <div class="kg-placeholder-text">知识图谱加载中，请稍候...</div>
                     </div>
                     <!-- Legend -->
@@ -392,7 +393,7 @@
             const grid = document.getElementById('node-grid');
             grid.innerHTML = graph.nodes.map(n => `
                 <div class="node-item">
-                    <div class="node-icon">&#128196;</div>
+                    <div class="node-icon"><i data-lucide="file-text"></i></div>
                     <div class="node-name">${n.name}</div>
                     <div class="node-type">${n.type || '知识点'}</div>
                 </div>
@@ -545,7 +546,7 @@
             list.innerHTML = records.map(r => `
                 <div class="record-item">
                     <div class="record-info">
-                        <div class="record-icon">${r.action === 'complete' ? '&#10004;' : '&#9654;'}</div>
+                        <div class="record-icon">${r.action === 'complete' ? '<i data-lucide="check-circle"></i>' : '<i data-lucide="play-circle"></i>'}</div>
                         <div>
                             <div class="record-action">${r.action === 'complete' ? '完成学习' : '开始学习'}</div>
                             <div class="record-target">${r.kp_name || r.kp_id || ''}</div>
@@ -563,5 +564,6 @@
         window.handleDeletePathway = handleDeletePathway;
         window.handleToggleItem = handleToggleItem;
     </script>
+    <script>lucide.createIcons();</script>
 </body>
 </html>

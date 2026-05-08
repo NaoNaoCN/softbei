@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>生成资源 - 个性化学习助手</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -47,7 +48,7 @@
         }
         .nav-item:hover { background: #E3F2FD; color: #1976D2; }
         .nav-item.active { background: #1976D2; color: #fff; }
-        .nav-item .icon { font-size: 18px; width: 24px; text-align: center; }
+        .nav-item .icon { width: 24px; height: 18px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
         /* Main */
         .main {
@@ -156,7 +157,7 @@
             background: #E3F2FD;
         }
         .form-radio input { display: none; }
-        .form-radio-icon { font-size: 20px; }
+        .form-radio-icon { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; }
         .form-radio-text { font-size: 14px; font-weight: 500; }
         .btn-primary {
             width: 100%;
@@ -219,7 +220,7 @@
             color: #6B7280;
             text-align: center;
         }
-        .result-empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+        .result-empty-icon { width: 48px; height: 48px; margin-bottom: 16px; opacity: 0.5; display: inline-flex; align-items: center; justify-content: center; }
         .result-empty-text { font-size: 14px; }
         .result-item { margin-bottom: 24px; }
         .result-item-title { font-weight: 600; margin-bottom: 8px; color: #1A1A2E; }
@@ -248,7 +249,7 @@
             text-align: center;
             padding: 20px;
         }
-        .result-success-icon { font-size: 48px; margin-bottom: 16px; }
+        .result-success-icon { width: 48px; height: 48px; margin-bottom: 16px; display: inline-flex; align-items: center; justify-content: center; }
         .result-success-title { font-size: 18px; font-weight: 600; color: #1A1A2E; margin-bottom: 8px; }
     </style>
 </head>
@@ -258,25 +259,25 @@
         <nav class="sidebar">
             <div class="sidebar-logo">个性化学习助手</div>
             <a href="index.html" class="nav-item">
-                <span class="icon">🏠</span><span>首页</span>
+                <span class="icon"><i data-lucide="home"></i></span><span>首页</span>
             </a>
             <a href="chat.html" class="nav-item">
-                <span class="icon">💬</span><span>智能对话</span>
+                <span class="icon"><i data-lucide="message-circle"></i></span><span>智能对话</span>
             </a>
             <a href="profile.html" class="nav-item">
-                <span class="icon">👤</span><span>我的画像</span>
+                <span class="icon"><i data-lucide="user"></i></span><span>我的画像</span>
             </a>
             <a href="generate.html" class="nav-item active">
-                <span class="icon">✨</span><span>生成资源</span>
+                <span class="icon"><i data-lucide="sparkles"></i></span><span>生成资源</span>
             </a>
             <a href="pathway.html" class="nav-item">
-                <span class="icon">🗺️</span><span>学习路径</span>
+                <span class="icon"><i data-lucide="map"></i></span><span>学习路径</span>
             </a>
             <a href="library.html" class="nav-item">
-                <span class="icon">📚</span><span>资源库</span>
+                <span class="icon"><i data-lucide="book-open"></i></span><span>资源库</span>
             </a>
             <a href="evaluate.html" class="nav-item">
-                <span class="icon">📝</span><span>学习评估</span>
+                <span class="icon"><i data-lucide="clipboard-check"></i></span><span>学习评估</span>
             </a>
         </nav>
 
@@ -319,17 +320,17 @@
                         <div class="form-radio-group">
                             <label class="form-radio selected" onclick="selectRadio(this)">
                                 <input type="radio" name="resource_type" value="doc" checked>
-                                <span class="form-radio-icon">📄</span>
+                                <span class="form-radio-icon"><i data-lucide="file-text"></i></span>
                                 <span class="form-radio-text">学习文档</span>
                             </label>
                             <label class="form-radio" onclick="selectRadio(this)">
                                 <input type="radio" name="resource_type" value="mindmap">
-                                <span class="form-radio-icon">🗺️</span>
+                                <span class="form-radio-icon"><i data-lucide="map"></i></span>
                                 <span class="form-radio-text">思维导图</span>
                             </label>
                             <label class="form-radio" onclick="selectRadio(this)">
                                 <input type="radio" name="resource_type" value="quiz">
-                                <span class="form-radio-icon">📝</span>
+                                <span class="form-radio-icon"><i data-lucide="clipboard-list"></i></span>
                                 <span class="form-radio-text">测验题目</span>
                             </label>
                             <div class="form-group" id="quiz-count-group" style="display:none;margin-top:12px;margin-left:32px;">
@@ -347,12 +348,12 @@
                             </div>
                             <label class="form-radio" onclick="selectRadio(this)">
                                 <input type="radio" name="resource_type" value="code">
-                                <span class="form-radio-icon">💻</span>
+                                <span class="form-radio-icon"><i data-lucide="code"></i></span>
                                 <span class="form-radio-text">代码示例</span>
                             </label>
                             <label class="form-radio" onclick="selectRadio(this)">
                                 <input type="radio" name="resource_type" value="summary">
-                                <span class="form-radio-icon">📋</span>
+                                <span class="form-radio-icon"><i data-lucide="layout-list"></i></span>
                                 <span class="form-radio-text">知识总结</span>
                             </label>
                         </div>
@@ -377,7 +378,7 @@
                 <div class="result-card" id="result-card">
                     <div class="result-title">生成结果</div>
                     <div class="result-empty" id="result-empty">
-                        <div class="result-empty-icon">&#10024;</div>
+                        <div class="result-empty-icon"><i data-lucide="sparkles"></i></div>
                         <div class="result-empty-text">配置参数后点击「开始生成」<br>系统将为您创建个性化学习资源</div>
                     </div>
                     <div id="result-content" style="display:none;"></div>
@@ -488,7 +489,7 @@
                         document.getElementById('result-content').style.display = 'block';
                         document.getElementById('result-content').innerHTML = `
                             <div class="result-success">
-                                <div class="result-success-icon">&#10004;</div>
+                                <div class="result-success-icon"><i data-lucide="check-circle"></i></div>
                                 <div class="result-success-title">资源生成完成</div>
                                 <div style="font-size:14px;color:#6B7280;margin-top:8px;">资源 ID: ${task.task_id}</div>
                             </div>
@@ -526,5 +527,6 @@
 
         loadKgNodes();
     </script>
+    <script>lucide.createIcons();</script>
 </body>
 </html>
