@@ -72,6 +72,8 @@ class StudentProfile(Base):
     knowledge_weak: Mapped[list | None] = mapped_column(JSON)
     error_prone: Mapped[list | None] = mapped_column(JSON)
     current_progress: Mapped[str | None] = mapped_column(Text)
+    # 学习目标历史提问列表：记录每轮对话的 user_message，供 LLM 做总体概括
+    goal_questions: Mapped[list | None] = mapped_column(JSON, default=list)
     version: Mapped[int] = mapped_column(Integer, default=1)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
