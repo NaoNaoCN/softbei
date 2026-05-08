@@ -205,7 +205,7 @@ class TestBuildProfileContext:
         ctx = await build_profile_context(out)
         assert "CS" in ctx
         assert "DL" in ctx
-        assert "visual" in ctx
+        assert "视觉型" in ctx
 
     async def test_empty_profile(self):
         """所有字段为空时应返回"暂无学生画像信息"。"""        

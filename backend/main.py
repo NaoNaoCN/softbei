@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import jwt
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status, UploadFile, File, Form
+from fastapi import BackgroundTasks, Body, Depends, FastAPI, HTTPException, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -87,6 +87,16 @@ async def lifespan(app: FastAPI):
     # 启动动态会话表过期清理后台任务
     from backend.db.dynamic_chat import start_cleanup_task
     cleanup_task = asyncio.create_task(start_cleanup_task())
+
+    # 知识库为空时，自动从 knowledge_base/ai_intro 索引
+    from backend.db.vector import get_collection
+    from backend.rag.indexer import index_directory
+    import os
+    KB_DIR = "knowledge_base/ai_intro"
+    if get_collection().count() == 0 and os.path.isdir(KB_DIR):
+        logger.info("[Lifespan] 知识库为空，开始自动索引...")
+        indexed = await index_directory(KB_DIR)
+        logger.info(f"[Lifespan] 知识库索引完成，共写入 {indexed} 个文本块。")
 
     try:
         yield
@@ -498,12 +508,13 @@ async def get_kg_graph(
 
 @app.post("/kg/build", tags=["knowledge-graph"])
 async def build_kg_endpoint(
-    doc_id: str,
+    body: dict = Body(...),
     background_tasks: BackgroundTasks,
-    user_id: Optional[uuid.UUID] = None,
     db: AsyncSession = Depends(get_session),
 ):
     """异步构建知识图谱，立即返回任务 ID 供轮询。"""
+    doc_id: str = body.get("doc_id")
+    user_id: Optional[uuid.UUID] = uuid.UUID(body["user_id"]) if body.get("user_id") else None
     from backend.db.crud import insert
     from backend.db.models import KGBuildTask
     from backend.models.schemas import KGBuildTaskOut

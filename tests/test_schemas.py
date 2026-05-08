@@ -23,7 +23,7 @@ class TestStudentProfileIn:
         p = StudentProfileIn(
             major="计算机科学",
             learning_goal="掌握深度学习基础",
-            cognitive_style="visual",
+            cognitive_style="视觉型",
             daily_time_minutes=60,
             knowledge_mastered=["线性代数", "概率论"],
             knowledge_weak=["反向传播"],

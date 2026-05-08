@@ -56,9 +56,9 @@ class QuestionType(str, Enum):
 
 
 class CognitiveStyle(str, Enum):
-    visual = "visual"
-    text = "text"
-    practice = "practice"
+    visual = "视觉型"
+    text = "阅读型"
+    practice = "动手型"
 
 
 # ===========================================================
