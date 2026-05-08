@@ -129,7 +129,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     logger.warning(f"[ProfileAgent] db={db}, config_keys={list(config.keys()) if config else 'None'}")
     if db is not None:
         try:
-            state = state.model_copy(update={"profile": await profile_svc.merge_chat_updates(user_uuid, updates, db)})
+            state = state.model_copy(update={"profile": await profile_svc.merge_chat_updates(user_uuid, updates, db, user_message=state.user_message)})
         except Exception as e:
             logger.error(f"DB 合并画像失败: {e}")
             # 数据库更新失败时，回退到内存级别合并

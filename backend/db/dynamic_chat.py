@@ -39,6 +39,7 @@ async def create_session_table(table_name: str) -> None:
     """
     动态创建会话消息表。
     表结构: id, session_id, role, content, resource_type, created_at
+    对于旧版本创建的表，执行轻量迁移补齐缺失列。
     """
     engine = get_engine()
 
@@ -55,7 +56,23 @@ async def create_session_table(table_name: str) -> None:
 
     async with engine.begin() as conn:
         await conn.execute(text(sql))
-        logger.info(f"创建会话表: {table_name}")
+        # 轻量迁移：为旧表补上新增列（如 resource_type）
+        try:
+            result = await conn.execute(text(f"PRAGMA table_info({table_name})"))
+            columns = {row[1] for row in result.fetchall()}
+            if "resource_type" not in columns:
+                await conn.execute(text(
+                    f"ALTER TABLE {table_name} ADD COLUMN resource_type VARCHAR(16) DEFAULT NULL"
+                ))
+                logger.info(f"轻量迁移：为 {table_name} 补充 resource_type 列")
+            if "session_id" not in columns:
+                await conn.execute(text(
+                    f"ALTER TABLE {table_name} ADD COLUMN session_id VARCHAR(32)"
+                ))
+                logger.info(f"轻量迁移：为 {table_name} 补充 session_id 列")
+        except Exception as mig_err:
+            logger.warning(f"会话表 {table_name} 轻量迁移失败: {mig_err}")
+        logger.info(f"确保会话表存在: {table_name}")
 
 
 async def insert_message(
@@ -111,6 +128,12 @@ async def read_messages(table_name: str) -> list[dict]:
 
     :return: [{"role", "content", "resource_type", "created_at"}]
     """
+    # 先确保旧表结构被轻量迁移到最新版本（补上缺失列）
+    try:
+        await create_session_table(table_name)
+    except Exception as e:
+        logger.warning(f"迁移会话表 {table_name} 失败: {e}")
+
     engine = get_engine()
     sql = f"SELECT role, content, resource_type, created_at FROM {table_name} ORDER BY created_at ASC"
     try:

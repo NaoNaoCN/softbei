@@ -106,6 +106,8 @@ class StudentProfileIn(BaseModel):
     knowledge_weak: list[str] = Field(default_factory=list)
     error_prone: list[str] = Field(default_factory=list)
     current_progress: Optional[str] = None
+    # 学习目标历史提问：记录每轮对话的用户提问，用于增量概括 learning_goal
+    goal_questions: list[str] = Field(default_factory=list)
 
 
 class StudentProfileOut(StudentProfileIn):

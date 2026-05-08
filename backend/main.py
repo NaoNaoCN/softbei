@@ -325,6 +325,10 @@ async def chat(
         list(result.metadata.keys()),
         len(result.metadata.get("recommendations", [])),
     )
+
+    # 学习目标异步刷新已在 merge_chat_updates 内部通过 asyncio.create_task 触发，
+    # 与资源生成链路并行，且不依赖本响应是否成功返回，此处无需重复注册。
+
     return {
         "content": result.final_content,
         "metadata": result.metadata,

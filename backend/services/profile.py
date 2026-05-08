@@ -5,6 +5,8 @@ backend/services/profile.py
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import uuid
 from typing import Optional
 
@@ -13,6 +15,49 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.db.crud import select_one, select, insert, update_by_id
 from backend.db.models import StudentProfile, ProfileHistory
 from backend.models.schemas import StudentProfileIn, StudentProfileOut
+
+_logger = logging.getLogger(__name__)
+
+# 保持后台任务引用，避免被 GC。任务完成后自动移除。
+_BG_TASKS: set[asyncio.Task] = set()
+
+# 学习目标概括 prompt：对历史提问列表进行总体准确的概括
+_GOAL_SUMMARY_PROMPT = """你是一个学习画像分析助手。以下是用户近期在学习对话中的全部提问（按时间顺序）：
+{questions}
+
+请你基于这些提问，总结出用户的总体学习目标。要求：
+1. 一句话概括，不超过 50 个字；
+2. 优先提炼用户的**核心学习领域和阶段目标**，而不是罗列知识点；
+3. 概括要体现用户在学什么方向、要达到什么效果，比如“夯实计算机专业基础”“备考xx考试”；
+4. 不要逐字拼接提问里的关键词，而是提炼共性、合并同类知识；
+5. 避免使用“辅以”这类生硬的书面词，用自然的表述体现主次关系；
+6. 概括要体现用户的学习方向和要达成的效果，直接陈述目标，不要用“旨在、辅以”这类词；
+7. 在知识点较多时自动归类合并同类知识点，不零散罗列细碎内容，提炼核心学习板块；
+8. 优先提炼用户的核心学习方向与阶段目标，聚焦主干能力而非零散知识点；
+9. 直接输出目标文本，不要加前缀（如“学习目标：”），不要加引号。
+仅输出概括结果。"""
+
+_MAX_GOAL_QUESTIONS = 50  # 最多保留最近 N 条提问，避免无限膨胀
+
+
+async def _summarize_learning_goal(questions: list[str]) -> Optional[str]:
+    """调用 LLM 对历史提问列表进行总体概括，得到精准的学习目标。失败时返回 None。"""
+    if not questions:
+        return None
+    # 延迟导入，避免循环依赖
+    from backend.services.llm import chat_completion
+
+    numbered = "\n".join(f"{i + 1}. {q}" for i, q in enumerate(questions))
+    prompt = _GOAL_SUMMARY_PROMPT.format(questions=numbered)
+    try:
+        raw = await chat_completion(
+            [{"role": "user", "content": prompt}], temperature=0.3
+        )
+        goal = (raw or "").strip().strip("「」\"'")
+        return goal or None
+    except Exception as e:
+        _logger.warning(f"学习目标概括失败: {e}")
+        return None
 
 
 # ----------------------------------------------------------
@@ -59,6 +104,7 @@ async def create_or_update_profile(
                 "knowledge_weak": data.knowledge_weak,
                 "error_prone": data.error_prone,
                 "current_progress": data.current_progress,
+                "goal_questions": data.goal_questions or [],
             }
         )
         await db.refresh(existing)
@@ -77,6 +123,7 @@ async def create_or_update_profile(
                 "knowledge_weak": data.knowledge_weak,
                 "error_prone": data.error_prone,
                 "current_progress": data.current_progress,
+                "goal_questions": data.goal_questions or [],
             }
         )
         # 初始化历史
@@ -111,15 +158,34 @@ async def merge_chat_updates(
     user_id: uuid.UUID,
     updates: dict,
     db: AsyncSession,
+    user_message: Optional[str] = None,
 ) -> StudentProfileOut:
     """
     将 ProfileAgent 从对话中提取的画像字段增量合并进当前画像。
     只更新 updates 中非 None 的字段。
+
+    学习目标（learning_goal）采用增量更新策略：
+    在本函数里仅将本轮 user_message 追加到 goal_questions 历史列表（纯DB写，不阻塞）；
+    真正的 LLM 概括由调用方在回复返回后，通过 BackgroundTasks 异步调用 refresh_learning_goal 完成，
+    以避免对话接口因多次 LLM 调用叠加而超时。
     """
     existing = await select_one(db, StudentProfile, filters={"user_id": user_id})
+
+    # 准备：追加本轮提问到历史列表（仅记录，不在此处调 LLM）
+    existing_questions: list[str] = []
+    if existing is not None:
+        existing_questions = list(getattr(existing, "goal_questions", None) or [])
+
+    new_questions = list(existing_questions)
+    if user_message and user_message.strip():
+        new_questions.append(user_message.strip())
+        # 只保留最近 N 条，避免无限增长
+        if len(new_questions) > _MAX_GOAL_QUESTIONS:
+            new_questions = new_questions[-_MAX_GOAL_QUESTIONS:]
+
     if not existing:
-        # 不存在则创建新画像
-        return await create_or_update_profile(
+        # 不存在则创建新画像；学习目标暂用 LLM 单轮提取结果占位，后台任务会重新概括写回
+        created = await create_or_update_profile(
             user_id,
             StudentProfileIn(
                 major=updates.get("major"),
@@ -130,26 +196,103 @@ async def merge_chat_updates(
                 knowledge_weak=updates.get("knowledge_weak") or [],
                 error_prone=updates.get("error_prone") or [],
                 current_progress=updates.get("current_progress"),
+                goal_questions=new_questions,
             ),
             db,
         )
+        # fire-and-forget：新建画像有提问时也异步触发 LLM 概括
+        if new_questions:
+            _schedule_refresh_learning_goal(user_id)
+        return created
 
     # 快照当前状态
     snapshot = StudentProfileOut.model_validate(existing).model_dump(mode="json")
     await insert(db, ProfileHistory, {"profile_id": existing.id, "snapshot": snapshot}, commit=False)
 
-    # 只更新非 None 的字段
+    # 只更新非 None 的字段（learning_goal 由后台任务异步覆写）
     update_data = {}
-    for key in ["major", "learning_goal", "cognitive_style", "daily_time_minutes",
+    for key in ["major", "cognitive_style", "daily_time_minutes",
                 "knowledge_mastered", "knowledge_weak", "error_prone", "current_progress"]:
         if key in updates and updates[key] is not None:
             update_data[key] = updates[key]
+
+    # 增量记录提问
+    if new_questions != existing_questions:
+        update_data["goal_questions"] = new_questions
 
     if update_data:
         await update_by_id(db, StudentProfile, existing.id, update_data)
         await db.refresh(existing)
 
+    # fire-and-forget：如果 goal_questions 有新增，异步触发 LLM 重新概括 learning_goal。
+    # 不使用 FastAPI BackgroundTasks，避免 /chat 接口因资源生成耗时超时时后台任务不执行。
+    if new_questions != existing_questions:
+        _schedule_refresh_learning_goal(user_id, new_questions)
+
     return StudentProfileOut.model_validate(existing)
+
+
+def _schedule_refresh_learning_goal(user_id: uuid.UUID, questions: Optional[list[str]] = None) -> None:
+    """在当前 event loop 中投递一个后台协程，用独立 session 刷新 learning_goal。失败静默忽略。
+
+    若传入 questions，则直接用它做 LLM 概括，避免因调用方 session 尚未 commit
+    而导致后台任务读到旧快照的事务可见性问题。"""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        _logger.warning("_schedule_refresh_learning_goal: 当前无 running loop，跳过")
+        return
+    task = loop.create_task(refresh_learning_goal(user_id, questions))
+    _BG_TASKS.add(task)
+    task.add_done_callback(_BG_TASKS.discard)
+
+
+async def refresh_learning_goal(
+    user_id: uuid.UUID,
+    questions: Optional[list[str]] = None,
+) -> None:
+    """
+    后台任务：对历史提问做总体概括，将结果写回 learning_goal。
+
+    :param questions: 可选。若由调用方传入则直接使用（绕过事务可见性问题）；否则从 DB 重读。
+    自行创建独立的 DB session，不与请求生命周期耦合。失败时仅记录 warning。
+    """
+    try:
+        from backend.db import database as db_mod
+    except Exception as e:
+        _logger.warning(f"refresh_learning_goal 导入数据库模块失败: {e}")
+        return
+
+    factory = getattr(db_mod, "_session_factory", None)
+    if factory is None:
+        _logger.warning("refresh_learning_goal: session factory 未初始化，跳过")
+        return
+
+    try:
+        async with factory() as db:
+            try:
+                # 在获取 profile 之前先延迟一下，给调用方 session 留出提交窗口，
+                # 保证我们能读到最新的 goal_questions（在没传 questions 时生效）。
+                if questions is None:
+                    await asyncio.sleep(0.2)
+                existing = await select_one(db, StudentProfile, filters={"user_id": user_id})
+                if not existing:
+                    return
+                final_questions = questions if questions is not None else list(
+                    getattr(existing, "goal_questions", None) or []
+                )
+                if not final_questions:
+                    return
+                summarized = await _summarize_learning_goal(final_questions)
+                if summarized:
+                    await update_by_id(db, StudentProfile, existing.id, {"learning_goal": summarized})
+                    await db.commit()
+                    _logger.info(f"[refresh_learning_goal] 学习目标已刷新: {summarized[:60]}")
+            except Exception as e:
+                _logger.warning(f"后台学习目标刷新失败: {e}")
+                await db.rollback()
+    except Exception as e:
+        _logger.warning(f"后台学习目标刷新 session 创建失败: {e}")
 
 
 async def build_profile_context(profile: StudentProfileOut) -> str:
