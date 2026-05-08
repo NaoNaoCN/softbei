@@ -67,12 +67,16 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     """
     kp_name = await resolve_kp_name(state, config)
 
-    # 决定题目数量
-    total, single, multi = 4, 2, 1
-    fill = max(0, total - single - multi)
-    if state.profile:
+    # 决定题目数量：优先使用 state.num_questions，否则根据画像计算
+    if state.num_questions:
+        total = state.num_questions
+        single = max(1, total // 2)
+        multi = max(1, total // 4)
+    elif state.profile:
         total, single, multi = _get_question_counts(state.profile)
-        fill = max(0, total - single - multi)
+    else:
+        total, single, multi = 4, 2, 1
+    fill = max(0, total - single - multi)
 
     logger.info("[QuizAgent] kp_name=%s total=%d single=%d multi=%d fill=%d",
                  kp_name, total, single, multi, fill)

@@ -362,7 +362,7 @@
     </div>
 
     <script type="module">
-        import { isLoggedIn, getUserId, getResourceStats, getResources, deleteResource, importDocumentAsync, getImportStatus } from './assets/api.js';
+        import { isLoggedIn, getUserId, getResourceStats, getResources, deleteResource, importDocumentAsync, getImportStatus, buildKg, getKgBuildStatusByDoc } from './assets/api.js';
 
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
@@ -373,6 +373,7 @@
         let currentFilter = '';
         let currentSearch = '';
         const pageSize = 20;
+        let allResources = [];  // store for build kg
 
         const TYPE_MAP = { doc: '学习文档', mindmap: '思维导图', quiz: '测验', code: '代码示例', summary: '知识总结' };
         const ICON_MAP = { doc: '&#128196;', mindmap: '&#128203;', quiz: '&#128221;', code: '&#128187;', summary: '&#128203;' };
@@ -411,6 +412,7 @@
                         </div>
                     </div>
                     <div class="resource-actions">
+                        ${r.resource_type === 'doc' ? `<button class="btn-build-kg" onclick="handleBuildKg('${r.id}')">构建知识图谱</button>` : ''}
                         <button class="btn-sm btn-sm-outline" onclick="location.href='library.html'">预览</button>
                         ${r.resource_type === 'quiz' ? '<button class="btn-sm btn-sm-outline" onclick="location.href=\'evaluate.html\'">测验</button>' : ''}
                         <button class="btn-sm btn-sm-danger" onclick="handleDelete('${r.id}')">删除</button>
@@ -432,11 +434,44 @@
             loadResources();
         }
 
-        async function handleDelete(id) {
-            if (!confirm('确定删除该资源？')) return;
-            const ok = await deleteResource(id, userId);
-            if (ok) loadResources();
-            else alert('删除失败');
+        async function handleBuildKg(kpId) {
+            if (!confirm('确定要为此文档构建知识图谱吗？')) return;
+            const statusEl = document.createElement('div');
+            statusEl.style.cssText = 'margin-top:12px;padding:12px;background:#E3F2FD;border-radius:8px;font-size:13px;color:#1976D2;';
+            statusEl.textContent = '正在提交知识图谱构建任务...';
+            const btn = document.querySelector(`[onclick="handleBuildKg('${kpId}')"]`);
+            btn.parentElement.appendChild(statusEl);
+            btn.style.display = 'none';
+            try {
+                const result = await buildKg(kpId, userId);
+                if (result && result.task_id) {
+                    statusEl.textContent = '任务已提交，正在构建...';
+                    const poll = async () => {
+                        const s = await getKgBuildStatusByDoc(kpId);
+                        if (!s) return setTimeout(poll, 3000);
+                        if (s.status === 'completed') {
+                            statusEl.textContent = '✓ 知识图谱构建完成！';
+                            statusEl.style.background = '#E8F5E9';
+                            statusEl.style.color = '#43A047';
+                        } else if (s.status === 'failed') {
+                            statusEl.textContent = '✗ 构建失败: ' + (s.error_msg || '未知错误');
+                            statusEl.style.background = '#FFEBEE';
+                            statusEl.style.color = '#E53935';
+                        } else {
+                            statusEl.textContent = '构建中: ' + (s.progress || 0) + '% · ' + (s.stage || '处理中');
+                            setTimeout(poll, 3000);
+                        }
+                    };
+                    poll();
+                } else {
+                    throw new Error(result?.detail || '提交失败');
+                }
+            } catch (e) {
+                statusEl.textContent = '✗ 提交失败: ' + e.message;
+                statusEl.style.background = '#FFEBEE';
+                statusEl.style.color = '#E53935';
+                btn.style.display = '';
+            }
         }
 
         function handleFileSelect(input) {
@@ -491,6 +526,16 @@
         }
 
         window.handleDelete = handleDelete;
+        async function handleDelete(resourceId) {
+            if (!confirm('确定删除此资源？')) return;
+            try {
+                await deleteResource(resourceId, userId);
+                loadResources();
+                loadStats();
+            } catch (e) {
+                alert('删除失败: ' + e.message);
+            }
+        }
         window.handleFileSelect = handleFileSelect;
         window.handleImport = handleImport;
         window.changePage = changePage;

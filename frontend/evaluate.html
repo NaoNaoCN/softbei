@@ -409,11 +409,11 @@
             currentQuiz = data;
             container.innerHTML = data.map((q, idx) => `
                 <div class="quiz-item" id="quiz-${q.id}">
-                    <div class="quiz-meta">第 ${idx + 1} 题 · ${q.question_type === 'multiple' ? '多选题' : '单选题'} · ${q.score || 5}分</div>
-                    <div class="quiz-question">${q.question}</div>
+                    <div class="quiz-meta">第 ${idx + 1} 题 · ${q.question_type === 'multi' ? '多选题' : '单选题'} · ${q.difficulty || 5}分</div>
+                    <div class="quiz-question">${q.stem}</div>
                     <div class="quiz-options">
                         ${(q.options || []).map((opt, oi) => `
-                            <div class="quiz-option" data-question="${q.id}" data-option="${oi}" onclick="selectOption(this, '${q.id}', ${q.question_type === 'multiple'})">
+                            <div class="quiz-option" data-question="${q.id}" data-option="${oi}" onclick="selectOption(this, '${q.id}', ${q.question_type === 'multi' ? true : false})">
                                 <div class="quiz-option-marker">${String.fromCharCode(65 + oi)}</div>
                                 <span>${opt}</span>
                             </div>
@@ -434,36 +434,73 @@
                 document.querySelectorAll(`[data-question="${questionId}"]`).forEach(o => o.classList.remove('selected'));
             }
             el.classList.toggle('selected');
+            const letter = String.fromCharCode(65 + parseInt(el.dataset.option)); // 'A', 'B', 'C'...
             if (isMultiple) {
                 userAnswers[questionId] = userAnswers[questionId] || [];
-                const opt = el.dataset.option;
-                const idx = userAnswers[questionId].indexOf(opt);
+                const idx = userAnswers[questionId].indexOf(letter);
                 if (idx >= 0) userAnswers[questionId].splice(idx, 1);
-                else userAnswers[questionId].push(opt);
+                else userAnswers[questionId].push(letter);
             } else {
-                userAnswers[questionId] = [el.dataset.option];
+                userAnswers[questionId] = [letter];
             }
         }
 
         async function submitQuiz() {
             let correct = 0;
+            const submitted = [];
             for (const [qId, opts] of Object.entries(userAnswers)) {
                 const result = await submitQuizAnswer(userId, qId, opts.join(','));
-                if (result && result.is_correct) correct++;
-                const el = document.getElementById('quiz-' + qId);
-                if (el) {
-                    el.querySelectorAll('.quiz-option').forEach((opt, idx) => {
-                        if (opts.includes(String(idx))) {
-                            opt.classList.add(result && result.is_correct ? 'correct' : 'wrong');
-                        }
-                    });
-                }
+                const isCorrect = !!(result && result.is_correct);
+                if (isCorrect) correct++;
+                submitted.push({ qId, opts, isCorrect });
             }
+
+            // 先生成带答案和解析的完整 HTML
+            const quizHtml = currentQuiz.map((q, idx) => {
+                const submittedAns = submitted.find(s => s.qId === q.id);
+                const answerStr = String(q.answer || '');
+                const isMulti = q.question_type === 'multi';
+                let correctOpts = isMulti
+                    ? (() => { try { return JSON.parse(answerStr); } catch { return []; } })()
+                    : [answerStr];
+
+                const optionsHtml = (q.options || []).map((opt, oi) => {
+                    const letter = String.fromCharCode(65 + oi);
+                    const isSelected = submittedAns && submittedAns.opts.includes(letter);
+                    const isCorrectOpt = correctOpts.map(String).includes(letter);
+                    let cls = 'quiz-option';
+                    if (submittedAns && isSelected && !submittedAns.isCorrect) cls += ' wrong';
+                    if (isCorrectOpt) cls += ' correct';
+                    return `<div class="${cls}">
+                        <div class="quiz-option-marker">${letter}</div>
+                        <span>${opt}</span>
+                    </div>`;
+                }).join('');
+
+                let resultText = submittedAns
+                    ? (submittedAns.isCorrect ? '✓ 回答正确' : '✗ 回答错误')
+                    : '○ 未作答';
+                const resultColor = submittedAns && submittedAns.isCorrect ? '#43A047' : submittedAns ? '#E53935' : '#9CA3AF';
+                const explanationHtml = q.explanation
+                    ? `<div style="margin-top:10px;padding:12px;background:#F0F7FF;border-radius:8px;font-size:13px;color:#374151;line-height:1.6;border-left:4px solid #1976D2;"><strong>解析：</strong>${q.explanation}</div>`
+                    : '';
+
+                return `<div class="quiz-item" id="quiz-${q.id}">
+                    <div class="quiz-meta" style="margin-bottom:12px;">
+                        <span style="color:${resultColor};font-weight:600;">${resultText}</span>
+                        <span style="color:#6B7280;"> · ${isMulti ? '多选题' : '单选题'} · ${q.difficulty || 5}分</span>
+                    </div>
+                    <div class="quiz-question">${q.stem}</div>
+                    <div class="quiz-options">${optionsHtml}</div>
+                    ${explanationHtml}
+                </div>`;
+            }).join('');
+
             const total = currentQuiz.length;
             const pct = total ? Math.round(correct / total * 100) : 0;
             const container = document.getElementById('quiz-container');
-            container.innerHTML = `
-                <div class="score-display ${pct >= 60 ? 'pass' : 'fail'}">
+            container.innerHTML = quizHtml + `
+                <div class="score-display ${pct >= 60 ? 'pass' : 'fail'}" style="margin-top:24px;">
                     <div class="score-value">${pct}</div>
                     <div style="font-size:18px;font-weight:600;">/ 100</div>
                     <div class="score-detail">${correct}/${total} 正确</div>
@@ -489,11 +526,11 @@
             }
             list.innerHTML = `
                 <table class="table">
-                    <thead><tr><th>题目</th><th>你的答案</th><th>结果</th><th>时间</th></tr></thead>
+                    <thead><tr><th>知识点</th><th>你的答案</th><th>结果</th><th>时间</th></tr></thead>
                     <tbody>
                         ${attempts.map(a => `
                             <tr>
-                                <td>${a.quiz_item_id ? a.quiz_item_id.slice(0, 8) + '...' : '-'}</td>
+                                <td>${a.kp_name || a.kp_id || '-'}</td>
                                 <td>${a.user_answer || '-'}</td>
                                 <td><span class="result-badge ${a.is_correct ? 'correct' : 'wrong'}">${a.is_correct ? '正确' : '错误'}</span></td>
                                 <td>${a.created_at ? new Date(a.created_at).toLocaleString() : '-'}</td>
@@ -508,12 +545,14 @@
             const attempts = await getQuizAttempts(userId) || [];
             const byKp = {};
             attempts.forEach(a => {
-                const kp = a.kp_id || '未知';
-                if (!byKp[kp]) byKp[kp] = { total: 0, correct: 0 };
+                const kp = a.kp_name || a.kp_id || '未知';
+                if (!byKp[kp]) byKp[kp] = { total: 0, correct: 0, kp_id: a.kp_id };
                 byKp[kp].total++;
                 if (a.is_correct) byKp[kp].correct++;
             });
-            const weak = Object.entries(byKp).filter(([, v]) => v.correct / v.total < 0.6).sort((a, b) => (a[1].correct / a[1].total) - (b[1].correct / b[1].total));
+            const weak = Object.entries(byKp)
+                .filter(([k, v]) => k !== '未知' && v.correct / v.total < 0.6)
+                .sort((a, b) => (a[1].correct / a[1].total) - (b[1].correct / b[1].total));
             const list = document.getElementById('weak-list');
             if (!weak.length) {
                 list.innerHTML = '<div class="empty-state"><div class="empty-icon">&#128123;</div><div class="empty-text">暂无薄弱知识点，继续保持！</div></div>';
@@ -521,6 +560,7 @@
             }
             list.innerHTML = weak.map(([kp, v]) => {
                 const acc = Math.round(v.correct / v.total * 100);
+                const encodedKp = encodeURIComponent(kp);
                 return `
                 <div class="weak-item">
                     <div class="weak-item-header">
@@ -529,7 +569,7 @@
                     </div>
                     <div class="progress-bar"><div class="progress-fill" style="width:${acc}%"></div></div>
                     <div class="weak-item-actions" style="margin-top:12px;">
-                        <button class="btn-secondary" onclick="location.href='chat.html'">前往对话加强</button>
+                        <button class="btn-secondary" onclick="location.href='generate.html?kp=${encodedKp}&type=doc'">前往学习</button>
                     </div>
                 </div>
             `}).join('');
@@ -539,6 +579,9 @@
         window.selectOption = selectOption;
         window.submitQuiz = submitQuiz;
         window.resetQuiz = resetQuiz;
+        window.startQuiz = startQuiz;
+        window.loadHistory = loadHistory;
+        window.loadWeakAnalysis = loadWeakAnalysis;
 
         loadQuizResources();
     </script>

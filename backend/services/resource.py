@@ -17,6 +17,7 @@ from backend.models.schemas import (
     GenerateTaskOut,
     LearningRecordCreate,
     LearningRecordOut,
+    ResourceListOut,
     ResourceMetaOut,
     TaskStatus,
 )
@@ -50,21 +51,32 @@ async def list_resources(
     kp_id: Optional[str] = None,
     skip: int = 0,
     limit: int = 20,
-) -> list[ResourceMetaOut]:
+) -> ResourceListOut:
     """分页列举用户的资源，可按类型或知识点过滤。"""
+    import sqlalchemy as sa
+
     filters = {"user_id": user_id}
     if resource_type:
         filters["resource_type"] = resource_type
     if kp_id:
         filters["kp_id"] = kp_id
 
+    # Count total (without limit/offset)
+    count_query = sa.select(sa.func.count()).select_from(ResourceMeta).where(ResourceMeta.user_id == user_id)
+    if resource_type:
+        count_query = count_query.where(ResourceMeta.resource_type == resource_type)
+    if kp_id:
+        count_query = count_query.where(ResourceMeta.kp_id == kp_id)
+    total = (await db.execute(count_query)).scalar() or 0
+
+    # Paginated results
     resources = await select(
         db, ResourceMeta,
         filters=filters,
         limit=limit,
         offset=skip,
     )
-    return [
+    items = [
         ResourceMetaOut(
             id=r.id,
             user_id=r.user_id,
@@ -77,6 +89,7 @@ async def list_resources(
         )
         for r in resources
     ]
+    return ResourceListOut(items=items, total=total)
 
 
 async def delete_resource(resource_id: uuid.UUID, db: AsyncSession) -> bool:

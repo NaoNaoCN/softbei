@@ -370,7 +370,7 @@
                 ? weak.map(k => `<span class="tag tag-warning">${k}</span>`).join('')
                 : '<span style="color:#6B7280;font-size:13px;">暂无</span>';
 
-            const errors = profile.knowledge_frequent_error || [];
+            const errors = profile.error_prone || [];
             document.getElementById('view-error').innerHTML = errors.length
                 ? errors.map(k => `<span class="tag tag-default">${k}</span>`).join('')
                 : '<span style="color:#6B7280;font-size:13px;">暂无</span>';
@@ -388,7 +388,7 @@
             document.getElementById('edit-goal').value = profile.learning_goal || '';
             document.getElementById('edit-mastered').value = (profile.knowledge_mastered || []).join(', ');
             document.getElementById('edit-weak').value = (profile.knowledge_weak || []).join(', ');
-            document.getElementById('edit-error').value = (profile.knowledge_frequent_error || []).join(', ');
+            document.getElementById('edit-error').value = (profile.error_prone || []).join(', ');
         }
 
         async function handleSave() {
@@ -399,7 +399,7 @@
                 learning_goal: document.getElementById('edit-goal').value.trim(),
                 knowledge_mastered: document.getElementById('edit-mastered').value.split(',').map(s => s.trim()).filter(Boolean),
                 knowledge_weak: document.getElementById('edit-weak').value.split(',').map(s => s.trim()).filter(Boolean),
-                knowledge_frequent_error: document.getElementById('edit-error').value.split(',').map(s => s.trim()).filter(Boolean),
+                error_prone: document.getElementById('edit-error').value.split(',').map(s => s.trim()).filter(Boolean),
             };
             const btn = document.getElementById('save-btn');
             btn.disabled = true;

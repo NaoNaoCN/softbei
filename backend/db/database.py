@@ -64,6 +64,9 @@ async def init_db() -> None:
             pool_timeout=db_cfg.pool_timeout,
             pool_recycle=db_cfg.pool_recycle,
         )
+    else:
+        # SQLite 需要设置 busy_timeout，避免锁冲突时直接失败
+        engine_kwargs["connect_args"] = {"timeout": 30}
     _engine = create_async_engine(db_cfg.url, **engine_kwargs)
     _session_factory = async_sessionmaker(
         _engine,

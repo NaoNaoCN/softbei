@@ -44,6 +44,7 @@ from backend.models.schemas import (
     QuizItemOut,
     QuizSubmitIn,
     QuestionType,
+    ResourceListOut,
     ResourceMetaOut,
     StudentProfileIn,
     StudentProfileOut,
@@ -596,19 +597,24 @@ async def start_generation(
     触发异步资源生成任务。
     返回 task_id 供前端轮询 /generate/{task_id}/status。
     """
+    import asyncio
     from backend.services.generation import run_generation
     task = await resource_svc.create_generation_task(user_id, body, db)
 
     # 获取或创建会话 ID
     session_id = str(uuid.uuid4())
 
-    background_tasks.add_task(
-        run_generation,
-        task.task_id,
-        str(user_id),
-        session_id,
-        body,
-        db,
+    # 将 body 转为可序列化的 dict，避免 Pydantic 模型在 background task 中反序列化失败
+    body_dict = body.model_dump()
+
+    # 使用 asyncio.create_task 在事件循环中调度后台任务
+    asyncio.create_task(
+        run_generation(
+            task.task_id,
+            str(user_id),
+            session_id,
+            body_dict,
+        )
     )
     return task
 
@@ -629,7 +635,7 @@ async def get_generation_status(
 # 资源库
 # ===========================================================
 
-@app.get("/resources", response_model=list[ResourceMetaOut], tags=["resources"])
+@app.get("/resources", response_model=ResourceListOut, tags=["resources"])
 async def list_resources(
     user_id: uuid.UUID,
     resource_type: Optional[str] = None,
@@ -703,12 +709,31 @@ async def get_quiz_items(
 ):
     """获取某资源下的所有题目。"""
     from backend.db.crud import select as db_select
-    if user_id:
-        res = await resource_svc.get_resource(resource_id, db)
-        if not res:
-            raise HTTPException(status_code=404)
-        if res.user_id != user_id:
-            raise HTTPException(status_code=403, detail="Access denied")
+
+    res = await resource_svc.get_resource(resource_id, db)
+    if not res:
+        raise HTTPException(status_code=404, detail="Resource not found")
+    if user_id and res.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # 优先从 content_json.items 读取（AI 生成的题目存储在此）
+    if res.content_json and res.content_json.get("items"):
+        items = res.content_json["items"]
+        return [
+            QuizItemOut(
+                id=uuid.uuid5(uuid.NAMESPACE_DNS, f"{resource_id}-{idx}"),
+                kp_id=res.kp_id,
+                question_type=QuestionType(item["question_type"]) if item.get("question_type") else QuestionType.single,
+                difficulty=item.get("difficulty"),
+                stem=item["stem"],
+                options=item.get("options"),
+                answer=item["answer"],
+                explanation=item.get("explanation"),
+            )
+            for idx, item in enumerate(items)
+        ]
+
+    # 回退：从 QuizItem 表读取
     quiz_items = await db_select(db, QuizItem, filters={"resource_id": resource_id})
     return [
         QuizItemOut(
@@ -733,37 +758,56 @@ async def submit_quiz(
 ):
     """提交答题记录，返回批改结果。"""
     from backend.db.crud import select_one, insert
-
-    quiz_item = await select_one(db, QuizItem, filters={"id": body.quiz_item_id})
-    if not quiz_item:
-        raise HTTPException(status_code=404, detail="Quiz item not found")
-
-    # 判分
     import re
     import ast
 
+    # 先尝试从 QuizItem 表查找
+    quiz_item = await select_one(db, QuizItem, filters={"id": body.quiz_item_id})
+
+    # 如果找不到，尝试从用户的 quiz 资源的 content_json 中查找
+    found_answer = None
+    found_qtype = None
+    found_kp_id = None
+    if not quiz_item:
+        from backend.db.crud import select
+        resources = await select(db, ResourceMeta, filters={"user_id": user_id, "resource_type": "quiz"})
+        for res in resources:
+            if res.content_json and res.content_json.get("items"):
+                for idx, item in enumerate(res.content_json["items"]):
+                    expected_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{res.id}-{idx}"))
+                    if expected_id == str(body.quiz_item_id):
+                        found_answer = item.get("answer")
+                        found_qtype = item.get("question_type")
+                        found_kp_id = res.kp_id
+                        break
+                if found_answer is not None:
+                    break
+
+    if not quiz_item and found_answer is None:
+        raise HTTPException(status_code=404, detail="Quiz item not found")
+
     def extract_letters(text: str) -> set[str]:
-        """从 'A. xxx, B. yyy' 这样的文本中提取出字母集合 {A, B}"""
         return set(re.findall(r'\b([A-Z])\b', text))
 
-    if quiz_item.question_type == QuestionType.single:
+    question_type = quiz_item.question_type if quiz_item else (QuestionType(found_qtype) if found_qtype else QuestionType.single)
+    answer = quiz_item.answer if quiz_item else found_answer
+
+    if question_type == QuestionType.single:
         user_letters = extract_letters(str(body.user_answer))
-        correct_letters = extract_letters(str(quiz_item.answer))
+        correct_letters = extract_letters(str(answer))
         is_correct = user_letters == correct_letters
-    elif quiz_item.question_type == QuestionType.multi:
+    elif question_type == QuestionType.multi:
         user_letters = extract_letters(str(body.user_answer))
-        # correct_answer 可能是 "['A', 'B', 'D']" 格式的字符串
         try:
-            correct_list = ast.literal_eval(str(quiz_item.answer))
+            correct_list = ast.literal_eval(str(answer))
             correct_letters = set(correct_list)
         except Exception:
-            correct_letters = extract_letters(str(quiz_item.answer))
+            correct_letters = extract_letters(str(answer))
         is_correct = user_letters == correct_letters
     else:
-        # fill / short：直接字符串比较
-        is_correct = str(body.user_answer).strip().lower() == str(quiz_item.answer).strip().lower()
+        is_correct = str(body.user_answer).strip().lower() == str(answer).strip().lower()
 
-    logger.info(f"[QuizSubmit] quiz_item_id={body.quiz_item_id}, question_type={quiz_item.question_type}, user_answer={body.user_answer!r}, correct_answer={quiz_item.answer!r}, is_correct={is_correct}")
+    logger.info(f"[QuizSubmit] quiz_item_id={body.quiz_item_id}, question_type={question_type}, user_answer={body.user_answer!r}, correct_answer={answer!r}, is_correct={is_correct}")
     score = 1.0 if is_correct else 0.0
 
     attempt = await insert(
@@ -774,6 +818,7 @@ async def submit_quiz(
             "user_answer": str(body.user_answer),
             "is_correct": is_correct,
             "score": score,
+            "kp_id": quiz_item.kp_id if quiz_item else found_kp_id,
         },
     )
     return QuizAttemptOut(
@@ -782,6 +827,7 @@ async def submit_quiz(
         user_answer=attempt.user_answer,
         is_correct=attempt.is_correct,
         score=attempt.score,
+        kp_id=attempt.kp_id,
         created_at=attempt.created_at,
     )
 
@@ -790,19 +836,35 @@ async def submit_quiz(
 async def get_quiz_attempts(
     user_id: uuid.UUID,
     skip: int = 0,
-    limit: int = 20,
+    limit: int = 50,
     db: AsyncSession = Depends(get_session),
 ):
     """获取用户的答题历史。"""
-    from backend.db.crud import select as db_select
+    import sqlalchemy as sa
 
-    attempts = await db_select(
-        db, QuizAttempt,
-        filters={"user_id": user_id},
-        limit=limit,
-        offset=skip,
+    query = (
+        sa.select(QuizAttempt, KGNode.name)
+        .select_from(QuizAttempt)
+        .outerjoin(KGNode, QuizAttempt.kp_id == KGNode.id)
+        .where(QuizAttempt.user_id == user_id)
+        .order_by(QuizAttempt.created_at.desc())
+        .limit(limit)
+        .offset(skip)
     )
-    return [QuizAttemptOut.model_validate(a) for a in attempts]
+    rows = (await db.execute(query)).all()
+    return [
+        QuizAttemptOut(
+            id=a.id,
+            quiz_item_id=a.quiz_item_id,
+            user_answer=a.user_answer,
+            is_correct=a.is_correct,
+            score=a.score,
+            kp_id=a.kp_id,
+            kp_name=kp_name or (a.kp_id if a.kp_id else None),
+            created_at=a.created_at,
+        )
+        for a, kp_name in rows
+    ]
 
 
 # ===========================================================

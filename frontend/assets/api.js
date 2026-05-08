@@ -115,11 +115,11 @@ export async function deleteResource(resource_id, user_id) {
 // 生成任务
 // ===========================================================
 
-export async function startGeneration(user_id, kp_id, resource_type) {
+export async function startGeneration(user_id, kp_id, resource_type, num_questions = 4) {
     const resp = await apiFetch(`/generate?user_id=${encodeURIComponent(user_id)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kp_id, resource_type })
+        body: JSON.stringify({ kp_id, resource_type, num_questions })
     });
     return resp?.json();
 }
@@ -172,11 +172,11 @@ export async function addPathwayItem(path_id, user_id, kp_id, order_index) {
     return resp?.json();
 }
 
-export async function markPathwayItemDone(path_id, item_id, user_id) {
+export async function markPathwayItemDone(path_id, item_id, user_id, is_completed = true) {
     const resp = await apiFetch(`/pathways/${path_id}/items/${item_id}?user_id=${encodeURIComponent(user_id)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_completed: true })
+        body: JSON.stringify({ is_completed })
     });
     return resp?.ok;
 }
@@ -287,6 +287,25 @@ export async function importDocumentAsync(user_id, file, title) {
 
 export async function getImportStatus(task_id) {
     const resp = await apiFetch(`/documents/import/${task_id}/status`);
+    return resp?.json();
+}
+
+export async function buildKg(doc_id, user_id) {
+    const resp = await apiFetch('/kg/build', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ doc_id, user_id })
+    });
+    return resp?.json();
+}
+
+export async function getKgBuildStatus(task_id) {
+    const resp = await apiFetch(`/kg/build/${task_id}/status`);
+    return resp?.json();
+}
+
+export async function getKgBuildStatusByDoc(doc_id) {
+    const resp = await apiFetch(`/kg/build/by-doc/${doc_id}/status`);
     return resp?.json();
 }
 

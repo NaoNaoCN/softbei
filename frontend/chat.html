@@ -377,9 +377,9 @@
                 return;
             }
             container.innerHTML = sessions.map(s => `
-                <div class="session-item ${s.session_id === activeSessionId ? 'active' : ''}" onclick="loadSession('${s.session_id}')">
+                <div class="session-item ${s.id === activeSessionId ? 'active' : ''}" onclick="loadSession('${s.id}')">
                     <span class="session-title">${s.title || '新会话'}</span>
-                    <button class="session-delete" onclick="event.stopPropagation(); handleDeleteSession('${s.session_id}')">删除</button>
+                    <button class="session-delete" onclick="event.stopPropagation(); handleDeleteSession('${s.id}')">删除</button>
                 </div>
             `).join('');
         }
@@ -412,33 +412,69 @@
         }
 
         async function handleNewChat() {
-            const session = await createChatSession(userId);
-            if (session && session.session_id) {
-                await loadSessions();
-                loadSession(session.session_id);
+            try {
+                const session = await createChatSession(userId);
+                if (session && session.id) {
+                    activeSessionId = session.id;
+                    await loadSessions();
+                    await loadSession(session.id);
+                }
+            } catch (err) {
+                console.error('handleNewChat error:', err);
             }
         }
 
         async function sendMessage() {
-            const input = document.getElementById('chat-input');
-            const content = input.value.trim();
-            if (!content || !activeSessionId) return;
+            try {
+                const input = document.getElementById('chat-input');
+                const content = input.value.trim();
+                if (!content) return;
 
-            // Append user message immediately
-            const area = document.getElementById('messages-area');
-            area.innerHTML += `
-                <div class="message user">
-                    <div class="message-bubble">${content}</div>
-                    <div class="message-time">${formatTime(new Date().toISOString())}</div>
-                </div>
-            `;
-            input.value = '';
-            area.scrollTop = area.scrollHeight;
+                // Auto-create session if none is active
+                if (!activeSessionId) {
+                    await handleNewChat();
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    if (!activeSessionId) return;
+                }
 
-            // Send to backend
-            const response = await sendChatMessage(activeSessionId, userId, content);
-            if (response) {
-                await loadSession(activeSessionId);
+                // Append user message immediately
+                const area = document.getElementById('messages-area');
+                area.innerHTML += `
+                    <div class="message user">
+                        <div class="message-bubble">${content}</div>
+                        <div class="message-time">${formatTime(new Date().toISOString())}</div>
+                    </div>
+                    <div class="message assistant" id="thinking-msg">
+                        <div class="message-bubble" style="color:#6B7280;">🤔 AI 正在思考...</div>
+                    </div>
+                `;
+                input.value = '';
+                area.scrollTop = area.scrollHeight;
+
+                // Disable send button while waiting
+                const sendBtn = document.querySelector('.chat-send');
+                sendBtn.disabled = true;
+
+                // Send to backend (non-streaming for simplicity)
+                try {
+                    const response = await sendChatMessage(activeSessionId, userId, content);
+                    // Remove thinking indicator
+                    const thinking = document.getElementById('thinking-msg');
+                    if (thinking) thinking.remove();
+                    sendBtn.disabled = false;
+                    if (response && response.content) {
+                        await loadSession(activeSessionId);
+                    }
+                } catch (err) {
+                    const thinking = document.getElementById('thinking-msg');
+                    if (thinking) thinking.remove();
+                    sendBtn.disabled = false;
+                    console.error('sendMessage error:', err);
+                    alert('发送失败: ' + err.message);
+                }
+            } catch (err) {
+                console.error('sendMessage error:', err);
+                alert('发送失败: ' + err.message);
             }
         }
 
@@ -455,6 +491,7 @@
         window.loadSession = loadSession;
         window.sendMessage = sendMessage;
         window.handleDeleteSession = handleDeleteSession;
+        window.handleNewChat = handleNewChat;
 
         document.querySelector('.btn-new-chat').addEventListener('click', handleNewChat);
 

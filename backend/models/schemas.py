@@ -224,6 +224,7 @@ class GenerateRequest(BaseModel):
     """触发资源生成的请求体"""
     kp_id: str = Field(..., description="目标知识点节点 ID")
     resource_type: ResourceType
+    num_questions: int = Field(default=4, ge=1, le=20, description="测验题目数量（仅 quiz 类型生效）")
     extra_params: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -263,6 +264,11 @@ class ResourceMetaOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ResourceListOut(BaseModel):
+    items: list[ResourceMetaOut]
+    total: int
+
+
 # ===========================================================
 # 测验 / 题目
 # ===========================================================
@@ -292,6 +298,8 @@ class QuizAttemptOut(BaseModel):
     user_answer: Any
     is_correct: bool
     score: float
+    kp_id: Optional[str] = None
+    kp_name: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -343,3 +351,4 @@ class AgentState(BaseModel):
     is_onboarding: bool = False          # 前端标记：当前是否处于画像初始化阶段
     profile_complete: bool = False       # profile_agent 判断后写入，供条件路由使用
     clarify_message: Optional[str] = None  # 追问内容，情况A/B时写入，透传给前端
+    num_questions: int = 4  # 测验题目数量

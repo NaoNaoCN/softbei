@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>学习路径 - 个性化学习助手</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -305,11 +306,20 @@
                 </div>
 
                 <!-- KG Graph -->
-                <div class="kg-container">
-                    <div id="kg-chart" style="width:100%;height:400px;"></div>
-                    <div class="kg-placeholder" id="kg-placeholder">
+                <div class="kg-container" style="display:flex;flex-direction:row;align-items:flex-start;gap:12px;">
+                    <div id="kg-chart" style="width:100%;height:500px;"></div>
+                    <div class="kg-placeholder" id="kg-placeholder" style="display:none;">
                         <div class="kg-placeholder-icon">&#128203;</div>
                         <div class="kg-placeholder-text">知识图谱加载中，请稍候...</div>
+                    </div>
+                    <!-- Legend -->
+                    <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start;padding:8px 0;flex-shrink:0;">
+                        <div style="font-size:13px;color:#6B7280;margin-bottom:4px;">图例</div>
+                        <span style="display:flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;background:#1565C0;border-radius:50%;display:inline-block;"></span><span style="font-size:12px;">课程</span></span>
+                        <span style="display:flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;background:#2E7D32;border-radius:50%;display:inline-block;"></span><span style="font-size:12px;">章节</span></span>
+                        <span style="display:flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;background:#EF6C00;border-radius:50%;display:inline-block;"></span><span style="font-size:12px;">知识点</span></span>
+                        <span style="display:flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;background:#6A1B9A;border-radius:50%;display:inline-block;"></span><span style="font-size:12px;">子点</span></span>
+                        <span style="display:flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;background:#C62828;border-radius:50%;display:inline-block;"></span><span style="font-size:12px;">概念</span></span>
                     </div>
                 </div>
 
@@ -346,7 +356,7 @@
     </div>
 
     <script type="module">
-        import { isLoggedIn, getUserId, getKgGraph, getPathways, createPathway, deletePathway, getLearningRecords } from './assets/api.js';
+        import { isLoggedIn, getUserId, getKgGraph, getPathways, createPathway, deletePathway, getLearningRecords, addPathwayItem, markPathwayItemDone } from './assets/api.js';
 
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
@@ -384,29 +394,79 @@
                 <div class="node-item">
                     <div class="node-icon">&#128196;</div>
                     <div class="node-name">${n.name}</div>
-                    <div class="node-type">${n.node_type || '知识点'}</div>
+                    <div class="node-type">${n.type || '知识点'}</div>
                 </div>
             `).join('');
 
             // If echarts is available, render it
             if (typeof echarts !== 'undefined') {
-                chartDiv.style.height = '400px';
+                chartDiv.style.height = '500px';
                 const chart = echarts.init(chartDiv);
-                const nodes = graph.nodes.map(n => ({ name: n.name, id: n.id }));
-                const edges = (graph.edges || []).map(e => ({ source: e.from, target: e.to }));
+
+                const nodeTypeSize = {
+                    'Course': 70,
+                    'Chapter': 55,
+                    'KnowledgePoint': 40,
+                    'SubPoint': 30,
+                    'Concept': 25,
+                };
+                const nodeTypeColor = {
+                    'Course': '#1565C0',
+                    'Chapter': '#2E7D32',
+                    'KnowledgePoint': '#EF6C00',
+                    'SubPoint': '#6A1B9A',
+                    'Concept': '#C62828',
+                };
+
+                const nodes = graph.nodes.map(n => ({
+                    name: n.name,
+                    id: n.id,
+                    node_type: n.type || 'KnowledgePoint',
+                    symbolSize: nodeTypeSize[n.type] || 35,
+                    itemStyle: { color: nodeTypeColor[n.type] || '#EF6C00' },
+                }));
+                const edges = (graph.edges || []).map(e => ({ source: e.source_id, target: e.target_id }));
                 chart.setOption({
-                    tooltip: {},
+                    tooltip: {
+                        trigger: 'item',
+                        formatter: params => {
+                            if (params.dataType === 'edge') return '';
+                            const t = params.data.node_type || '';
+                            const typeNames = { 'Course': '课程', 'Chapter': '章节', 'KnowledgePoint': '知识点', 'SubPoint': '子点', 'Concept': '概念' };
+                            const label = typeNames[t] || t;
+                            return `<b>${params.data.name}</b><br/><span style="font-size:12px;color:#888">${label}</span>`;
+                        }
+                    },
                     series: [{
                         type: 'graph',
                         layout: 'force',
-                        symbolSize: 40,
                         roam: true,
-                        label: { show: true, fontSize: 12 },
+                        draggable: true,
+                        label: {
+                            show: true,
+                            fontSize: 11,
+                            position: 'bottom',
+                            formatter: '{b}',
+                        },
+                        edgeSymbol: ['circle', 'arrow'],
+                        edgeSymbolSize: [4, 6],
                         data: nodes,
                         links: edges,
-                        lineStyle: { color: '#E0E6ED', width: 1.5 },
+                        lineStyle: { color: '#90A4AE', width: 1.5, curveness: 0.15, opacity: 0.7 },
+                        emphasis: {
+                            focus: 'adjacency',
+                            lineStyle: { color: '#1976D2', width: 2.5, opacity: 1 },
+                            itemStyle: { borderWidth: 3, borderColor: '#fff' },
+                        },
+                        force: {
+                            repulsion: 200,
+                            gravity: 0.1,
+                            layoutAnimation: true,
+                            edgeLength: [80, 200],
+                        },
                     }]
                 });
+                window.addEventListener('resize', () => chart.resize());
             }
         }
 
@@ -438,7 +498,7 @@
                         ${items.map((item, idx) => {
                             const cls = item.is_completed ? 'completed' : (idx < completed ? 'in-progress' : 'pending');
                             const label = item.is_completed ? '已完成' : (idx < completed ? '进行中' : '待学习');
-                            return `<div class="step-item ${cls}"><span>${idx+1}. ${item.kp_name || item.kp_id}</span><span class="step-status">${label}</span></div>`;
+                            return `<div class="step-item ${cls}" onclick="handleToggleItem('${p.id}', '${item.id}', ${!item.is_completed})" style="cursor:pointer;"><span>${idx+1}. ${item.kp_name || item.kp_id}</span><span class="step-status">${label}</span></div>`;
                         }).join('')}
                     </div>
                 </div>`;
@@ -461,6 +521,11 @@
         async function handleDeletePathway(id) {
             if (!confirm('确定删除该路径？')) return;
             await deletePathway(id, userId);
+            await loadPathways();
+        }
+
+        async function handleToggleItem(pathId, itemId, isCompleted) {
+            await markPathwayItemDone(pathId, itemId, userId);
             await loadPathways();
         }
 
@@ -496,8 +561,7 @@
         window.showCreatePathway = showCreatePathway;
         window.handleCreatePathway = handleCreatePathway;
         window.handleDeletePathway = handleDeletePathway;
-
-        loadKgGraph();
+        window.handleToggleItem = handleToggleItem;
     </script>
 </body>
 </html>

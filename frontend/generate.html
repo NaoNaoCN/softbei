@@ -317,27 +317,40 @@
                     <div class="form-group">
                         <label class="form-label">资源类型</label>
                         <div class="form-radio-group">
-                            <label class="form-radio selected">
+                            <label class="form-radio selected" onclick="selectRadio(this)">
                                 <input type="radio" name="resource_type" value="doc" checked>
                                 <span class="form-radio-icon">📄</span>
                                 <span class="form-radio-text">学习文档</span>
                             </label>
-                            <label class="form-radio">
+                            <label class="form-radio" onclick="selectRadio(this)">
                                 <input type="radio" name="resource_type" value="mindmap">
                                 <span class="form-radio-icon">🗺️</span>
                                 <span class="form-radio-text">思维导图</span>
                             </label>
-                            <label class="form-radio">
+                            <label class="form-radio" onclick="selectRadio(this)">
                                 <input type="radio" name="resource_type" value="quiz">
                                 <span class="form-radio-icon">📝</span>
                                 <span class="form-radio-text">测验题目</span>
                             </label>
-                            <label class="form-radio">
+                            <div class="form-group" id="quiz-count-group" style="display:none;margin-top:12px;margin-left:32px;">
+                                <label class="form-label">题目数量</label>
+                                <select class="form-select" id="quiz-count-select" style="width:auto;">
+                                    <option value="2" selected>2 道</option>
+                                    <option value="4">4 道</option>
+                                    <option value="6">6 道</option>
+                                    <option value="8">8 道</option>
+                                    <option value="10">10 道</option>
+                                    <option value="12">12 道</option>
+                                    <option value="15">15 道</option>
+                                    <option value="20">20 道</option>
+                                </select>
+                            </div>
+                            <label class="form-radio" onclick="selectRadio(this)">
                                 <input type="radio" name="resource_type" value="code">
                                 <span class="form-radio-icon">💻</span>
                                 <span class="form-radio-text">代码示例</span>
                             </label>
-                            <label class="form-radio">
+                            <label class="form-radio" onclick="selectRadio(this)">
                                 <input type="radio" name="resource_type" value="summary">
                                 <span class="form-radio-icon">📋</span>
                                 <span class="form-radio-text">知识总结</span>
@@ -388,11 +401,43 @@
 
         const userId = getUserId();
 
+        // 解析 URL 参数
+        const urlParams = new URLSearchParams(window.location.search);
+        const prefillKp = urlParams.get('kp');
+        const prefillType = urlParams.get('type');
+
         async function loadKgNodes() {
             const graph = await getKgGraph({ depth: 2 });
             const select = document.getElementById('kp-select');
             if (graph && graph.nodes) {
                 select.innerHTML = graph.nodes.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
+                // 预填充知识点
+                if (prefillKp) {
+                    const decodedKp = decodeURIComponent(prefillKp);
+                    for (let i = 0; i < select.options.length; i++) {
+                        if (select.options[i].textContent === decodedKp) {
+                            select.selectedIndex = i;
+                            break;
+                        }
+                    }
+                }
+                // 预填充资源类型
+                if (prefillType) {
+                    const radio = document.querySelector(`input[name="resource_type"][value="${prefillType}"]`);
+                    if (radio) {
+                        radio.checked = true;
+                        const label = radio.closest('.form-radio');
+                        if (label) {
+                            label.parentElement.querySelectorAll('.form-radio').forEach(el => el.classList.remove('selected'));
+                            label.classList.add('selected');
+                        }
+                        // 显示测验题目数量选择器（如果需要）
+                        const quizGroup = document.getElementById('quiz-count-group');
+                        if (quizGroup && prefillType === 'quiz') {
+                            quizGroup.style.display = 'block';
+                        }
+                    }
+                }
             } else {
                 select.innerHTML = '<option value="">暂无可用知识点</option>';
             }
@@ -401,6 +446,7 @@
         async function handleGenerate() {
             const kpId = document.getElementById('kp-select').value;
             const resourceType = document.querySelector('input[name="resource_type"]:checked')?.value || 'doc';
+            const numQuestions = resourceType === 'quiz' ? parseInt(document.getElementById('quiz-count-select').value, 10) : 4;
 
             if (!kpId) {
                 alert('请选择知识点');
@@ -416,7 +462,7 @@
             btn.textContent = '生成中...';
 
             try {
-                const task = await startGeneration(userId, kpId, resourceType);
+                const task = await startGeneration(userId, kpId, resourceType, numQuestions);
                 if (!task || !task.task_id) {
                     throw new Error('生成任务创建失败');
                 }
@@ -424,7 +470,7 @@
                 // Poll status
                 let attempts = 0;
                 const poll = async () => {
-                    if (attempts++ > 60) {
+                    if (attempts++ > 200) {
                         alert('生成超时，请稍后刷新页面查看结果');
                         btn.disabled = false;
                         btn.textContent = '开始生成';
@@ -435,7 +481,7 @@
                     const pct = status.progress || 0;
                     document.getElementById('progress-fill').style.width = pct + '%';
                     document.getElementById('progress-text').textContent = status.status_message || `生成中... ${pct}%`;
-                    if (status.status === 'completed') {
+                    if (status.status === 'done' || status.status === 'completed') {
                         btn.disabled = false;
                         btn.textContent = '开始生成';
                         document.getElementById('result-progress').style.display = 'none';
@@ -466,6 +512,17 @@
                 document.getElementById('result-progress').style.display = 'none';
             }
         }
+
+        window.handleGenerate = handleGenerate;
+        function selectRadio(label) {
+            label.parentElement.querySelectorAll('.form-radio').forEach(el => el.classList.remove('selected'));
+            label.classList.add('selected');
+            label.querySelector('input').checked = true;
+            const quizGroup = document.getElementById('quiz-count-group');
+            const resourceType = label.querySelector('input').value;
+            quizGroup.style.display = resourceType === 'quiz' ? 'block' : 'none';
+        }
+        window.selectRadio = selectRadio;
 
         loadKgNodes();
     </script>
