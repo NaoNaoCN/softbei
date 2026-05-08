@@ -12,9 +12,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install dependencies
 pip install -r requirements.txt
 
-# Run backend + open frontend (http://localhost:8000/app)
-./start.ps1
-
 # Or run backend only (frontend at http://localhost:8000/app)
 uvicorn backend.main:app --reload --port 8000
 

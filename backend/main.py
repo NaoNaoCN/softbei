@@ -512,8 +512,8 @@ async def get_kg_graph(
 
 @app.post("/kg/build", tags=["knowledge-graph"])
 async def build_kg_endpoint(
-    body: dict = Body(...),
     background_tasks: BackgroundTasks,
+    body: dict = Body(...),
     db: AsyncSession = Depends(get_session),
 ):
     """异步构建知识图谱，立即返回任务 ID 供轮询。"""
