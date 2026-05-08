@@ -1,5 +1,5 @@
 """
-tests/test_database.py
+tests/db/test_database.py
 backend/db/database.py 单元测试。
 """
 

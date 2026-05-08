@@ -23,6 +23,7 @@ st.title("✨ 生成学习资源")
 # 辅助函数
 # ----------------------------------------------------------
 
+@st.cache_data(ttl=3600, show_spinner="加载知识图谱...")
 def fetch_kg_nodes(root_id: str | None = None, depth: int = 2) -> list[dict]:
     """获取知识图谱节点列表供下拉选择。"""
     try:
@@ -64,6 +65,7 @@ def poll_task_status(task_id: str) -> dict | None:
     return None
 
 
+@st.cache_data(ttl=300, show_spinner="加载资源...")
 def fetch_resource(resource_id: str) -> dict | None:
     """获取已生成资源详情。"""
     try:
@@ -120,13 +122,25 @@ if not st.session_state.get("user_id"):
 
 user_id = st.session_state["user_id"]
 
+# 判断是否从薄弱分析跳转，直接进入"直接生成"模式
+if st.session_state.get("open_direct_tab"):
+    default_mode = 1  # 直接生成
+    st.session_state["open_direct_tab"] = False
+else:
+    default_mode = 0
+
 # 模式选择
-tab_chat, tab_direct = st.tabs(["💬 对话式生成", "📋 直接生成"])
+mode = st.radio(
+    "生成模式",
+    ["💬 对话式生成", "📋 直接生成"],
+    index=default_mode,
+    horizontal=True,
+)
 
 # ----------------------------------------------------------
 # 对话式生成模式
 # ----------------------------------------------------------
-with tab_chat:
+if mode == "💬 对话式生成":
     st.markdown("""
     对话式资源生成已整合到「智能对话」页面。
     在对话中描述您的学习需求，AI 将自动生成相应资源。
@@ -137,7 +151,7 @@ with tab_chat:
 # ----------------------------------------------------------
 # 直接生成模式
 # ----------------------------------------------------------
-with tab_direct:
+else:
     col_form, col_result = st.columns([1, 2])
 
     with col_form:

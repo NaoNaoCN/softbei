@@ -1,5 +1,5 @@
 """
-tests/test_mindmap_agent.py
+tests/agents/test_mindmap_agent.py
 backend/agents/mindmap_agent.py 单元测试。
 """
 

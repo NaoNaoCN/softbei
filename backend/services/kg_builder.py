@@ -8,8 +8,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import logging
 import re
+
+from loguru import logger  # noqa: F401
 from collections import defaultdict
 from typing import Any
 
@@ -20,8 +21,6 @@ from backend.db.models import KGEdge, KGNode
 from backend.db.vector import get_documents_by_doc_id
 from backend.models.schemas import KGNodeType, KGRelation
 from backend.services.llm import chat_completion
-
-logger = logging.getLogger(__name__)
 
 # ----------------------------------------------------------
 # Prompts
@@ -176,7 +175,7 @@ def _group_by_page(documents: list[str], metadatas: list[dict]) -> list[str]:
     if len(grouped) > MAX_BATCHES:
         step = len(grouped) / MAX_BATCHES
         sampled = [grouped[int(i * step)] for i in range(MAX_BATCHES)]
-        print(f"[KG] 批次过多({len(grouped)})，采样为 {len(sampled)} 批")
+        logger.info(f"[KG] 批次过多({len(grouped)})，采样为 {len(sampled)} 批")
         grouped = sampled
 
     return grouped
@@ -200,7 +199,7 @@ def _trim_toc_by_level(toc: list[dict]) -> list[dict]:
             # 回退到上一级
             final_level = max(cutoff - 1, 1)
             trimmed = [item for item in toc if item["level"] <= final_level]
-            print(f"[KG-TOC] 目录项 {len(toc)} 个超过阈值 {_TOC_MAX_ITEMS}，截止到 level {final_level}（{len(trimmed)} 项）")
+            logger.info(f"[KG-TOC] 目录项 {len(toc)} 个超过阈值 {_TOC_MAX_ITEMS}，截止到 level {final_level}（{len(trimmed)} 项）")
             return trimmed
 
     return toc
@@ -239,7 +238,7 @@ def _build_toc_skeleton(toc: list[dict]) -> tuple[list[dict], list[dict]]:
             edges.append({"source": name, "target": parent_name, "relation": "IS_PART_OF"})
         stack.append((level, name))
 
-    print(f"[KG-TOC] 骨架：{len(nodes)} 节点, {len(edges)} 条层级边")
+    logger.info(f"[KG-TOC] 骨架：{len(nodes)} 节点, {len(edges)} 条层级边")
     return nodes, edges
 
 
@@ -285,7 +284,7 @@ def _group_by_toc(
         else:
             merged.append(sec)
 
-    print(f"[KG-TOC] 按目录聚合为 {len(merged)} 个章节批次")
+    logger.info(f"[KG-TOC] 按目录聚合为 {len(merged)} 个章节批次")
     return merged
 
 
@@ -317,7 +316,7 @@ async def _extract_single_batch(i: int, text: str, total: int) -> list[dict]:
     """单个 batch 的节点提取（供并发调用）。"""
     prompt = NODE_EXTRACT_PROMPT.format(text=text[:6000])
     async with _LLM_SEMAPHORE:
-        print(f"[KG] 提取节点 batch {i+1}/{total} (开始)")
+        logger.info(f"[KG] 提取节点 batch {i+1}/{total} (开始)")
         try:
             raw = await chat_completion(
                 [{"role": "user", "content": prompt}],
@@ -341,10 +340,10 @@ async def _extract_single_batch(i: int, text: str, total: int) -> list[dict]:
                     "type": node_type,
                     "description": node.get("description", ""),
                 })
-            print(f"[KG] 提取节点 batch {i+1}/{total} 完成，得到 {len(valid_nodes)} 个节点")
+            logger.info(f"[KG] 提取节点 batch {i+1}/{total} 完成，得到 {len(valid_nodes)} 个节点")
             return valid_nodes
         except Exception as e:
-            print(f"[KG] 节点提取 batch {i+1} 失败: {e}")
+            logger.info(f"[KG] 节点提取 batch {i+1} 失败: {e}")
             return []
 
 
@@ -366,7 +365,7 @@ async def _extract_nodes(grouped_texts: list[str]) -> list[dict]:
             if node["name"] not in all_nodes:
                 all_nodes[node["name"]] = node
 
-    print(f"[KG] 全部 batch 完成，去重后共 {len(all_nodes)} 个节点")
+    logger.info(f"[KG] 全部 batch 完成，去重后共 {len(all_nodes)} 个节点")
     return list(all_nodes.values())
 
 
@@ -383,7 +382,7 @@ async def _extract_edges_batch(
     )
     prompt = EDGE_EXTRACT_PROMPT.format(nodes_text=nodes_text)
     async with _LLM_SEMAPHORE:
-        print(f"[KG] 推断关系 batch {batch_idx+1}/{total} (开始，{len(batch_nodes)} 个节点)")
+        logger.info(f"[KG] 推断关系 batch {batch_idx+1}/{total} (开始，{len(batch_nodes)} 个节点)")
         try:
             raw = await chat_completion(
                 [{"role": "user", "content": prompt}],
@@ -399,10 +398,10 @@ async def _extract_edges_batch(
                 rel = edge.get("relation", "").strip()
                 if src in all_node_names and tgt in all_node_names and rel in valid_relations and src != tgt:
                     valid_edges.append({"source": src, "target": tgt, "relation": rel})
-            print(f"[KG] 推断关系 batch {batch_idx+1}/{total} 完成，得到 {len(valid_edges)} 条")
+            logger.info(f"[KG] 推断关系 batch {batch_idx+1}/{total} 完成，得到 {len(valid_edges)} 条")
             return valid_edges
         except Exception as e:
-            print(f"[KG] 关系推断 batch {batch_idx+1} 失败: {e}")
+            logger.info(f"[KG] 关系推断 batch {batch_idx+1} 失败: {e}")
             return []
 
 
@@ -422,7 +421,7 @@ async def _extract_edges(all_nodes: list[dict]) -> list[dict]:
         batches.append(all_nodes[i:i + BATCH_SIZE])
         i += BATCH_SIZE - OVERLAP  # 步长 = BATCH_SIZE - OVERLAP
     total = len(batches)
-    print(f"[KG] 关系推断分为 {total} 批（每批 ~{BATCH_SIZE} 节点，重叠 {OVERLAP}）")
+    logger.info(f"[KG] 关系推断分为 {total} 批（每批 ~{BATCH_SIZE} 节点，重叠 {OVERLAP}）")
 
     tasks = [
         _extract_edges_batch(batch, all_node_names, i, total)
@@ -440,7 +439,7 @@ async def _extract_edges(all_nodes: list[dict]) -> list[dict]:
                 seen.add(key)
                 unique_edges.append(edge)
 
-    print(f"[KG] 全部关系推断完成，去重后共 {len(unique_edges)} 条")
+    logger.info(f"[KG] 全部关系推断完成，去重后共 {len(unique_edges)} 条")
     return unique_edges
 
 
@@ -459,7 +458,7 @@ async def _extract_toc_batch(
     )
     allowed = set(llm_types)
     async with _LLM_SEMAPHORE:
-        print(f"[KG-TOC] 提取细粒度节点 {i+1}/{total}「{section['section']}」")
+        logger.info(f"[KG-TOC] 提取细粒度节点 {i+1}/{total}「{section['section']}」")
         try:
             raw = await chat_completion(
                 [{"role": "user", "content": prompt}],
@@ -476,10 +475,10 @@ async def _extract_toc_batch(
                 if ntype not in allowed:
                     ntype = llm_types[-1]  # 默认归到最细粒度
                 valid.append({"name": name, "type": ntype, "description": n.get("description", "")})
-            print(f"[KG-TOC] 章节「{section['section']}」得到 {len(valid)} 个节点")
+            logger.info(f"[KG-TOC] 章节「{section['section']}」得到 {len(valid)} 个节点")
             return valid, section["section"]
         except Exception as e:
-            print(f"[KG-TOC] 章节「{section['section']}」提取失败: {e}")
+            logger.info(f"[KG-TOC] 章节「{section['section']}」提取失败: {e}")
             return [], section["section"]
 
 
@@ -502,7 +501,7 @@ async def _extract_nodes_with_context(
                 all_nodes[node["name"]] = node
                 section_map[node["name"]] = sec_name
 
-    print(f"[KG-TOC] 细粒度节点去重后共 {len(all_nodes)} 个")
+    logger.info(f"[KG-TOC] 细粒度节点去重后共 {len(all_nodes)} 个")
     return list(all_nodes.values()), section_map
 
 
@@ -520,7 +519,7 @@ async def _extract_cross_edges(all_nodes: list[dict]) -> list[dict]:
         batches.append(all_nodes[i:i + BATCH_SIZE])
         i += BATCH_SIZE - OVERLAP
     total = len(batches)
-    print(f"[KG-TOC] 跨章节关系推断分为 {total} 批")
+    logger.info(f"[KG-TOC] 跨章节关系推断分为 {total} 批")
 
     async def _batch(batch_nodes, idx):
         nodes_text = "\n".join(
@@ -529,7 +528,7 @@ async def _extract_cross_edges(all_nodes: list[dict]) -> list[dict]:
         )
         prompt = EDGE_EXTRACT_CROSS_PROMPT.format(nodes_text=nodes_text)
         async with _LLM_SEMAPHORE:
-            print(f"[KG-TOC] 跨章节关系 batch {idx+1}/{total}")
+            logger.info(f"[KG-TOC] 跨章节关系 batch {idx+1}/{total}")
             try:
                 raw = await chat_completion(
                     [{"role": "user", "content": prompt}],
@@ -544,7 +543,7 @@ async def _extract_cross_edges(all_nodes: list[dict]) -> list[dict]:
                         valid.append({"source": src, "target": tgt, "relation": rel})
                 return valid
             except Exception as exc:
-                print(f"[KG-TOC] 跨章节关系 batch {idx+1} 失败: {exc}")
+                logger.info(f"[KG-TOC] 跨章节关系 batch {idx+1} 失败: {exc}")
                 return []
 
     results = await asyncio.gather(*[_batch(b, i) for i, b in enumerate(batches)])
@@ -556,7 +555,7 @@ async def _extract_cross_edges(all_nodes: list[dict]) -> list[dict]:
             if key not in seen:
                 seen.add(key)
                 unique.append(e)
-    print(f"[KG-TOC] 跨章节关系去重后共 {len(unique)} 条")
+    logger.info(f"[KG-TOC] 跨章节关系去重后共 {len(unique)} 条")
     return unique
 
 
@@ -573,7 +572,7 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
     返回 {"nodes_count": int, "edges_count": int, "doc_id": str}
     """
     # 1. 从 ChromaDB 获取文本块
-    print(f"[KG] 开始构建知识图谱，doc_id={doc_id}")
+    logger.info(f"[KG] 开始构建知识图谱，doc_id={doc_id}")
     if on_progress:
         await on_progress(5, "文本处理中")
     result = get_documents_by_doc_id(doc_id)
@@ -583,7 +582,7 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
     if not documents:
         raise ValueError(f"文档 {doc_id} 在向量库中未找到文本块")
 
-    print(f"[KG] doc_id={doc_id}, 共 {len(documents)} 个文本块")
+    logger.info(f"[KG] doc_id={doc_id}, 共 {len(documents)} 个文本块")
 
     # 2. 尝试提取 PDF 目录
     toc = None
@@ -605,14 +604,14 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
                     if toc:
                         toc = _trim_toc_by_level(toc)
     except Exception as e:
-        print(f"[KG] 目录提取失败，将使用 fallback: {e}")
+        logger.info(f"[KG] 目录提取失败，将使用 fallback: {e}")
         toc = None
 
     if toc and len(toc) >= 3:
         # ===== TOC 路径 =====
         toc_max_level = max(item["level"] for item in toc)
         llm_types = _get_llm_types(toc_max_level)
-        print(f"[KG-TOC] 检测到 {len(toc)} 个目录项（max level={toc_max_level}），LLM 提取类型：{llm_types}")
+        logger.info(f"[KG-TOC] 检测到 {len(toc)} 个目录项（max level={toc_max_level}），LLM 提取类型：{llm_types}")
         if on_progress:
             await on_progress(10, "目录结构解析中")
 
@@ -638,20 +637,20 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
         cross_edges = await _extract_cross_edges(nodes)
 
         edges = skeleton_edges + auto_edges + cross_edges
-        print(f"[KG-TOC] 总计 {len(nodes)} 节点, {len(edges)} 边（骨架 {len(skeleton_edges)} + 归属 {len(auto_edges)} + 跨章节 {len(cross_edges)}）")
+        logger.info(f"[KG-TOC] 总计 {len(nodes)} 节点, {len(edges)} 边（骨架 {len(skeleton_edges)} + 归属 {len(auto_edges)} + 跨章节 {len(cross_edges)}）")
     else:
         # ===== Fallback：原有逻辑 =====
         if toc is not None:
-            print(f"[KG] 目录项不足({len(toc)}个)，使用 fallback 逻辑")
+            logger.info(f"[KG] 目录项不足({len(toc)}个)，使用 fallback 逻辑")
         grouped = _group_by_page(documents, metadatas)
-        print(f"[KG] 聚合为 {len(grouped)} 批")
+        logger.info(f"[KG] 聚合为 {len(grouped)} 批")
         if on_progress:
             await on_progress(10, "文本处理中")
 
         if on_progress:
             await on_progress(15, "知识点提取中")
         nodes = await _extract_nodes(grouped)
-        print(f"[KG] 提取到 {len(nodes)} 个节点")
+        logger.info(f"[KG] 提取到 {len(nodes)} 个节点")
 
         if not nodes:
             return {"nodes_count": 0, "edges_count": 0, "doc_id": doc_id}
@@ -659,7 +658,7 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
         if on_progress:
             await on_progress(55, "关系推断中")
         edges = await _extract_edges(nodes)
-        print(f"[KG] 推断出 {len(edges)} 条关系")
+        logger.info(f"[KG] 推断出 {len(edges)} 条关系")
 
     if not nodes:
         return {"nodes_count": 0, "edges_count": 0, "doc_id": doc_id}
@@ -773,7 +772,7 @@ async def run_kg_build(task_id, doc_id: str, db: AsyncSession, user_id=None) -> 
             "edges_count": result["edges_count"],
         })
     except Exception as e:
-        print(f"[KG] 后台构建失败: {e}")
+        logger.error(f"[KG] 后台构建失败: {e}")
         await update_by_id(db, KGBuildTask, task_id, {
             "status": "failed",
             "progress": 0,

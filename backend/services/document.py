@@ -9,6 +9,8 @@ import uuid
 from pathlib import Path
 from typing import Callable, Optional
 
+from loguru import logger  # noqa: F401
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.crud import insert
@@ -49,12 +51,12 @@ async def import_pdf(
 
     # 1. 加载并解析 PDF
     chunks = loader.load_file(str(path), doc_id=doc_id)
-    print(f"[import_pdf] 解析完成，生成 {len(chunks)} 个文本块")
+    logger.info(f"[import_pdf] 解析完成，生成 {len(chunks)} 个文本块")
     # 2. 索引到向量库
     indexed_count = 0
     if chunks:
         indexed_count = await rag_indexer.index_chunks(chunks)
-        print(f"[import_pdf] 索引完成，共索引 {len(chunks)} 个文本块")
+        logger.info(f"[import_pdf] 索引完成，共索引 {len(chunks)} 个文本块")
     # 3. 创建资源记录（可选）
     resource_id = None
     if db is not None:
@@ -69,7 +71,7 @@ async def import_pdf(
             },
         )
         resource_id = resource.id
-        print(f"[import_pdf] 资源记录创建完成，ID={resource_id}")
+        logger.info(f"[import_pdf] 资源记录创建完成，ID={resource_id}")
     return {
         "doc_id": doc_id,
         "title": doc_title,
@@ -104,7 +106,7 @@ async def import_pdf_with_progress(
 
     # 1. 加载并解析 PDF
     chunks = loader.load_file(str(path), doc_id=doc_id)
-    print(f"[import_pdf_with_progress] 解析完成，生成 {len(chunks)} 个文本块")
+    logger.info(f"[import_pdf_with_progress] 解析完成，生成 {len(chunks)} 个文本块")
     _cb("parsing", 20)
 
     # 2. 索引到向量库（带 batch 进度）
@@ -121,7 +123,7 @@ async def import_pdf_with_progress(
         indexed_count = await rag_indexer.index_chunks(
             chunks, progress_callback=_index_progress
         )
-        print(f"[import_pdf_with_progress] 索引完成，共索引 {indexed_count} 个文本块")
+        logger.info(f"[import_pdf_with_progress] 索引完成，共索引 {indexed_count} 个文本块")
 
     # 3. 创建资源记录（可选）
     resource_id = None
@@ -137,7 +139,7 @@ async def import_pdf_with_progress(
             },
         )
         resource_id = resource.id
-        print(f"[import_pdf_with_progress] 资源记录创建完成，ID={resource_id}")
+        logger.info(f"[import_pdf_with_progress] 资源记录创建完成，ID={resource_id}")
     _cb("saving_record", 95)
 
     _cb("done", 100)

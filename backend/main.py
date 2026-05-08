@@ -6,7 +6,6 @@ FastAPI 应用入口：路由注册、生命周期管理、中间件配置。
 from __future__ import annotations
 
 import asyncio
-import logging
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -20,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.hash_utils import hash_password, verify_password
 from backend.agents.graph import get_graph, invoke, stream_invoke
+from backend.middleware.logging_middleware import LoggingMiddleware
 from backend.db.database import close_db, get_session, health_check as db_health, init_db
 import backend.db.database as _db_module
 from backend.db.vector import health_check as vec_health, init_vector_db
@@ -43,6 +43,7 @@ from backend.models.schemas import (
     QuizAttemptOut,
     QuizItemOut,
     QuizSubmitIn,
+    QuestionType,
     ResourceMetaOut,
     StudentProfileIn,
     StudentProfileOut,
@@ -64,9 +65,8 @@ _doc_import_tasks: dict[str, dict] = {}
 # JWT 配置（从 configs/config.yaml 读取）
 # ===========================================================
 
-# 将 backend.agents.* 的日志级别设为 INFO，确保 agent 执行链路可见
-logging.getLogger("backend.agents").setLevel(logging.INFO)
 from backend.config import config as app_config
+from backend.logging_config import logger  # noqa: F401
 
 JWT_SECRET = app_config.jwt.secret
 JWT_ALGORITHM = app_config.jwt.algorithm
@@ -114,6 +114,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(LoggingMiddleware)
 
 
 # ===========================================================
@@ -230,7 +231,7 @@ async def create_chat_session(user_id: uuid.UUID, db: AsyncSession = Depends(get
     try:
         await create_session_table(table_name)
     except Exception as e:
-        logging.getLogger(__name__).warning(f"动态会话表创建失败: {e}")
+        logger.warning(f"动态会话表创建失败: {e}")
         table_name = None
 
     # 4. 回写 messages_table 字段
@@ -278,7 +279,7 @@ async def chat(
                         resource_type=result.resource_type.value if result.resource_type else None,
                     )
     except Exception as e:
-        logging.getLogger(__name__).warning(f"动态会话表写入失败: {e}")
+        logger.warning(f"动态会话表写入失败: {e}")
 
     # 如果生成了资源，持久化到 resource_meta 表
     if result.resource_type and result.draft_content:
@@ -299,11 +300,9 @@ async def chat(
                 "content": result.draft_content,
             })
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"资源保存失败: {e}")
+            logger.warning(f"资源保存失败: {e}")
 
-    import logging as _log
-    _log.getLogger(__name__).warning(
+    logger.warning(
         "[chat] returning metadata keys=%s recommendations_count=%d",
         list(result.metadata.keys()),
         len(result.metadata.get("recommendations", [])),
@@ -396,49 +395,80 @@ async def get_kg_graph(
     depth: int = 3,
     db: AsyncSession = Depends(get_session),
 ):
-    """获取知识图谱子图，供前端 ECharts 渲染。支持按 doc_id 过滤 + depth 控制展开层数。"""
-    from backend.db.crud import select as db_select
+    """获取知识图谱子图，供前端 ECharts 渲染。支持按 doc_id 过滤 + depth 控制展开层数。
 
-    filters: dict = {}
-    if doc_id:
-        filters["course_id"] = doc_id
-    if user_id:
-        filters["user_id"] = user_id
-    all_nodes = await db_select(db, KGNode, filters=filters)
-    node_map = {n.id: n for n in all_nodes}
-    node_ids = set(node_map.keys())
+    优化：depth 过滤下推到 DB 层，避免加载全量数据。
+    """
+    from sqlalchemy import select as sa_select, and_
+    from backend.db.models import KGNode, KGEdge
 
-    all_edges = await db_select(db, KGEdge)
-    edges_in_scope = [e for e in all_edges if e.source_id in node_ids and e.target_id in node_ids]
-
-    # depth 统一按节点类型层级过滤
     type_levels = ["Course", "Chapter", "KnowledgePoint", "SubPoint", "Concept"]
-    allowed_types = set(type_levels[:depth])
-    reachable = {nid for nid, n in node_map.items() if n.node_type in allowed_types}
+    allowed_types = type_levels[:depth]
 
-    # 如果指定了 root_id，进一步限制为该根节点的层级子树
-    if root_id and root_id in node_ids:
-        hierarchy_adj: dict[str, list[str]] = {nid: [] for nid in node_ids}
-        for e in edges_in_scope:
+    # 基础过滤条件
+    base_conditions = []
+    if doc_id:
+        base_conditions.append(KGNode.course_id == doc_id)
+    if user_id:
+        base_conditions.append(KGNode.user_id == user_id)
+
+    if root_id:
+        # 有 root_id：加载所有节点建立邻接表，再 BFS 扩展
+        all_nodes = await db.execute(
+            sa_select(KGNode).where(and_(*base_conditions)) if base_conditions
+            else sa_select(KGNode)
+        )
+        all_nodes = all_nodes.scalars().all()
+        node_map = {n.id: n for n in all_nodes}
+
+        # 建立邻接表（只看 IS_PART_OF / CONTAINS 关系）
+        children_adj: dict[str, set[str]] = {n.id: set() for n in all_nodes}
+        parent_adj: dict[str, set[str]] = {n.id: set() for n in all_nodes}
+        for e in await db.execute(sa_select(KGEdge)):
+            e = e[0]
             if e.relation in ("IS_PART_OF", "CONTAINS"):
-                hierarchy_adj[e.target_id].append(e.source_id)
-                hierarchy_adj[e.source_id].append(e.target_id)
-        # BFS 找出 root 的所有后代
+                children_adj.setdefault(e.source_id, set()).add(e.target_id)
+                parent_adj.setdefault(e.target_id, set()).add(e.source_id)
+
+        # BFS 找 root 的所有后代（不限层级，先找完全部子树）
         descendants: set[str] = {root_id}
         frontier = [root_id]
         while frontier:
             next_frontier = []
             for nid in frontier:
-                for child in hierarchy_adj.get(nid, []):
-                    if child not in descendants:
+                for child in children_adj.get(nid, []):
+                    if child not in descendants and child in node_map:
                         descendants.add(child)
                         next_frontier.append(child)
             frontier = next_frontier
-        reachable = reachable & descendants
 
-    # 过滤节点和边
-    filtered_nodes = [n for n in all_nodes if n.id in reachable]
-    filtered_edges = [e for e in edges_in_scope if e.source_id in reachable and e.target_id in reachable]
+        # 再按 depth 类型过滤（只保留 allowed_types 的节点）
+        reachable = {nid for nid in descendants if node_map[nid].node_type in allowed_types}
+
+        # 如果 root 自身类型不在 allowed_types，也加入（作为入口）
+        if root_id in descendants and root_id in node_map:
+            reachable.add(root_id)
+    else:
+        # 无 root_id：直接按 node_type 过滤，大幅减少加载量
+        conditions = base_conditions + [KGNode.node_type.in_(allowed_types)]
+        all_nodes = await db.execute(
+            sa_select(KGNode).where(and_(*conditions)) if conditions
+            else sa_select(KGNode).where(KGNode.node_type.in_(allowed_types))
+        )
+        all_nodes = all_nodes.scalars().all()
+        node_map = {n.id: n for n in all_nodes}
+        reachable = set(node_map.keys())
+
+    # 加载关联边（只看两端节点都在 reachable 里的）
+    if reachable:
+        edges_result = await db.execute(
+            sa_select(KGEdge).where(
+                and_(KGEdge.source_id.in_(reachable), KGEdge.target_id.in_(reachable))
+            )
+        )
+        filtered_edges = edges_result.scalars().all()
+    else:
+        filtered_edges = []
 
     kg_nodes = [
         KGNodeOut(
@@ -449,7 +479,7 @@ async def get_kg_graph(
             is_core=False,
             extra={"description": n.description or ""},
         )
-        for n in filtered_nodes
+        for n in all_nodes if n.id in reachable
     ]
     kg_edges = [
         KGEdgeOut(
@@ -474,7 +504,7 @@ async def build_kg_endpoint(
     from backend.db.models import KGBuildTask
     from backend.models.schemas import KGBuildTaskOut
 
-    print(f"[POST /kg/build] 创建异步构建任务，doc_id={doc_id}")
+    logger.info(f"[POST /kg/build] 创建异步构建任务，doc_id={doc_id}")
     task = await insert(db, KGBuildTask, data={
         "doc_id": doc_id,
         "status": "pending",
@@ -611,12 +641,18 @@ async def list_resources(
 
 @app.get("/resources/stats", tags=["resources"])
 async def get_resource_stats(user_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
-    """返回用户的资源统计：按类型计数的字典。"""
-    from backend.db.crud import count
+    """返回用户的资源统计：按类型计数的字典。一次 GROUP BY 替代 5 次 COUNT 查询。"""
+    from sqlalchemy import func, select
 
-    stats = {}
-    for rt in ["doc", "mindmap", "quiz", "code", "summary"]:
-        stats[rt] = await count(db, ResourceMeta, {"user_id": user_id, "resource_type": rt})
+    rows = await db.execute(
+        select(ResourceMeta.resource_type, func.count(ResourceMeta.id))
+        .where(ResourceMeta.user_id == user_id)
+        .group_by(ResourceMeta.resource_type)
+    )
+    stats = {rt: 0 for rt in ["doc", "mindmap", "quiz", "code", "summary"]}
+    for rt, cnt in rows.all():
+        if rt in stats:
+            stats[rt] = cnt
     return stats
 
 
@@ -674,7 +710,7 @@ async def get_quiz_items(
     return [
         QuizItemOut(
             id=item.id,
-            kp_id=None,
+            kp_id=item.kp_id,
             question_type=item.question_type,
             difficulty=None,
             stem=item.stem,
@@ -700,9 +736,31 @@ async def submit_quiz(
         raise HTTPException(status_code=404, detail="Quiz item not found")
 
     # 判分
-    user_answer_str = str(body.user_answer).strip().lower()
-    correct_answer_str = str(quiz_item.answer).strip().lower()
-    is_correct = user_answer_str == correct_answer_str
+    import re
+    import ast
+
+    def extract_letters(text: str) -> set[str]:
+        """从 'A. xxx, B. yyy' 这样的文本中提取出字母集合 {A, B}"""
+        return set(re.findall(r'\b([A-Z])\b', text))
+
+    if quiz_item.question_type == QuestionType.single:
+        user_letters = extract_letters(str(body.user_answer))
+        correct_letters = extract_letters(str(quiz_item.answer))
+        is_correct = user_letters == correct_letters
+    elif quiz_item.question_type == QuestionType.multi:
+        user_letters = extract_letters(str(body.user_answer))
+        # correct_answer 可能是 "['A', 'B', 'D']" 格式的字符串
+        try:
+            correct_list = ast.literal_eval(str(quiz_item.answer))
+            correct_letters = set(correct_list)
+        except Exception:
+            correct_letters = extract_letters(str(quiz_item.answer))
+        is_correct = user_letters == correct_letters
+    else:
+        # fill / short：直接字符串比较
+        is_correct = str(body.user_answer).strip().lower() == str(quiz_item.answer).strip().lower()
+
+    logger.info(f"[QuizSubmit] quiz_item_id={body.quiz_item_id}, question_type={quiz_item.question_type}, user_answer={body.user_answer!r}, correct_answer={quiz_item.answer!r}, is_correct={is_correct}")
     score = 1.0 if is_correct else 0.0
 
     attempt = await insert(
@@ -877,8 +935,6 @@ async def import_document(
     - 索引到向量库（供 RAG 检索使用）
     - 创建资源记录到数据库
     """
-    import logging
-    _log = logging.getLogger(__name__)
     file_name = file.filename or "unknown.pdf"
     if not file_name.lower().endswith(".pdf"):
         raise HTTPException(
@@ -889,7 +945,7 @@ async def import_document(
     try:
         content = await file.read()
         saved_path = document_svc.save_uploaded_file(content, file_name)
-        _log.warning(f"[import_document] 文件 {file_name} 已保存到 {saved_path}，开始处理...")
+        logger.warning(f"[import_document] 文件 {file_name} 已保存到 {saved_path}，开始处理...")
         result = await document_svc.import_pdf(
             file_path=saved_path,
             user_id=user_id,
@@ -922,8 +978,6 @@ async def import_document_async(
     """
     异步导入 PDF 文档。立即返回 task_id，前端轮询 /documents/import/{task_id}/status。
     """
-    import logging
-    _log = logging.getLogger(__name__)
     file_name = file.filename or "unknown.pdf"
     if not file_name.lower().endswith(".pdf"):
         raise HTTPException(
@@ -975,7 +1029,7 @@ async def import_document_async(
             _doc_import_tasks[task_id]["doc_id"] = result.get("doc_id")
             _doc_import_tasks[task_id]["result"] = result
         except Exception as e:
-            _log.exception(f"[import_document_async] 后台任务失败: {e}")
+            logger.exception(f"[import_document_async] 后台任务失败: {e}")
             _doc_import_tasks[task_id]["status"] = "failed"
             _doc_import_tasks[task_id]["error"] = str(e)
 

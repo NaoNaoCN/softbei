@@ -1,5 +1,5 @@
 """
-tests/test_services.py
+tests/services/test_services.py
 backend/services 模块（profile, resource, pathway）单元测试。
 使用 SQLite 内存数据库。
 """

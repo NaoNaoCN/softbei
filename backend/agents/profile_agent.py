@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.schemas import AgentState, StudentProfileIn, StudentProfileOut
 from backend.services import profile as profile_svc
 from backend.services.llm import chat_completion
+from loguru import logger  # noqa: F401
 
 # 提取画像字段的 prompt
 _EXTRACT_PROMPT = """你是一个学生画像分析助手。
@@ -120,20 +121,17 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
             cleaned = cleaned.rsplit("```", 1)[0].strip()
         updates = json.loads(cleaned)
     except (json.JSONDecodeError, Exception) as e:
-        import logging
-        logging.getLogger(__name__).error(f"画像提取失败: {e}, raw={raw if 'raw' in dir() else 'N/A'}")
+        logger.error(f"画像提取失败: {e}, raw={raw if 'raw' in dir() else 'N/A'}")
         updates = {}
 
     # -- 2. 合并到数据库 --
     user_uuid = uuid.UUID(state.user_id)
-    import logging
-    _logger = logging.getLogger(__name__)
-    _logger.warning(f"[ProfileAgent] db={db}, config_keys={list(config.keys()) if config else 'None'}")
+    logger.warning(f"[ProfileAgent] db={db}, config_keys={list(config.keys()) if config else 'None'}")
     if db is not None:
         try:
             state = state.model_copy(update={"profile": await profile_svc.merge_chat_updates(user_uuid, updates, db, user_message=state.user_message)})
         except Exception as e:
-            _logger.error(f"DB 合并画像失败: {e}")
+            logger.error(f"DB 合并画像失败: {e}")
             # 数据库更新失败时，回退到内存级别合并
             state = _merge_profile_in_memory(state, updates)
     else:
@@ -155,11 +153,9 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     complete = _check_profile_complete(state)
     state = state.model_copy(update={"profile_complete": complete})
 
-    import logging
-    _log = logging.getLogger(__name__)
-    _log.warning(f"[ProfileAgent] updates={updates}")
-    _log.warning(f"[ProfileAgent] profile={state.profile}")
-    _log.warning(f"[ProfileAgent] complete={complete}, is_resource_request={is_resource_request}")
+    logger.warning(f"[ProfileAgent] updates={updates}")
+    logger.warning(f"[ProfileAgent] profile={state.profile}")
+    logger.warning(f"[ProfileAgent] complete={complete}, is_resource_request={is_resource_request}")
 
     # -- 5. 若需要追问，生成 clarify_message --
     if not complete or (is_resource_request and not complete):
@@ -191,8 +187,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
                 [{"role": "user", "content": clarify_prompt}], temperature=0.7
             )
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(f"LLM 调用失败: {e}")
+            logger.error(f"LLM 调用失败: {e}")
             clarify_msg = "能告诉我你的学习目标和目前的知识基础吗？"
 
         state = state.model_copy(update={

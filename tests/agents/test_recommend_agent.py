@@ -1,5 +1,5 @@
 """
-tests/test_recommend_agent.py
+tests/agents/test_recommend_agent.py
 backend/agents/recommend_agent.py 单元测试。
 """
 

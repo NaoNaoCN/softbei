@@ -1,5 +1,5 @@
 """
-tests/test_vector.py
+tests/rag/test_vector.py
 backend/db/vector.py 单元测试。
 使用 unittest.mock 模拟 ChromaDB 客户端。
 """

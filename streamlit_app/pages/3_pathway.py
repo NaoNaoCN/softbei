@@ -38,6 +38,7 @@ def fetch_kg_graph(root_id: str | None = None, depth: int = 3, doc_id: str | Non
     return None
 
 
+@st.cache_data(ttl=300, show_spinner="加载文档...")
 def fetch_documents(user_id: str) -> list[dict]:
     """获取用户导入的文档列表。"""
     try:
@@ -49,6 +50,7 @@ def fetch_documents(user_id: str) -> list[dict]:
     return []
 
 
+@st.cache_data(ttl=300, show_spinner="加载学习路径...")
 def fetch_pathways(user_id: str) -> list[dict]:
     """获取用户的学习路径列表。"""
     try:
@@ -60,6 +62,7 @@ def fetch_pathways(user_id: str) -> list[dict]:
     return []
 
 
+@st.cache_data(ttl=60, show_spinner="加载学习记录...")
 def fetch_learning_records(user_id: str, limit: int = 10, kp_id: str | None = None) -> list[dict]:
     """获取学习记录，可按 kp_id 过滤。"""
     try:
@@ -96,6 +99,7 @@ def post_learning_record(user_id: str, resource_id: str | None, kp_id: str | Non
         pass
 
 
+@st.cache_data(ttl=120, show_spinner=False)
 def fetch_node_resources(user_id: str, kp_id: str) -> list[dict]:
     """获取节点关联的已生成资源列表。"""
     try:
@@ -415,10 +419,8 @@ with tab_path:
         }
 
         # ---------- 获取知识图谱并渲染 ----------
-        path_graph = fetch_kg_graph(depth=5, user_id=user_id)
+        path_graph = fetch_kg_graph(depth=5)
         if path_graph and path_graph.get("nodes"):
-            from streamlit_app.components.mindmap import render_kg_graph
-
             col_graph, col_detail = st.columns([3, 1])
             with col_graph:
                 clicked_id = render_kg_graph(

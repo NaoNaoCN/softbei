@@ -1,5 +1,5 @@
 """
-tests/test_planner_agent.py
+tests/agents/test_planner_agent.py
 backend/agents/planner_agent.py 单元测试。
 """
 

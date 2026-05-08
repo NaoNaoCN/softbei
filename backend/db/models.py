@@ -253,7 +253,7 @@ class QuizAttempt(Base):
     user_answer: Mapped[str] = mapped_column(Text, nullable=False)
     is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
     score: Mapped[float | None] = mapped_column(Float)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column("submitted_at", DateTime, default=datetime.utcnow)
 
     quiz_item: Mapped["QuizItem"] = relationship(back_populates="attempts")
 

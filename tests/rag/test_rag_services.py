@@ -1,5 +1,5 @@
 """
-tests/test_rag_services.py
+tests/rag/test_rag_services.py
 backend/services/llm.py, backend/rag/indexer.py, backend/rag/retriever.py 单元测试。
 所有外部依赖使用 mock。
 """

@@ -1,6 +1,6 @@
 """
 streamlit_app/components/mindmap.py
-思维导图组件：使用 streamlit-echarts 渲染 ECharts tree 图。
+思维导图组件：使用 st.html + ECharts 原生 JS 渲染。
 """
 
 from __future__ import annotations
@@ -9,27 +9,14 @@ from typing import Any
 
 import streamlit as st
 
-try:
-    from streamlit_echarts import st_echarts
-    _ECHARTS_AVAILABLE = True
-except ImportError:
-    _ECHARTS_AVAILABLE = False
+# ECharts CDN
+_ECHARTS_CDN = "https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"
 
 
 def render_mindmap(tree_data: dict[str, Any], height: int = 600) -> None:
-    """
-    渲染思维导图（ECharts tree）。
-
-    :param tree_data: ECharts tree 格式字典，包含 name / children 字段
-    :param height:    图表高度（像素）
-    """
+    """渲染思维导图（ECharts tree）。"""
     if not tree_data:
         st.info("暂无思维导图数据。")
-        return
-
-    if not _ECHARTS_AVAILABLE:
-        st.warning("streamlit-echarts 未安装，以 JSON 形式展示。")
-        st.json(tree_data)
         return
 
     option = {
@@ -63,7 +50,44 @@ def render_mindmap(tree_data: dict[str, Any], height: int = 600) -> None:
             }
         ],
     }
-    st_echarts(options=option, height=f"{height}px")
+
+    _render_echarts(option, height=height)
+
+
+def _render_echarts(option: dict[str, Any], height: int = 700) -> None:
+    """通过 st.html 渲染 ECharts 图表。"""
+    import json
+
+    option_json = json.dumps(option, ensure_ascii=False)
+    height_px = f"{height}px"
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <script src="{_ECHARTS_CDN}"></script>
+    </head>
+    <body style="margin:0;padding:0;">
+        <div id="chart" style="width:100%;height:{height_px};"></div>
+        <script>
+            var chart = echarts.init(document.getElementById('chart'));
+            var option = {option_json};
+            chart.setOption(option);
+            window.addEventListener('resize', function() {{ chart.resize(); }});
+        </script>
+    </body>
+    </html>
+    """
+    st.html(html, unsafe_allow_javascript=True)
+
+
+def _echarts_click_key() -> str:
+    """返回当前页面唯一的 click key（防止多图冲突）。"""
+    # 用 st.session_state 生成一个每页唯一的 key
+    if "echarts_click_count" not in st.session_state:
+        st.session_state["echarts_click_count"] = 0
+    return f"echarts_click_{st.session_state['echarts_click_count']}"
 
 
 def render_kg_graph(
@@ -76,23 +100,17 @@ def render_kg_graph(
     """
     渲染知识图谱（ECharts graph 力导向布局）。
 
-    :param graph_data:        包含 nodes / edges 列表的字典（KGGraphOut 序列化）
+    :param graph_data:        包含 nodes / edges 列表的字典
     :param height:            图表高度（像素）
-    :param on_click:          是否启用点击事件回调
-    :param pathway_highlight: 学习路径高亮配置，包含 completed / current / planned 三个节点 ID 集合
-    :param learned_ids:       已学习节点 ID 集合，用于"已学习"视图高亮
-    :return:                  点击的节点 ID（如果 on_click=True），否则 None
+    :param on_click:           是否启用点击事件回调
+    :param pathway_highlight:  学习路径高亮配置
+    :param learned_ids:        已学习节点 ID 集合
+    :return:                   点击的节点 ID（如果 on_click=True），否则 None
     """
     if not graph_data:
         st.info("暂无知识图谱数据。")
         return None
 
-    if not _ECHARTS_AVAILABLE:
-        st.warning("streamlit-echarts 未安装，以 JSON 形式展示。")
-        st.json(graph_data)
-        return None
-
-    # 节点类型颜色映射（默认模式）
     color_map = {
         "Course": "#5470c6",
         "Chapter": "#91cc75",
@@ -100,8 +118,6 @@ def render_kg_graph(
         "SubPoint": "#ee6666",
         "Concept": "#73c0de",
     }
-
-    # 路径高亮颜色
     hl_colors = {
         "completed": "#52c41a",
         "current": "#fa8c16",
@@ -112,20 +128,16 @@ def render_kg_graph(
     completed_ids = pathway_highlight.get("completed", set()) if has_hl else set()
     current_ids = pathway_highlight.get("current", set()) if has_hl else set()
     planned_ids = pathway_highlight.get("planned", set()) if has_hl else set()
-    all_hl_ids = completed_ids | current_ids | planned_ids
+    planned_order: dict[str, int] = {}
+    if has_hl and pathway_highlight.get("planned_order"):
+        planned_order = pathway_highlight["planned_order"]
 
-    # 计算每个节点的关联边数量（用于动态大小）
     edge_count: dict[str, int] = {}
     for e in graph_data.get("edges", []):
         edge_count[e["source_id"]] = edge_count.get(e["source_id"], 0) + 1
         edge_count[e["target_id"]] = edge_count.get(e["target_id"], 0) + 1
 
     base_sizes = {"Course": 40, "Chapter": 30, "KnowledgePoint": 20, "SubPoint": 14, "Concept": 12}
-
-    # 为规划节点建立序号映射（用于 label 标注）
-    planned_order: dict[str, int] = {}
-    if has_hl and pathway_highlight.get("planned_order"):
-        planned_order = pathway_highlight["planned_order"]
 
     nodes = []
     for n in graph_data.get("nodes", []):
@@ -180,14 +192,11 @@ def render_kg_graph(
                 node_cfg["label"] = {"show": True, "color": "#1890ff", "fontWeight": "bold",
                                      "formatter": f"{n['name']}{suffix}"}
             else:
-                # 无关节点：变暗
                 node_cfg["itemStyle"] = {"color": color_map.get(n["type"], "#999"), "opacity": 0.12}
                 node_cfg["symbolSize"] = max(size - 4, 6)
                 node_cfg["label"] = {"show": False}
-
         elif learned_ids is not None:
             if nid in learned_ids:
-                # 已学习：保持原色 + 绿色光晕
                 node_cfg["itemStyle"] = {
                     "color": color_map.get(n["type"], "#999"),
                     "shadowBlur": 10,
@@ -197,7 +206,6 @@ def render_kg_graph(
                 }
                 node_cfg["label"] = {"show": True}
             else:
-                # 未学习：变灰变暗
                 node_cfg["itemStyle"] = {"color": "#ccc", "opacity": 0.25}
                 node_cfg["symbolSize"] = max(size - 4, 6)
                 node_cfg["label"] = {"show": False}
@@ -214,16 +222,16 @@ def render_kg_graph(
             "lineStyle": {"type": {"REQUIRES": "dashed", "RELATED_TO": "dotted"}.get(e.get("relation", ""), "solid")},
         }
         if has_hl:
-            both_in = sid in all_hl_ids and tid in all_hl_ids
+            both_in = sid in (completed_ids | current_ids | planned_ids) and tid in (completed_ids | current_ids | planned_ids)
             if both_in:
                 link_cfg["lineStyle"]["width"] = 3
                 link_cfg["lineStyle"]["opacity"] = 0.9
-                link_cfg["lineStyle"]["color"] = hl_colors["planned"]
-                # 连接已完成节点的边用绿色
                 if sid in completed_ids and tid in completed_ids:
                     link_cfg["lineStyle"]["color"] = hl_colors["completed"]
                 elif sid in current_ids or tid in current_ids:
                     link_cfg["lineStyle"]["color"] = hl_colors["current"]
+                else:
+                    link_cfg["lineStyle"]["color"] = hl_colors["planned"]
             else:
                 link_cfg["lineStyle"]["opacity"] = 0.06
                 link_cfg["lineStyle"]["width"] = 0.5
@@ -258,7 +266,6 @@ def render_kg_graph(
         ],
     }
 
-    # 路径高亮模式下添加图例说明
     if has_hl:
         option["legend"] = [{"data": list(color_map.keys()), "top": 30}]
         option["graphic"] = [
@@ -281,8 +288,49 @@ def render_kg_graph(
             ]}
         ]
 
-    events = {"click": "function(params){if(!params.data) return null; return params.data.id || params.data.name || null;}"} if on_click else {}
-    result = st_echarts(options=option, height=f"{height}px", events=events)
-    if on_click and isinstance(result, dict):
-        result = next(iter(result.values()), None)
-    return result if on_click else None
+    # 生成唯一 key 供点击回调使用
+    click_key = _echarts_click_key()
+    st.session_state["echarts_click_count"] += 1
+
+    if on_click:
+        # 读取上一轮点击结果（通过 query_params 回传）
+        params = st.query_params
+        clicked = params.get(click_key, None)
+        # 清除 query_params 避免刷新后残留
+        try:
+            del params[click_key]
+        except Exception:
+            pass
+        import json
+        option_json = json.dumps(option, ensure_ascii=False)
+        height_px = f"{height}px"
+
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="utf-8">
+        <script src="{_ECHARTS_CDN}"></script>
+        </head>
+        <body style="margin:0;padding:0;">
+        <div id="chart" style="width:100%;height:{height_px};"></div>
+        <script>
+        var chart = echarts.init(document.getElementById('chart'));
+        var option = {option_json};
+        chart.setOption(option);
+        window.addEventListener('resize', function() {{ chart.resize(); }});
+        chart.on('click', function(params) {{
+            if (!params.data || !params.data.id) return;
+            var key = '{click_key}';
+            var url = new URL(window.location.href);
+            url.searchParams.set(key, params.data.id);
+            window.location.href = url.toString();
+        }});
+        </script>
+        </body>
+        </html>
+        """
+        st.html(html, unsafe_allow_javascript=True)
+        return clicked if clicked else None
+    else:
+        _render_echarts(option, height=height)
+        return None

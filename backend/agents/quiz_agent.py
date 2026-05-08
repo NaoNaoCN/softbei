@@ -6,8 +6,9 @@ QuizAgent：生成多题型测验题目集合。
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
+
+from loguru import logger  # noqa: F401
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,9 +19,6 @@ from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
 from backend.db.crud import insert_many
 from backend.db.models import QuizItem
-
-_logger = logging.getLogger(__name__)
-
 
 SYSTEM_PROMPT = """你是一位出题专家。
 请为以下知识点出 {count} 道题目，题型分布：
@@ -76,7 +74,7 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
         total, single, multi = _get_question_counts(state.profile)
         fill = max(0, total - single - multi)
 
-    _logger.info("[QuizAgent] kp_name=%s total=%d single=%d multi=%d fill=%d",
+    logger.info("[QuizAgent] kp_name=%s total=%d single=%d multi=%d fill=%d",
                  kp_name, total, single, multi, fill)
 
     # 检索相关文档
@@ -85,11 +83,11 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
         context = format_context(chunks, max_tokens=3000)
         retrieved_texts = [c.text for c in chunks]
         if chunks:
-            _logger.info("[QuizAgent] RAG 检索到 %d 条参考资料", len(chunks))
+            logger.info("[QuizAgent] RAG 检索到 %d 条参考资料", len(chunks))
         else:
-            _logger.warning("[QuizAgent] RAG 未检索到参考资料，降级为纯 LLM 生成")
+            logger.warning("[QuizAgent] RAG 未检索到参考资料，降级为纯 LLM 生成")
     except Exception as e:
-        _logger.warning("[QuizAgent] RAG 检索异常: %s，降级为纯 LLM 生成", e)
+        logger.warning("[QuizAgent] RAG 检索异常: %s，降级为纯 LLM 生成", e)
         context = "（暂无参考资料）"
         retrieved_texts = []
 
@@ -119,14 +117,14 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
             cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
             cleaned = cleaned.rsplit("```", 1)[0].strip()
         questions = json.loads(cleaned)
-        _logger.info("[QuizAgent] 题目生成成功，共 %d 题", len(questions))
+        logger.info("[QuizAgent] 题目生成成功，共 %d 题", len(questions))
         draft = json.dumps(questions, ensure_ascii=False)
         state = state.model_copy(update={"draft_content": draft})
     except json.JSONDecodeError as e:
-        _logger.warning("[QuizAgent] JSON 解析失败: %s，raw_preview=%.200s", e, raw if 'raw' in dir() else '')
+        logger.warning("[QuizAgent] JSON 解析失败: %s，raw_preview=%.200s", e, raw if 'raw' in dir() else '')
         state = state.model_copy(update={"draft_content": "[]"})
     except Exception as e:
-        _logger.error("[QuizAgent] 生成失败: %s", e)
+        logger.error("[QuizAgent] 生成失败: %s", e)
         state = state.model_copy(update={"draft_content": f"题目生成失败：{e}"})
 
     return state

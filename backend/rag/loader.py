@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from loguru import logger  # noqa: F401
+
 from langchain_community.document_loaders import (
     PyPDFLoader,           # PDF 加载
     UnstructuredWordDocumentLoader,  # DOCX/DOC 加载
@@ -182,7 +184,7 @@ def load_directory(
                 file_chunks = load_file(p)
                 chunks.extend(file_chunks)
             except Exception as e:
-                print(f"[loader] Skipping {p}: {e}")
+                logger.warning(f"[loader] Skipping {p}: {e}")
 
     return chunks
 
