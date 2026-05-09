@@ -101,6 +101,7 @@ async def import_pdf_with_progress(
     path = Path(file_path)
     doc_id = f"pdf_{uuid.uuid4().hex[:12]}"
     doc_title = title or path.stem
+    logger.info(f"[import_pdf_with_progress] received title={title!r}, final doc_title={doc_title!r}")
 
     _cb("saving", 5)
 

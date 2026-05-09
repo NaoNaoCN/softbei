@@ -487,6 +487,7 @@
             const file = fileInput.files[0];
             if (!file) return;
             const title = document.getElementById('import-title').value.trim();
+            console.log('[handleImport] title value:', JSON.stringify(title));
             const btn = document.getElementById('import-btn');
             const status = document.getElementById('import-status');
             btn.disabled = true;
@@ -501,7 +502,7 @@
                     const poll = async () => {
                         const s = await getImportStatus(result.task_id);
                         if (!s) return setTimeout(poll, 2000);
-                        if (s.status === 'completed') {
+                        if (s.status === 'done') {
                             status.textContent = '导入完成！';
                             btn.disabled = false;
                             btn.textContent = '开始导入';

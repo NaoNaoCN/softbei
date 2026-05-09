@@ -67,6 +67,7 @@ async def run_generation(
                 kp_id=req.kp_id,
                 resource_type=req.resource_type,
                 num_questions=req.num_questions,
+                question_type_counts=req.question_type_counts,
             )
 
             try:

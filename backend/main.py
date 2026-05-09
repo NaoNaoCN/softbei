@@ -9,7 +9,7 @@ import asyncio
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Annotated
 
 import jwt
 from fastapi import BackgroundTasks, Body, Depends, FastAPI, HTTPException, status, UploadFile, File, Form
@@ -858,17 +858,84 @@ async def get_quiz_attempts(
     import sqlalchemy as sa
 
     query = (
-        sa.select(QuizAttempt, KGNode.name)
+        sa.select(QuizAttempt, KGNode.name, QuizItem)
         .select_from(QuizAttempt)
         .outerjoin(KGNode, QuizAttempt.kp_id == KGNode.id)
+        .outerjoin(QuizItem, QuizAttempt.quiz_item_id == QuizItem.id)
         .where(QuizAttempt.user_id == user_id)
         .order_by(QuizAttempt.created_at.desc())
         .limit(limit)
         .offset(skip)
     )
     rows = (await db.execute(query)).all()
-    return [
-        QuizAttemptOut(
+
+    # 收集 content_json 中缺失的题目：尝试从 ResourceMeta.content_json 中补充
+    resource_cache = {}  # kp_key -> flat list of all items for that kp
+                          # "_res_{res_id}" -> list of items for specific resource (for UUID matching)
+
+    def find_item_content(quiz_item_id: uuid.UUID) -> dict | None:
+        """从 resource_cache 中查找题目内容（quiz_item_id 为虚拟 UUID，格式为 {resource_id}-{idx}）"""
+        quiz_id_str = str(quiz_item_id)
+        for res_id, items in resource_cache.items():
+            if res_id.startswith("_res_"):
+                for idx, item in enumerate(items):
+                    expected = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{res_id[5:]}-{idx}"))
+                    if expected == quiz_id_str:
+                        return item
+        return None
+
+    # 构建结果，处理 qi 为 None 的情况
+    result = []
+    for a, kp_name, qi in rows:
+        if qi is not None:
+            stem = qi.stem
+            options = qi.options
+            answer = qi.answer
+            explanation = qi.explanation
+            question_type = qi.question_type.value if qi.question_type else None
+            difficulty = None
+        else:
+            # 尝试通过 kp_id 查找同知识点的 quiz 资源，从其 content_json 中补充题目内容
+            kp_key = a.kp_id or ""
+            if not kp_key:
+                stem = None
+                options = None
+                answer = None
+                explanation = None
+                question_type = None
+                difficulty = None
+            elif kp_key not in resource_cache:
+                res_list = await db.execute(
+                    sa.select(ResourceMeta).where(
+                        ResourceMeta.kp_id == kp_key,
+                        ResourceMeta.resource_type == "quiz",
+                    )
+                )
+                all_items = []
+                for res in res_list.scalars().all():
+                    if res.content_json and res.content_json.get("items"):
+                        items = res.content_json["items"]
+                        all_items.extend(items)
+                        resource_cache[f"_res_{res.id}"] = items
+                resource_cache[kp_key] = all_items
+
+            item = find_item_content(a.quiz_item_id)
+            if item:
+                stem = item.get("stem")
+                options = item.get("options")
+                answer = item.get("answer")
+                explanation = item.get("explanation")
+                question_type = item.get("question_type")
+                difficulty = item.get("difficulty")
+            else:
+                stem = None
+                options = None
+                answer = None
+                explanation = None
+                question_type = None
+                difficulty = None
+
+        result.append(QuizAttemptOut(
             id=a.id,
             quiz_item_id=a.quiz_item_id,
             user_answer=a.user_answer,
@@ -877,9 +944,14 @@ async def get_quiz_attempts(
             kp_id=a.kp_id,
             kp_name=kp_name or (a.kp_id if a.kp_id else None),
             created_at=a.created_at,
-        )
-        for a, kp_name in rows
-    ]
+            stem=stem,
+            options=options,
+            answer=answer,
+            explanation=explanation,
+            question_type=question_type,
+            difficulty=difficulty,
+        ))
+    return result
 
 
 # ===========================================================
@@ -1053,11 +1125,12 @@ async def import_document_async(
     user_id: uuid.UUID,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    title: Optional[str] = None,
+    title: Annotated[Optional[str], Form()] = None,
 ):
     """
     异步导入 PDF 文档。立即返回 task_id，前端轮询 /documents/import/{task_id}/status。
     """
+    logger.info(f"[import_document_async] received title={title!r}, file.filename={file.filename!r}")
     file_name = file.filename or "unknown.pdf"
     if not file_name.lower().endswith(".pdf"):
         raise HTTPException(
@@ -1085,6 +1158,8 @@ async def import_document_async(
         def _cb(stage: str, pct: int):
             _doc_import_tasks[task_id]["stage"] = stage
             _doc_import_tasks[task_id]["progress"] = pct
+
+        logger.info(f"[_run_import] task_id={task_id}, title={title!r}")
 
         try:
             sf = _db_module._session_factory
