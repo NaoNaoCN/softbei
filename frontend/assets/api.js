@@ -118,6 +118,14 @@ export async function getResourceStats(user_id) {
     return resp?.json();
 }
 
+export async function getResource(resource_id, user_id) {
+    let url = `/resources/${resource_id}`;
+    if (user_id) url += `?user_id=${encodeURIComponent(user_id)}`;
+    const resp = await apiFetch(url);
+    return resp?.json();
+}
+
+
 export async function deleteResource(resource_id, user_id) {
     const resp = await apiFetch(`/resources/${resource_id}?user_id=${encodeURIComponent(user_id)}`, {
         method: 'DELETE'

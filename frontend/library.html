@@ -277,6 +277,135 @@
         .empty-state { text-align: center; padding: 60px 20px; color: #6B7280; }
         .empty-icon { width: 48px; height: 48px; margin-bottom: 16px; opacity: 0.5; display: inline-flex; align-items: center; justify-content: center; }
         .empty-text { font-size: 14px; }
+
+        /* Preview Modal */
+        .modal-mask {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-mask.active { display: flex; }
+        .modal {
+            background: #fff;
+            width: min(880px, 92vw);
+            max-height: 86vh;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid #E0E6ED;
+        }
+        .modal-title { font-size: 16px; font-weight: 600; color: #1A1A2E; }
+        .modal-close {
+            background: transparent; border: none; cursor: pointer;
+            color: #6B7280; font-size: 20px; line-height: 1;
+            width: 28px; height: 28px; border-radius: 6px;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .modal-close:hover { background: #F5F7FA; color: #1A1A2E; }
+        .modal-body {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+            font-size: 14px;
+            line-height: 1.7;
+            color: #1A1A2E;
+        }
+        .modal-body pre {
+            background: #F5F7FA;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+            padding: 12px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 13px;
+            color: #1A1A2E;
+        }
+        .modal-body .md-text { white-space: pre-wrap; word-break: break-word; }
+        .preview-quiz-item {
+            padding: 12px 14px;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            background: #FAFBFD;
+        }
+        .preview-quiz-q { font-weight: 600; margin-bottom: 8px; }
+        .preview-quiz-opt { padding: 4px 0; color: #374151; }
+        .preview-quiz-ans { margin-top: 8px; color: #1976D2; font-size: 13px; }
+        .preview-quiz-exp { margin-top: 4px; color: #6B7280; font-size: 13px; }
+        .preview-loading { text-align: center; color: #6B7280; padding: 30px 0; }
+
+        /* Mindmap Tree */
+        .mm-tree, .mm-tree ul {
+            list-style: none;
+            padding-left: 18px;
+            position: relative;
+        }
+        .mm-tree { padding-left: 0; }
+        .mm-tree li {
+            position: relative;
+            padding: 4px 0 4px 16px;
+            font-size: 14px;
+            color: #1A1A2E;
+        }
+        .mm-tree li::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 14px;
+            width: 10px; height: 1px;
+            background: #B0BEC5;
+        }
+        .mm-tree li::after {
+            content: '';
+            position: absolute;
+            left: 0; top: 0;
+            width: 1px; height: 100%;
+            background: #E0E6ED;
+        }
+        .mm-tree > li::after { display: none; }
+        .mm-tree li:last-child::after { height: 14px; }
+        .mm-node {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 6px;
+            background: #E3F2FD;
+            color: #1976D2;
+            font-weight: 600;
+            font-size: 13.5px;
+        }
+        .mm-tree li li .mm-node {
+            background: #F5F7FA;
+            color: #1A1A2E;
+            font-weight: 500;
+        }
+        .mm-tree li li li .mm-node {
+            background: transparent;
+            color: #374151;
+            font-weight: 400;
+            padding: 2px 0;
+        }
+
+        /* PDF iframe */
+        .pdf-frame {
+            width: 100%;
+            height: 70vh;
+            border: 1px solid #E0E6ED;
+            border-radius: 8px;
+        }
+        .pdf-fallback {
+            margin-top: 10px;
+            font-size: 13px;
+            color: #6B7280;
+        }
     </style>
 </head>
 <body>
@@ -362,8 +491,21 @@
         </main>
     </div>
 
+    <!-- Preview Modal -->
+    <div class="modal-mask" id="preview-modal" onclick="if(event.target===this)closePreview()">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title" id="preview-title">资源预览</div>
+                <button class="modal-close" onclick="closePreview()">&times;</button>
+            </div>
+            <div class="modal-body" id="preview-body">
+                <div class="preview-loading">加载中...</div>
+            </div>
+        </div>
+    </div>
+
     <script type="module">
-        import { isLoggedIn, getUserId, getResourceStats, getResources, deleteResource, importDocumentAsync, getImportStatus, buildKg, getKgBuildStatusByDoc } from './assets/api.js';
+        import { isLoggedIn, getUserId, getResourceStats, getResources, getResource, deleteResource, importDocumentAsync, getImportStatus, buildKg, getKgBuildStatusByDoc } from './assets/api.js';
 
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
@@ -414,7 +556,7 @@
                     </div>
                     <div class="resource-actions">
                         ${r.resource_type === 'doc' ? `<button class="btn-build-kg" onclick="handleBuildKg('${r.id}')">构建知识图谱</button>` : ''}
-                        <button class="btn-sm btn-sm-outline" onclick="location.href='library.html'">预览</button>
+                        <button class="btn-sm btn-sm-outline" onclick="handlePreview('${r.id}','${r.resource_type}')">预览</button>
                         ${r.resource_type === 'quiz' ? '<button class="btn-sm btn-sm-outline" onclick="location.href=\'evaluate.html\'">测验</button>' : ''}
                         <button class="btn-sm btn-sm-danger" onclick="handleDelete('${r.id}')">删除</button>
                     </div>
@@ -541,6 +683,119 @@
         window.handleFileSelect = handleFileSelect;
         window.handleImport = handleImport;
         window.changePage = changePage;
+
+        // ---- 资源预览 ----
+        function escapeHtml(s) {
+            if (s === null || s === undefined) return '';
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function renderMindmapTree(node) {
+            if (!node || typeof node !== 'object') return '';
+            // 兼容 {tree: {...}} 外层包裹
+            if (node.tree && !node.name && !node.children) node = node.tree;
+            const name = node.name || node.title || node.label || '未命名';
+            const children = Array.isArray(node.children) ? node.children : [];
+            const childHtml = children.length
+                ? `<ul>${children.map(c => renderMindmapTree(c)).join('')}</ul>`
+                : '';
+            return `<li><span class="mm-node">${escapeHtml(name)}</span>${childHtml}</li>`;
+        }
+
+        function extractPdfFilename(content) {
+            if (!content || typeof content !== 'string') return null;
+            // 优先精确匹配导入描述：已导入 PDF：xxx.pdf（兼容全/半角冒号）
+            const re1 = new RegExp('已导入\\s*PDF\\s*[\uff1a:]\\s*(.+?\\.pdf)', 'i');
+            let m = content.match(re1);
+            if (m) return m[1].trim();
+            // 降级：取第一个 .pdf 前的连续非分隔符文本（排除全/半角冒号与空白）
+            const re2 = new RegExp('([^\\s/\\\\:\uff1a*?"<>|]+\\.pdf)', 'i');
+            m = content.match(re2);
+            return m ? m[1].trim() : null;
+        }
+
+        function renderPreview(r) {
+            const type = r.resource_type;
+            if (type === 'doc' || type === 'summary') {
+                const text = r.content_path || '（暂无内容）';
+                // doc 类型优先识别 PDF：这里 content 通常是「已导入 PDF：xxx.pdf，共 N 个文本块」
+                if (type === 'doc') {
+                    const fname = extractPdfFilename(text);
+                    if (fname) {
+                        const url = `http://localhost:8000/documents/file/${encodeURIComponent(fname)}`;
+                        return `
+                            <div style="margin-bottom:10px;color:#6B7280;font-size:13px;">文件：${escapeHtml(fname)}
+                                · <a href="${url}" target="_blank" style="color:#1976D2;text-decoration:none;">在新标签页打开</a>
+                            </div>
+                            <iframe class="pdf-frame" src="${url}" title="PDF 预览"></iframe>
+                            <div class="pdf-fallback">若浏览器未内置 PDF 查看器，请点击上方「在新标签页打开」。</div>
+                        `;
+                    }
+                }
+                return `<div class="md-text">${escapeHtml(text)}</div>`;
+            }
+            if (type === 'code') {
+                const cj = r.content_json || {};
+                const code = cj.code || r.content_path || '（暂无代码）';
+                const lang = cj.language ? `<div style="color:#6B7280;font-size:12px;margin-bottom:8px;">语言：${escapeHtml(cj.language)}</div>` : '';
+                return `${lang}<pre>${escapeHtml(code)}</pre>`;
+            }
+            if (type === 'mindmap') {
+                const cj = r.content_json || {};
+                // 根节点可能被 {tree: {...}} 包裹
+                const root = cj.tree && !cj.name ? cj.tree : cj;
+                if (!root || (!root.name && !Array.isArray(root.children))) {
+                    return '<div style="color:#6B7280;">（暂无内容）</div>';
+                }
+                return `<ul class="mm-tree">${renderMindmapTree(root)}</ul>`;
+            }
+            if (type === 'quiz') {
+                const items = (r.content_json && r.content_json.items) || [];
+                if (!items.length) return '<div style="color:#6B7280;">（暂无题目）</div>';
+                return items.map((q, i) => {
+                    const opts = Array.isArray(q.options)
+                        ? q.options.map((o, idx) => `<div class="preview-quiz-opt">${String.fromCharCode(65 + idx)}. ${escapeHtml(o)}</div>`).join('')
+                        : '';
+                    const ans = q.answer !== undefined ? `<div class="preview-quiz-ans">参考答案：${escapeHtml(Array.isArray(q.answer) ? q.answer.join(', ') : q.answer)}</div>` : '';
+                    const exp = q.explanation ? `<div class="preview-quiz-exp">解析：${escapeHtml(q.explanation)}</div>` : '';
+                    return `<div class="preview-quiz-item"><div class="preview-quiz-q">${i + 1}. ${escapeHtml(q.question || q.stem || '')}</div>${opts}${ans}${exp}</div>`;
+                }).join('');
+            }
+            return `<pre>${escapeHtml(JSON.stringify(r, null, 2))}</pre>`;
+        }
+
+        async function handlePreview(resourceId, resourceType) {
+            const modal = document.getElementById('preview-modal');
+            const body = document.getElementById('preview-body');
+            const titleEl = document.getElementById('preview-title');
+            titleEl.textContent = '资源预览';
+            body.innerHTML = '<div class="preview-loading">加载中...</div>';
+            modal.classList.add('active');
+            try {
+                const r = await getResource(resourceId, userId);
+                if (!r || r.detail) {
+                    body.innerHTML = `<div style="color:#E53935;">加载失败：${escapeHtml(r?.detail || '未知错误')}</div>`;
+                    return;
+                }
+                titleEl.textContent = `${TYPE_MAP[r.resource_type] || r.resource_type} · ${r.title || '未命名'}`;
+                body.innerHTML = renderPreview(r);
+            } catch (e) {
+                body.innerHTML = `<div style="color:#E53935;">加载失败：${escapeHtml(e.message)}</div>`;
+            }
+        }
+
+        function closePreview() {
+            document.getElementById('preview-modal').classList.remove('active');
+        }
+
+        window.handlePreview = handlePreview;
+        window.closePreview = closePreview;
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePreview(); });
 
         loadStats();
         loadResources();

@@ -14,7 +14,7 @@ from typing import Optional, Annotated
 import jwt
 from fastapi import BackgroundTasks, Body, Depends, FastAPI, HTTPException, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.hash_utils import hash_password, verify_password
@@ -363,6 +363,29 @@ async def get_session_messages(
     if not chat_sess.messages_table:
         return []
     return await read_messages(chat_sess.messages_table)
+
+@app.get("/documents/file/{filename}", tags=["documents"])
+async def get_document_file(filename: str):
+    """返回 uploaded_docs 目录下的 PDF 文件供前端 iframe 预览。
+
+    只接受纯文件名，拒绝路径穿越。
+    """
+    from pathlib import Path
+    # 防止路径穿越：文件名不允许含分隔符或上级引用
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="非法文件名")
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="仅支持 PDF 预览")
+    upload_dir = Path(__file__).parent.parent / "uploaded_docs"
+    file_path = upload_dir / filename
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="文件不存在")
+    return FileResponse(
+        path=str(file_path),
+        media_type="application/pdf",
+        filename=filename,
+        content_disposition_type="inline",
+    )
 
 
 @app.delete("/chat/sessions/{session_id}", tags=["chat"])
