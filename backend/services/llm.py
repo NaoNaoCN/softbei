@@ -11,8 +11,8 @@ from typing import AsyncGenerator, Optional
 
 from loguru import logger  # noqa: F401
 
-from openai import AsyncOpenAI, RateLimitError
-from tenacity import retry, stop_after_attempt, wait_exponential
+from openai import AsyncOpenAI, RateLimitError, PermissionDeniedError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from backend.config import config
 
@@ -52,7 +52,7 @@ def _make_client(provider: str) -> tuple[AsyncOpenAI, str]:
         return AsyncOpenAI(
             api_key=config.llm.api_key,
             base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        ), "qwen3.5-plus-2026-02-15"
+        ), "qwen3.5-397b-a17b"
 
     if provider == "openai":
         return AsyncOpenAI(
@@ -86,7 +86,11 @@ def _get_embedding_model():
 # 核心调用接口
 # ===========================================================
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+@retry(
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=2, min=3, max=30),
+    retry=retry_if_exception_type((RateLimitError, PermissionDeniedError)),
+)
 async def chat_completion(
     messages: list[dict],
     model: Optional[str] = None,

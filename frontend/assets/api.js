@@ -31,7 +31,12 @@ export function isLoggedIn() {
 }
 
 export async function apiFetch(endpoint, options = {}) {
-    const resp = await fetch(`${API_BASE}${endpoint}`, options);
+    const token = getToken();
+    const headers = { ...(options.headers || {}) };
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    const resp = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
     if (resp.status === 401) {
         clearAuth();
         window.location.href = 'auth.html';
@@ -305,8 +310,14 @@ export async function importDocumentAsync(user_id, file, title) {
         console.log('[importDocumentAsync] appending title:', JSON.stringify(title));
         formData.append('title', title);
     }
+    const headers = {};
+    const token = getToken();
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
     const resp = await fetch(`${API_BASE}/documents/import/async?user_id=${encodeURIComponent(user_id)}`, {
         method: 'POST',
+        headers,
         body: formData
     });
     return resp?.json();

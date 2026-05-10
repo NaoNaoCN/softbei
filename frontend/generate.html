@@ -251,6 +251,15 @@
         }
         .result-success-icon { width: 48px; height: 48px; margin-bottom: 16px; display: inline-flex; align-items: center; justify-content: center; }
         .result-success-title { font-size: 18px; font-weight: 600; color: #1A1A2E; margin-bottom: 8px; }
+
+        /* 多级知识点选择器 */
+        .kp-cascade { display: flex; flex-direction: column; gap: 8px; }
+        .kp-cascade .form-select { transition: opacity 0.2s; }
+        .kp-cascade .form-select:disabled { opacity: 0.5; }
+        .kp-selected-path {
+            margin-top: 6px; padding: 8px 12px; background: #E3F2FD; border-radius: 6px;
+            font-size: 12px; color: #1565C0; display: none; word-break: break-all;
+        }
     </style>
 </head>
 <body>
@@ -310,9 +319,12 @@
 
                     <div class="form-group">
                         <label class="form-label">选择知识点</label>
-                        <select class="form-select" id="kp-select">
-                            <option value="">加载中...</option>
-                        </select>
+                        <div class="kp-cascade" id="kp-cascade">
+                            <select class="form-select" id="kp-level-0">
+                                <option value="">加载中...</option>
+                            </select>
+                        </div>
+                        <div class="kp-selected-path" id="kp-selected-path"></div>
                     </div>
 
                     <div class="form-group">
@@ -414,46 +426,171 @@
         const prefillType = urlParams.get('type');
 
         async function loadKgNodes() {
-            const graph = await getKgGraph({ depth: 2 });
-            const select = document.getElementById('kp-select');
-            if (graph && graph.nodes) {
-                select.innerHTML = graph.nodes.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
-                // 预填充知识点
-                if (prefillKp) {
-                    const decodedKp = decodeURIComponent(prefillKp);
-                    for (let i = 0; i < select.options.length; i++) {
-                        if (select.options[i].textContent === decodedKp) {
-                            select.selectedIndex = i;
-                            break;
-                        }
-                    }
+            const graph = await getKgGraph({ depth: 5 });
+            if (!graph || !graph.nodes || !graph.nodes.length) {
+                document.getElementById('kp-level-0').innerHTML = '<option value="">暂无可用知识点</option>';
+                return;
+            }
+
+            // 构建树结构：通过 edges 建立 parent → children 映射
+            const nodeMap = {};
+            graph.nodes.forEach(n => { nodeMap[n.id] = { ...n, children: [] }; });
+
+            const childSet = new Set();
+            (graph.edges || []).forEach(e => {
+                // IS_PART_OF: source 是子节点, target 是父节点
+                // CONTAINS: source 是父节点, target 是子节点
+                if (e.relation === 'IS_PART_OF' && nodeMap[e.source_id] && nodeMap[e.target_id]) {
+                    nodeMap[e.target_id].children.push(nodeMap[e.source_id]);
+                    childSet.add(e.source_id);
+                } else if (e.relation === 'CONTAINS' && nodeMap[e.source_id] && nodeMap[e.target_id]) {
+                    nodeMap[e.source_id].children.push(nodeMap[e.target_id]);
+                    childSet.add(e.target_id);
                 }
-                // 预填充资源类型
-                if (prefillType) {
-                    const radio = document.querySelector(`input[name="resource_type"][value="${prefillType}"]`);
-                    if (radio) {
-                        radio.checked = true;
-                        const label = radio.closest('.form-radio');
-                        if (label) {
-                            label.parentElement.querySelectorAll('.form-radio').forEach(el => el.classList.remove('selected'));
-                            label.classList.add('selected');
-                        }
-                        // 显示测验题目数量选择器（如果需要）
-                        const quizGroup = document.getElementById('quiz-count-group');
-                        const typeInputs = document.getElementById('quiz-type-inputs');
-                        if (quizGroup && prefillType === 'quiz') {
-                            quizGroup.style.display = 'block';
-                            if (typeInputs) typeInputs.style.display = 'block';
-                        }
-                    }
-                }
-            } else {
-                select.innerHTML = '<option value="">暂无可用知识点</option>';
+            });
+
+            // 根节点：没有被任何 IS_PART_OF/CONTAINS 指向为子节点的
+            const roots = graph.nodes.filter(n => !childSet.has(n.id));
+
+            // 类型排序优先级
+            const typePriority = { Course: 0, Chapter: 1, KnowledgePoint: 2, SubPoint: 3, Concept: 4 };
+            const sortNodes = (arr) => arr.sort((a, b) => (typePriority[a.type] || 9) - (typePriority[b.type] || 9) || a.name.localeCompare(b.name));
+
+            // 存储树数据供级联使用
+            window._kgTree = { nodeMap, roots: sortNodes(roots) };
+
+            // 渲染第一级
+            renderCascadeLevel(0, roots);
+
+            // 预填充
+            if (prefillKp) {
+                const decodedKp = decodeURIComponent(prefillKp);
+                // 找到匹配节点并展开路径
+                const target = graph.nodes.find(n => n.name === decodedKp || n.id === decodedKp);
+                if (target) selectNodeById(target.id);
             }
         }
 
+        function renderCascadeLevel(level, nodes) {
+            const container = document.getElementById('kp-cascade');
+            // 移除当前级别及之后的所有 select
+            const existing = container.querySelectorAll('.form-select');
+            for (let i = level; i < existing.length; i++) existing[i].remove();
+
+            if (!nodes || !nodes.length) { updateSelectedPath(); return; }
+
+            const typeLabels = { Course: '课程', Chapter: '章节', KnowledgePoint: '知识点', SubPoint: '子知识点', Concept: '概念' };
+            const typePriority = { Course: 0, Chapter: 1, KnowledgePoint: 2, SubPoint: 3, Concept: 4 };
+            const sorted = [...nodes].sort((a, b) => (typePriority[a.type] || 9) - (typePriority[b.type] || 9) || a.name.localeCompare(b.name));
+
+            const levelType = sorted[0]?.type;
+            const placeholder = typeLabels[levelType] || '下一级';
+
+            const sel = document.createElement('select');
+            sel.className = 'form-select';
+            sel.id = `kp-level-${level}`;
+            sel.innerHTML = `<option value="">-- 选择${placeholder} --</option>` +
+                sorted.map(n => `<option value="${n.id}">${n.name}</option>`).join('');
+            sel.addEventListener('change', () => onCascadeChange(level));
+            container.appendChild(sel);
+            updateSelectedPath();
+        }
+
+        function onCascadeChange(level) {
+            const sel = document.getElementById(`kp-level-${level}`);
+            const nodeId = sel.value;
+            const container = document.getElementById('kp-cascade');
+            // 移除下级 selects
+            const existing = container.querySelectorAll('.form-select');
+            for (let i = level + 1; i < existing.length; i++) existing[i].remove();
+
+            if (nodeId && window._kgTree) {
+                const node = window._kgTree.nodeMap[nodeId];
+                if (node && node.children && node.children.length) {
+                    renderCascadeLevel(level + 1, node.children);
+                }
+            }
+            updateSelectedPath();
+        }
+
+        function getSelectedKpId() {
+            // 返回最深层级选中的值
+            const container = document.getElementById('kp-cascade');
+            const selects = container.querySelectorAll('.form-select');
+            let lastValue = '';
+            for (const sel of selects) {
+                if (sel.value) lastValue = sel.value;
+            }
+            return lastValue;
+        }
+
+        function getSelectedKpName() {
+            const container = document.getElementById('kp-cascade');
+            const selects = container.querySelectorAll('.form-select');
+            let lastName = '';
+            for (const sel of selects) {
+                if (sel.value) {
+                    const opt = sel.options[sel.selectedIndex];
+                    if (opt) lastName = opt.textContent;
+                }
+            }
+            return lastName;
+        }
+
+        function updateSelectedPath() {
+            const container = document.getElementById('kp-cascade');
+            const pathEl = document.getElementById('kp-selected-path');
+            const selects = container.querySelectorAll('.form-select');
+            const parts = [];
+            for (const sel of selects) {
+                if (sel.value) {
+                    const opt = sel.options[sel.selectedIndex];
+                    if (opt) parts.push(opt.textContent);
+                }
+            }
+            if (parts.length > 1) {
+                pathEl.textContent = '路径：' + parts.join(' → ');
+                pathEl.style.display = 'block';
+            } else {
+                pathEl.style.display = 'none';
+            }
+        }
+
+        function selectNodeById(targetId) {
+            // 找到从根到目标的路径，逐级选中
+            if (!window._kgTree) return;
+            const { nodeMap, roots } = window._kgTree;
+            const path = [];
+            function findPath(nodes, id) {
+                for (const n of nodes) {
+                    if (n.id === id) { path.push(n.id); return true; }
+                    if (n.children && n.children.length) {
+                        path.push(n.id);
+                        if (findPath(n.children, id)) return true;
+                        path.pop();
+                    }
+                }
+                return false;
+            }
+            findPath(roots, targetId);
+            // 逐级选中
+            let currentNodes = roots;
+            for (let i = 0; i < path.length; i++) {
+                const sel = document.getElementById(`kp-level-${i}`);
+                if (sel) {
+                    sel.value = path[i];
+                    const node = nodeMap[path[i]];
+                    if (node && node.children && node.children.length && i < path.length - 1) {
+                        renderCascadeLevel(i + 1, node.children);
+                    }
+                }
+            }
+            updateSelectedPath();
+        }
+
         async function handleGenerate() {
-            const kpId = document.getElementById('kp-select').value;
+            const kpId = getSelectedKpId();
+            const kpName = getSelectedKpName();
             const resourceType = document.querySelector('input[name="resource_type"]:checked')?.value || 'doc';
 
             let numQuestions = 4;
@@ -564,7 +701,26 @@
         window.selectRadio = selectRadio;
         window.syncQuizTotal = syncQuizTotal;
 
-        loadKgNodes();
+        loadKgNodes().then(() => {
+            // 预填充资源类型
+            if (prefillType) {
+                const radio = document.querySelector(`input[name="resource_type"][value="${prefillType}"]`);
+                if (radio) {
+                    radio.checked = true;
+                    const label = radio.closest('.form-radio');
+                    if (label) {
+                        label.parentElement.querySelectorAll('.form-radio').forEach(el => el.classList.remove('selected'));
+                        label.classList.add('selected');
+                    }
+                    const quizGroup = document.getElementById('quiz-count-group');
+                    const typeInputs = document.getElementById('quiz-type-inputs');
+                    if (quizGroup && prefillType === 'quiz') {
+                        quizGroup.style.display = 'block';
+                        if (typeInputs) typeInputs.style.display = 'block';
+                    }
+                }
+            }
+        });
     </script>
     <script>lucide.createIcons();</script>
 </body>

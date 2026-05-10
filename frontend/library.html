@@ -555,7 +555,7 @@
                         </div>
                     </div>
                     <div class="resource-actions">
-                        ${r.resource_type === 'doc' ? `<button class="btn-build-kg" onclick="handleBuildKg('${r.id}')">构建知识图谱</button>` : ''}
+                        ${r.resource_type === 'doc' ? `<button class="btn-build-kg" onclick="handleBuildKg('${r.kp_id}')">构建知识图谱</button>` : ''}
                         <button class="btn-sm btn-sm-outline" onclick="handlePreview('${r.id}','${r.resource_type}')">预览</button>
                         ${r.resource_type === 'quiz' ? '<button class="btn-sm btn-sm-outline" onclick="location.href=\'evaluate.html\'">测验</button>' : ''}
                         <button class="btn-sm btn-sm-danger" onclick="handleDelete('${r.id}')">删除</button>
@@ -570,6 +570,11 @@
                 <span class="page-info">第 ${currentPage} / ${totalPages} 页</span>
                 <button class="page-btn" onclick="changePage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>下一页</button>
             `;
+            lucide.createIcons();
+
+            // 检查是否有正在进行的 KG 构建任务并恢复进度显示
+            const docItems = items.filter(r => r.resource_type === 'doc' && r.kp_id);
+            if (docItems.length) checkRunningKgBuilds(docItems);
         }
 
         function changePage(p) {
@@ -577,9 +582,59 @@
             loadResources();
         }
 
+        // 恢复正在进行的 KG 构建进度
+        async function checkRunningKgBuilds(docItems) {
+            for (const r of docItems) {
+                try {
+                    const s = await getKgBuildStatusByDoc(r.kp_id);
+                    if (s && (s.status === 'running' || s.status === 'pending')) {
+                        showKgBuildProgress(r.kp_id, s);
+                    }
+                } catch(e) { /* ignore */ }
+            }
+        }
+
+        function showKgBuildProgress(kpId, initialStatus) {
+            const btn = document.querySelector(`[onclick="handleBuildKg('${kpId}')"]`);
+            if (!btn) return;
+            // 避免重复添加
+            if (btn.parentElement.querySelector('.kg-build-status')) return;
+            btn.style.display = 'none';
+            const statusEl = document.createElement('div');
+            statusEl.className = 'kg-build-status';
+            statusEl.style.cssText = 'margin-top:12px;padding:12px;background:#E3F2FD;border-radius:8px;font-size:13px;color:#1976D2;';
+            statusEl.textContent = '构建中: ' + (initialStatus.progress || 0) + '% · ' + (initialStatus.stage || '处理中');
+            btn.parentElement.appendChild(statusEl);
+            pollKgBuildStatus(kpId, statusEl, btn);
+        }
+
+        function pollKgBuildStatus(kpId, statusEl, btn) {
+            const poll = async () => {
+                try {
+                    const s = await getKgBuildStatusByDoc(kpId);
+                    if (!s) return setTimeout(poll, 3000);
+                    if (s.status === 'done' || s.status === 'completed') {
+                        statusEl.textContent = '✓ 知识图谱构建完成！';
+                        statusEl.style.background = '#E8F5E9';
+                        statusEl.style.color = '#43A047';
+                    } else if (s.status === 'failed') {
+                        statusEl.textContent = '✗ 构建失败: ' + (s.error_message || s.error_msg || '未知错误');
+                        statusEl.style.background = '#FFEBEE';
+                        statusEl.style.color = '#E53935';
+                        if (btn) btn.style.display = '';
+                    } else {
+                        statusEl.textContent = '构建中: ' + (s.progress || 0) + '% · ' + (s.stage || '处理中');
+                        setTimeout(poll, 3000);
+                    }
+                } catch(e) { setTimeout(poll, 5000); }
+            };
+            setTimeout(poll, 3000);
+        }
+
         async function handleBuildKg(kpId) {
             if (!confirm('确定要为此文档构建知识图谱吗？')) return;
             const statusEl = document.createElement('div');
+            statusEl.className = 'kg-build-status';
             statusEl.style.cssText = 'margin-top:12px;padding:12px;background:#E3F2FD;border-radius:8px;font-size:13px;color:#1976D2;';
             statusEl.textContent = '正在提交知识图谱构建任务...';
             const btn = document.querySelector(`[onclick="handleBuildKg('${kpId}')"]`);
@@ -589,23 +644,7 @@
                 const result = await buildKg(kpId, userId);
                 if (result && result.task_id) {
                     statusEl.textContent = '任务已提交，正在构建...';
-                    const poll = async () => {
-                        const s = await getKgBuildStatusByDoc(kpId);
-                        if (!s) return setTimeout(poll, 3000);
-                        if (s.status === 'completed') {
-                            statusEl.textContent = '✓ 知识图谱构建完成！';
-                            statusEl.style.background = '#E8F5E9';
-                            statusEl.style.color = '#43A047';
-                        } else if (s.status === 'failed') {
-                            statusEl.textContent = '✗ 构建失败: ' + (s.error_msg || '未知错误');
-                            statusEl.style.background = '#FFEBEE';
-                            statusEl.style.color = '#E53935';
-                        } else {
-                            statusEl.textContent = '构建中: ' + (s.progress || 0) + '% · ' + (s.stage || '处理中');
-                            setTimeout(poll, 3000);
-                        }
-                    };
-                    poll();
+                    pollKgBuildStatus(kpId, statusEl, btn);
                 } else {
                     throw new Error(result?.detail || '提交失败');
                 }
@@ -670,6 +709,7 @@
         }
 
         window.handleDelete = handleDelete;
+        window.handleBuildKg = handleBuildKg;
         async function handleDelete(resourceId) {
             if (!confirm('确定删除此资源？')) return;
             try {

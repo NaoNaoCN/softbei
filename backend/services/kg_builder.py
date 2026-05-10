@@ -308,7 +308,7 @@ def _attach_details_to_sections(
 # 核心提取逻辑
 # ----------------------------------------------------------
 
-# 并发控制：最多同时 10 个 LLM 请求
+# 并发控制：最多同时 3 个 LLM 请求（避免触发 DashScope 并发限流）
 _LLM_SEMAPHORE = asyncio.Semaphore(10)
 
 
@@ -683,10 +683,12 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
         )
     await db.flush()
 
-    # 6. 写入节点
+    # 6. 写入节点（去重：同名节点只保留第一个）
     name_to_id: dict[str, str] = {}
     edge_count = 0
     for node in nodes:
+        if node["name"] in name_to_id:
+            continue  # 跳过重复名称的节点
         node_id = _make_node_id(node["name"], doc_id)
         name_to_id[node["name"]] = node_id
         db.add(KGNode(
@@ -716,28 +718,37 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
     name_to_id[course_title] = course_node_id
     await db.flush()
 
+    # 边去重集合：(source_id, target_id, relation)
+    seen_edges: set[tuple[str, str, str]] = set()
+
     # 所有 Chapter 节点 → IS_PART_OF → Course
     for node in nodes:
         if node["type"] == "Chapter":
             node_id = _make_node_id(node["name"], doc_id)
-            db.add(KGEdge(
-                source_id=node_id,
-                target_id=course_node_id,
-                relation="IS_PART_OF",
-            ))
-            edge_count += 1
+            edge_key = (node_id, course_node_id, "IS_PART_OF")
+            if edge_key not in seen_edges:
+                seen_edges.add(edge_key)
+                db.add(KGEdge(
+                    source_id=node_id,
+                    target_id=course_node_id,
+                    relation="IS_PART_OF",
+                ))
+                edge_count += 1
 
-    # 8. 写入 LLM 推断的边
+    # 8. 写入 LLM 推断的边（去重）
     for edge in edges:
         src_id = name_to_id.get(edge["source"])
         tgt_id = name_to_id.get(edge["target"])
         if src_id and tgt_id:
-            db.add(KGEdge(
-                source_id=src_id,
-                target_id=tgt_id,
-                relation=edge["relation"],
-            ))
-            edge_count += 1
+            edge_key = (src_id, tgt_id, edge["relation"])
+            if edge_key not in seen_edges:
+                seen_edges.add(edge_key)
+                db.add(KGEdge(
+                    source_id=src_id,
+                    target_id=tgt_id,
+                    relation=edge["relation"],
+                ))
+                edge_count += 1
     await db.commit()
 
     logger.info(f"[KG] 构建完成: {len(nodes)} 节点, {edge_count} 边")
@@ -753,29 +764,36 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
 # ----------------------------------------------------------
 
 async def run_kg_build(task_id, doc_id: str, db: AsyncSession, user_id=None) -> None:
-    """后台执行 KG 构建，通过 KGBuildTask 记录进度。"""
+    """后台执行 KG 构建，通过 KGBuildTask 记录进度。
+
+    注意：FastAPI BackgroundTasks 在请求结束后执行，此时请求作用域的 db session
+    已关闭，因此必须创建独立的 session。
+    """
     from backend.db.crud import update_by_id
     from backend.db.models import KGBuildTask
+    from backend.db.database import _session_factory
 
-    async def on_progress(progress: int, stage: str):
-        await update_by_id(db, KGBuildTask, task_id, {
-            "status": "running", "progress": progress, "stage": stage,
-        })
+    async with _session_factory() as session:
+        async def on_progress(progress: int, stage: str):
+            await update_by_id(session, KGBuildTask, task_id, {
+                "status": "running", "progress": progress, "stage": stage,
+            })
 
-    try:
-        result = await build_kg(doc_id, db, on_progress=on_progress, user_id=user_id)
-        await update_by_id(db, KGBuildTask, task_id, {
-            "status": "done",
-            "progress": 100,
-            "stage": "构建完成",
-            "nodes_count": result["nodes_count"],
-            "edges_count": result["edges_count"],
-        })
-    except Exception as e:
-        logger.error(f"[KG] 后台构建失败: {e}")
-        await update_by_id(db, KGBuildTask, task_id, {
-            "status": "failed",
-            "progress": 0,
-            "stage": "构建失败",
-            "error_message": str(e),
-        })
+        try:
+            result = await build_kg(doc_id, session, on_progress=on_progress, user_id=user_id)
+            await update_by_id(session, KGBuildTask, task_id, {
+                "status": "done",
+                "progress": 100,
+                "stage": "构建完成",
+                "nodes_count": result["nodes_count"],
+                "edges_count": result["edges_count"],
+            })
+        except Exception as e:
+            logger.error(f"[KG] 后台构建失败: {e}")
+            await session.rollback()
+            await update_by_id(session, KGBuildTask, task_id, {
+                "status": "failed",
+                "progress": 0,
+                "stage": "构建失败",
+                "error_message": str(e)[:500],
+            })

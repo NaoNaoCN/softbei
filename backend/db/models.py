@@ -206,6 +206,7 @@ class KGBuildTask(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     doc_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
     status: Mapped[str] = mapped_column(
         Enum(TaskStatus, values_callable=lambda e: [m.value for m in e]),
         default=TaskStatus.pending,

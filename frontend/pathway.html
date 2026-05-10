@@ -69,16 +69,154 @@
             padding: 20px;
             margin-bottom: 24px;
             min-height: 400px;
+        }
+        .kg-main {
+            display: block;
+        }
+        .kg-graph-area {
+            width: 100%;
+            position: relative;
+            border-radius: 10px;
+            overflow: hidden;
+            background:
+                /* Nebula glow - center */
+                radial-gradient(ellipse at 50% 50%, rgba(100,140,200,0.10) 0%, transparent 60%),
+                /* Nebula glow - offset */
+                radial-gradient(ellipse at 75% 30%, rgba(150,115,190,0.07) 0%, transparent 50%),
+                radial-gradient(ellipse at 25% 70%, rgba(90,170,170,0.05) 0%, transparent 50%),
+                /* Base gradient - lighter */
+                linear-gradient(135deg, #1e2530 0%, #252d3a 40%, #2a3245 70%, #1e2530 100%);
+        }
+        .kg-graph-area::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            background-image:
+                radial-gradient(1px 1px at 3% 8%, rgba(255,255,255,0.6) 0%, transparent 100%),
+                radial-gradient(1px 1px at 7% 35%, rgba(255,255,255,0.45) 0%, transparent 100%),
+                radial-gradient(1.2px 1.2px at 10% 62%, rgba(255,255,255,0.7) 0%, transparent 100%),
+                radial-gradient(1px 1px at 14% 88%, rgba(255,255,255,0.35) 0%, transparent 100%),
+                radial-gradient(1px 1px at 18% 22%, rgba(255,255,255,0.5) 0%, transparent 100%),
+                radial-gradient(1.5px 1.5px at 22% 50%, rgba(255,255,255,0.65) 0%, transparent 100%),
+                radial-gradient(1px 1px at 26% 75%, rgba(255,255,255,0.4) 0%, transparent 100%),
+                radial-gradient(1px 1px at 30% 12%, rgba(255,255,255,0.55) 0%, transparent 100%),
+                radial-gradient(1.2px 1.2px at 34% 42%, rgba(255,255,255,0.5) 0%, transparent 100%),
+                radial-gradient(1px 1px at 38% 68%, rgba(255,255,255,0.35) 0%, transparent 100%),
+                radial-gradient(1px 1px at 42% 5%, rgba(255,255,255,0.6) 0%, transparent 100%),
+                radial-gradient(1.5px 1.5px at 46% 30%, rgba(255,255,255,0.7) 0%, transparent 100%),
+                radial-gradient(1px 1px at 50% 55%, rgba(255,255,255,0.4) 0%, transparent 100%),
+                radial-gradient(1px 1px at 54% 82%, rgba(255,255,255,0.5) 0%, transparent 100%),
+                radial-gradient(1.2px 1.2px at 58% 18%, rgba(255,255,255,0.55) 0%, transparent 100%),
+                radial-gradient(1px 1px at 62% 45%, rgba(255,255,255,0.3) 0%, transparent 100%),
+                radial-gradient(1px 1px at 66% 72%, rgba(255,255,255,0.6) 0%, transparent 100%),
+                radial-gradient(1.5px 1.5px at 70% 95%, rgba(255,255,255,0.45) 0%, transparent 100%),
+                radial-gradient(1px 1px at 74% 28%, rgba(255,255,255,0.5) 0%, transparent 100%),
+                radial-gradient(1.2px 1.2px at 78% 58%, rgba(255,255,255,0.65) 0%, transparent 100%),
+                radial-gradient(1px 1px at 82% 8%, rgba(255,255,255,0.4) 0%, transparent 100%),
+                radial-gradient(1px 1px at 85% 38%, rgba(255,255,255,0.55) 0%, transparent 100%),
+                radial-gradient(1.5px 1.5px at 88% 65%, rgba(255,255,255,0.7) 0%, transparent 100%),
+                radial-gradient(1px 1px at 91% 85%, rgba(255,255,255,0.35) 0%, transparent 100%),
+                radial-gradient(1px 1px at 94% 15%, rgba(255,255,255,0.5) 0%, transparent 100%),
+                radial-gradient(1.2px 1.2px at 97% 48%, rgba(255,255,255,0.6) 0%, transparent 100%),
+                radial-gradient(1px 1px at 12% 48%, rgba(255,255,255,0.3) 0%, transparent 100%),
+                radial-gradient(1px 1px at 36% 92%, rgba(255,255,255,0.45) 0%, transparent 100%),
+                radial-gradient(1.5px 1.5px at 60% 3%, rgba(255,255,255,0.5) 0%, transparent 100%),
+                radial-gradient(1px 1px at 84% 52%, rgba(255,255,255,0.4) 0%, transparent 100%);
+        }
+        .kg-detail-panel {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 340px;
+            height: 100vh;
+            background: #fff;
+            border-left: 1px solid #E0E6ED;
+            box-shadow: -4px 0 24px rgba(0,0,0,0.08);
+            padding: 20px;
+            overflow-y: auto;
+            z-index: 1000;
+            transform: translateX(100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .kg-detail-panel.open {
+            transform: translateX(0);
+        }
+        .kg-detail-panel .panel-close {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 28px;
+            height: 28px;
+            border: none;
+            background: #F3F4F6;
+            border-radius: 6px;
+            cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
+            font-size: 16px;
+            color: #6B7280;
+            transition: all 0.2s;
         }
+        .kg-detail-panel .panel-close:hover { background: #E5E7EB; color: #1A1A2E; }
+        .kg-detail-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.15);
+            z-index: 999;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .kg-detail-backdrop.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .kg-detail-panel h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; color: #1A1A2E; }
+        .kg-detail-panel .detail-type { display: inline-block; font-size: 11px; background: #E3F2FD; color: #1976D2; padding: 2px 8px; border-radius: 4px; margin-bottom: 8px; }
+        .kg-detail-panel .detail-id { font-size: 11px; color: #9CA3AF; margin-bottom: 8px; word-break: break-all; }
+        .kg-detail-panel .detail-desc { font-size: 13px; color: #4B5563; margin-bottom: 12px; line-height: 1.5; }
+        .kg-detail-panel .detail-section { font-size: 13px; font-weight: 600; color: #374151; margin: 12px 0 6px; }
+        .kg-detail-panel .relation-item { font-size: 12px; color: #4B5563; padding: 4px 0; display: flex; align-items: center; gap: 4px; }
+        .kg-detail-panel .resource-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #fff; border: 1px solid #E0E6ED; border-radius: 6px; margin-bottom: 6px; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+        .kg-detail-panel .resource-item:hover { border-color: #1976D2; }
+        .kg-detail-panel .detail-actions { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+        .kg-detail-panel .detail-actions button { width: 100%; }
         .kg-placeholder {
             text-align: center;
             color: #6B7280;
+            padding: 60px 20px;
         }
         .kg-placeholder-icon { width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.5; display: inline-flex; align-items: center; justify-content: center; }
         .kg-placeholder-text { font-size: 14px; }
+
+        /* KG Progress Bar */
+        .kg-progress-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 16px;
+            background: #E8F5E9;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: #2E7D32;
+        }
+        .kg-progress-bar .bar { flex: 1; height: 6px; background: #C8E6C9; border-radius: 3px; overflow: hidden; }
+        .kg-progress-bar .bar-fill { height: 100%; background: #43A047; border-radius: 3px; }
+
+        /* Type filter checkboxes */
+        .type-filter-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .type-filter-group label { display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; padding: 4px 8px; border-radius: 4px; background: #F5F7FA; border: 1px solid #E0E6ED; transition: all 0.2s; }
+        .type-filter-group label:hover { border-color: #1976D2; }
+        .type-filter-group input[type="checkbox"] { width: 14px; height: 14px; }
+
+        /* Pathway select in detail panel */
+        .pathway-select-list { max-height: 150px; overflow-y: auto; border: 1px solid #E0E6ED; border-radius: 6px; margin-top: 6px; }
+        .pathway-select-item { padding: 8px 12px; font-size: 12px; cursor: pointer; transition: background 0.2s; }
+        .pathway-select-item:hover { background: #E3F2FD; }
 
         /* KG Filter Bar */
         .kg-filter {
@@ -195,7 +333,7 @@
         /* Node List */
         .node-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(3, 1fr);
             gap: 12px;
             margin-top: 16px;
         }
@@ -265,6 +403,26 @@
             outline: none;
         }
         .form-input:focus { border-color: #1976D2; }
+
+        /* KG 全屏模式 */
+        body.kg-fullscreen .sidebar,
+        body.kg-fullscreen .page-title,
+        body.kg-fullscreen .page-subtitle,
+        body.kg-fullscreen .tabs,
+        body.kg-fullscreen #tab-pathways,
+        body.kg-fullscreen #tab-records,
+        body.kg-fullscreen #node-grid-section { display: none !important; }
+
+        body.kg-fullscreen .main { margin-left: 0; padding: 0; }
+        body.kg-fullscreen #tab-kg { position: fixed; inset: 0; z-index: 9999; background: #0f1923; padding: 16px; overflow: auto; display: block !important; }
+        body.kg-fullscreen #kg-chart { height: calc(100vh - 120px) !important; }
+
+        .kg-fullscreen-close {
+            display: none; position: fixed; top: 16px; right: 16px; z-index: 10000;
+            width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3);
+            background: rgba(30,40,55,0.9); color: #fff; font-size: 18px; cursor: pointer;
+        }
+        body.kg-fullscreen .kg-fullscreen-close { display: flex; align-items: center; justify-content: center; }
     </style>
 </head>
 <body>
@@ -293,34 +451,63 @@
 
             <!-- KG Tab -->
             <div id="tab-kg">
-                <!-- KG Filter Bar -->
+                <button class="kg-fullscreen-close" id="kg-fullscreen-close" onclick="exitKgFullscreen()">✕</button>
+                <!-- Row 1: Document selector -->
+                <div class="kg-filter">
+                    <select class="filter-select" id="kg-doc-select" style="min-width:200px;">
+                        <option value="">全部文档</option>
+                    </select>
+                </div>
+                <!-- Row 2: View mode + fullscreen -->
+                <div class="kg-filter">
+                    <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+                        <input type="checkbox" id="kg-learned-toggle"> 已学习视图
+                    </label>
+                    <button class="btn-secondary" onclick="enterKgFullscreen()">全屏查看</button>
+                </div>
+                <!-- Row 3: Filter controls -->
                 <div class="kg-filter">
                     <select class="filter-select" id="kg-depth">
-                        <option value="1">展开深度：1</option>
-                        <option value="2" selected>展开深度：2</option>
-                        <option value="3">展开深度：3</option>
-                        <option value="4">展开深度：4</option>
-                        <option value="5">展开深度：5</option>
+                        <option value="1">深度：1</option>
+                        <option value="2" selected>深度：2</option>
+                        <option value="3">深度：3</option>
+                        <option value="4">深度：4</option>
+                        <option value="5">深度：5</option>
                     </select>
-                    <button class="btn-secondary" onclick="loadKgGraph()">刷新图谱</button>
-                    <button class="btn-secondary" onclick="window.open(location.href, '_blank')">全屏查看</button>
+                    <select class="filter-select" id="kg-root-select">
+                        <option value="">全部根节点</option>
+                    </select>
+                    <div class="type-filter-group" id="kg-type-filters">
+                        <label><input type="checkbox" value="Course" checked><span style="color:#5B8DB8;">●</span> 课程</label>
+                        <label><input type="checkbox" value="Chapter" checked><span style="color:#6BA389;">●</span> 章节</label>
+                        <label><input type="checkbox" value="KnowledgePoint" checked><span style="color:#D4956A;">●</span> 知识点</label>
+                        <label><input type="checkbox" value="SubPoint" checked><span style="color:#9B85B2;">●</span> 子点</label>
+                        <label><input type="checkbox" value="Concept" checked><span style="color:#C27E7E;">●</span> 概念</label>
+                    </div>
+                    <input type="text" class="form-input" id="kg-search" placeholder="搜索知识点..." style="min-width:140px;">
+                    <button class="btn-secondary" id="kg-search-btn">搜索</button>
+                    <select class="filter-select" id="kg-pathway-overlay">
+                        <option value="">路径叠加：无</option>
+                    </select>
+                    <button class="btn-secondary" onclick="loadKgGraph()">刷新</button>
+                </div>
+
+                <!-- Learned progress bar (hidden by default) -->
+                <div class="kg-progress-bar" id="kg-learned-progress" style="display:none;">
+                    <span id="kg-learned-text">已学习 0 / 0 (0%)</span>
+                    <div class="bar"><div class="bar-fill" id="kg-learned-fill" style="width:0%"></div></div>
                 </div>
 
                 <!-- KG Graph -->
-                <div class="kg-container" style="display:flex;flex-direction:row;align-items:flex-start;gap:12px;">
-                    <div id="kg-chart" style="width:100%;height:500px;"></div>
-                    <div class="kg-placeholder" id="kg-placeholder" style="display:none;">
-                        <div class="kg-placeholder-icon"><i data-lucide="git-branch"></i></div>
-                        <div class="kg-placeholder-text">知识图谱加载中，请稍候...</div>
-                    </div>
-                    <!-- Legend -->
-                    <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-start;padding:8px 0;flex-shrink:0;">
-                        <div style="font-size:13px;color:#6B7280;margin-bottom:4px;">图例</div>
-                        <span style="display:flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;background:#1565C0;border-radius:50%;display:inline-block;"></span><span style="font-size:12px;">课程</span></span>
-                        <span style="display:flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;background:#2E7D32;border-radius:50%;display:inline-block;"></span><span style="font-size:12px;">章节</span></span>
-                        <span style="display:flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;background:#EF6C00;border-radius:50%;display:inline-block;"></span><span style="font-size:12px;">知识点</span></span>
-                        <span style="display:flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;background:#6A1B9A;border-radius:50%;display:inline-block;"></span><span style="font-size:12px;">子点</span></span>
-                        <span style="display:flex;align-items:center;gap:6px;"><span style="width:12px;height:12px;background:#C62828;border-radius:50%;display:inline-block;"></span><span style="font-size:12px;">概念</span></span>
+                <div class="kg-container">
+                    <div class="kg-main">
+                        <div class="kg-graph-area">
+                            <div id="kg-chart" style="width:100%;height:700px;position:relative;z-index:1;"></div>
+                            <div class="kg-placeholder" id="kg-placeholder" style="display:none;">
+                                <div class="kg-placeholder-icon"><i data-lucide="git-branch"></i></div>
+                                <div class="kg-placeholder-text">知识图谱加载中，请稍候...</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -356,8 +543,17 @@
         </main>
     </div>
 
+    <!-- Slide-in Detail Panel (outside main layout) -->
+    <div class="kg-detail-backdrop" id="kg-detail-backdrop" onclick="window._closeDetailPanel()"></div>
+    <div class="kg-detail-panel" id="kg-detail-panel">
+        <button class="panel-close" onclick="window._closeDetailPanel()">✕</button>
+        <div style="text-align:center;color:#9CA3AF;padding:40px 10px;font-size:13px;">
+            点击图中节点查看详情
+        </div>
+    </div>
+
     <script type="module">
-        import { isLoggedIn, getUserId, getKgGraph, getPathways, createPathway, deletePathway, getLearningRecords, addPathwayItem, markPathwayItemDone } from './assets/api.js';
+        import { isLoggedIn, getUserId, getKgGraph, getPathways, createPathway, deletePathway, getLearningRecords, addPathwayItem, markPathwayItemDone, getDocuments, getResources } from './assets/api.js';
 
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
@@ -365,6 +561,53 @@
 
         const userId = getUserId();
 
+        // === Module-level state ===
+        let fullGraph = null;
+        let chartInstance = null;
+        let learnedKpIds = new Set();
+
+        // === KG 全屏模式 ===
+        window.enterKgFullscreen = function() {
+            document.body.classList.add('kg-fullscreen');
+            if (chartInstance) chartInstance.resize();
+        };
+        window.exitKgFullscreen = function() {
+            document.body.classList.remove('kg-fullscreen');
+            if (chartInstance) chartInstance.resize();
+        };
+        let cachedPathways = [];
+
+        const nodeTypeSize = { 'Course': 90, 'Chapter': 55, 'KnowledgePoint': 30, 'SubPoint': 20, 'Concept': 10 };
+        const nodeTypeColor = { 'Course': '#5B8DB8', 'Chapter': '#6BA389', 'KnowledgePoint': '#D4956A', 'SubPoint': '#9B85B2', 'Concept': '#C27E7E' };
+        const nodeTypeShadow = {
+            'Course':          { shadowBlur: 40, shadowColor: 'rgba(91,141,184,0.45)', shadowOffsetY: 4 },
+            'Chapter':         { shadowBlur: 25, shadowColor: 'rgba(107,163,137,0.35)', shadowOffsetY: 3 },
+            'KnowledgePoint':  { shadowBlur: 15,  shadowColor: 'rgba(212,149,106,0.25)', shadowOffsetY: 2 },
+            'SubPoint':        { shadowBlur: 8,  shadowColor: 'rgba(155,133,178,0.18)', shadowOffsetY: 1 },
+            'Concept':         { shadowBlur: 4,  shadowColor: 'rgba(194,126,126,0.12)', shadowOffsetY: 0 },
+        };
+        const nodeTypeEdgeWidth = {
+            'Course': 7,
+            'Chapter': 4,
+            'KnowledgePoint': 2.0,
+            'SubPoint': 1.2,
+            'Concept': 0.5,
+        };
+
+        // Zoom-adaptive visibility
+        let currentZoom = 1;
+        const zoomThresholds = {
+            'Course': 0.0, // Always show
+            'Chapter': 0.2,
+            'KnowledgePoint': 0.5,
+            'SubPoint': 0.7,
+            'Concept': 1.2,
+        };
+        const nodeTypeIcon = { 'Course': '📘', 'Chapter': '📖', 'KnowledgePoint': '📌', 'SubPoint': '📍', 'Concept': '💡' };
+        const categoryList = ['Course', 'Chapter', 'KnowledgePoint', 'SubPoint', 'Concept'];
+        const categoryNames = { 'Course': '课程', 'Chapter': '章节', 'KnowledgePoint': '知识点', 'SubPoint': '子点', 'Concept': '概念' };
+
+        // === Tab switching ===
         function switchTab(btn, tab) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             btn.classList.add('active');
@@ -376,109 +619,545 @@
             else if (tab === 'records') loadRecords();
         }
 
+        // === Step 2: Load document options ===
+        async function loadDocumentOptions() {
+            try {
+                const docs = await getDocuments(userId) || [];
+                const sel = document.getElementById('kg-doc-select');
+                sel.innerHTML = '<option value="">全部文档</option>' + docs.map(d => `<option value="${d.kp_id}">${d.title || d.kp_id}</option>`).join('');
+            } catch(e) { console.warn('loadDocumentOptions error:', e); }
+        }
+
+        // === Step 1: Load KG graph data ===
         async function loadKgGraph() {
             const depth = parseInt(document.getElementById('kg-depth').value);
-            const graph = await getKgGraph({ depth });
+            const docId = document.getElementById('kg-doc-select').value;
+            const rootId = document.getElementById('kg-root-select').value;
+            const params = { depth };
+            if (docId) params.doc_id = docId;
+            if (rootId) params.root_id = rootId;
+
+            const graph = await getKgGraph(params);
             const chartDiv = document.getElementById('kg-chart');
             const placeholder = document.getElementById('kg-placeholder');
             if (!graph || !graph.nodes || !graph.nodes.length) {
                 placeholder.style.display = 'flex';
                 chartDiv.style.display = 'none';
+                document.getElementById('node-grid').innerHTML = '<div style="padding:20px;text-align:center;color:#6B7280;">暂无知识图谱数据</div>';
                 return;
             }
             placeholder.style.display = 'none';
             chartDiv.style.display = 'block';
 
-            // Render simple node list
-            const grid = document.getElementById('node-grid');
-            grid.innerHTML = graph.nodes.map(n => `
-                <div class="node-item">
-                    <div class="node-icon"><i data-lucide="file-text"></i></div>
-                    <div class="node-name">${n.name}</div>
-                    <div class="node-type">${n.type || '知识点'}</div>
-                </div>
-            `).join('');
+            fullGraph = graph;
 
-            // If echarts is available, render it
-            if (typeof echarts !== 'undefined') {
-                chartDiv.style.height = '500px';
-                const chart = echarts.init(chartDiv);
+            // Clear search state on refresh
+            document.getElementById('kg-search').value = '';
 
-                const nodeTypeSize = {
-                    'Course': 70,
-                    'Chapter': 55,
-                    'KnowledgePoint': 40,
-                    'SubPoint': 30,
-                    'Concept': 25,
-                };
-                const nodeTypeColor = {
-                    'Course': '#1565C0',
-                    'Chapter': '#2E7D32',
-                    'KnowledgePoint': '#EF6C00',
-                    'SubPoint': '#6A1B9A',
-                    'Concept': '#C62828',
-                };
+            // Populate root node selector with Course/Chapter nodes
+            const rootSel = document.getElementById('kg-root-select');
+            const rootNodes = graph.nodes.filter(n => n.type === 'Course' || n.type === 'Chapter');
+            rootSel.innerHTML = '<option value="">全部根节点</option>' + rootNodes.map(n => `<option value="${n.id}">${nodeTypeIcon[n.type] || ''} ${n.name}</option>`).join('');
 
-                const nodes = graph.nodes.map(n => ({
-                    name: n.name,
-                    id: n.id,
-                    node_type: n.type || 'KnowledgePoint',
-                    symbolSize: nodeTypeSize[n.type] || 35,
-                    itemStyle: { color: nodeTypeColor[n.type] || '#EF6C00' },
-                }));
-                const edges = (graph.edges || []).map(e => ({ source: e.source_id, target: e.target_id }));
-                chart.setOption({
-                    tooltip: {
-                        trigger: 'item',
-                        formatter: params => {
-                            if (params.dataType === 'edge') return '';
-                            const t = params.data.node_type || '';
-                            const typeNames = { 'Course': '课程', 'Chapter': '章节', 'KnowledgePoint': '知识点', 'SubPoint': '子点', 'Concept': '概念' };
-                            const label = typeNames[t] || t;
-                            return `<b>${params.data.name}</b><br/><span style="font-size:12px;color:#888">${label}</span>`;
-                        }
-                    },
-                    series: [{
-                        type: 'graph',
-                        layout: 'force',
-                        roam: true,
-                        draggable: true,
-                        label: {
-                            show: true,
-                            fontSize: 11,
-                            position: 'bottom',
-                            formatter: '{b}',
-                        },
-                        edgeSymbol: ['circle', 'arrow'],
-                        edgeSymbolSize: [4, 6],
-                        data: nodes,
-                        links: edges,
-                        lineStyle: { color: '#90A4AE', width: 1.5, curveness: 0.15, opacity: 0.7 },
-                        emphasis: {
-                            focus: 'adjacency',
-                            lineStyle: { color: '#1976D2', width: 2.5, opacity: 1 },
-                            itemStyle: { borderWidth: 3, borderColor: '#fff' },
-                        },
-                        force: {
-                            repulsion: 200,
-                            gravity: 0.1,
-                            layoutAnimation: true,
-                            edgeLength: [80, 200],
-                        },
-                    }]
-                });
-                window.addEventListener('resize', () => chart.resize());
+            // Load learned state if toggle is on
+            if (document.getElementById('kg-learned-toggle').checked) {
+                await loadLearnedState();
             }
+
+            applyFilters();
         }
 
+        // === Step 4: Load learned state ===
+        async function loadLearnedState() {
+            try {
+                const records = await getLearningRecords(userId, { limit: 500 }) || [];
+                learnedKpIds = new Set(records.filter(r => r.action === 'complete').map(r => r.kp_id));
+            } catch(e) { console.warn('loadLearnedState error:', e); }
+        }
+
+        // === Step 1+3: Apply filters (type + search) ===
+        function applyFilters() {
+            if (!fullGraph) return;
+
+            // Get active type filters
+            const activeTypes = new Set();
+            document.querySelectorAll('#kg-type-filters input[type="checkbox"]').forEach(cb => {
+                if (cb.checked) activeTypes.add(cb.value);
+            });
+
+            // Search query
+            const query = (document.getElementById('kg-search').value || '').trim().toLowerCase();
+
+            let filteredNodes = fullGraph.nodes.filter(n => activeTypes.has(n.type || 'KnowledgePoint'));
+
+            // Step 3: Search filter
+            if (query) {
+                const matchedIds = new Set();
+                filteredNodes.forEach(n => {
+                    if (n.name.toLowerCase().includes(query)) matchedIds.add(n.id);
+                });
+                // Add direct neighbors of matched nodes
+                const neighborIds = new Set(matchedIds);
+                (fullGraph.edges || []).forEach(e => {
+                    if (matchedIds.has(e.source_id)) neighborIds.add(e.target_id);
+                    if (matchedIds.has(e.target_id)) neighborIds.add(e.source_id);
+                });
+                filteredNodes = filteredNodes.filter(n => neighborIds.has(n.id));
+            }
+
+            // Filter edges to only include those between visible nodes
+            const visibleIds = new Set(filteredNodes.map(n => n.id));
+            const filteredEdges = (fullGraph.edges || []).filter(e => visibleIds.has(e.source_id) && visibleIds.has(e.target_id));
+
+            renderGraph(filteredNodes, filteredEdges);
+            renderNodeGrid(filteredNodes);
+            updateLearnedProgress(filteredNodes);
+        }
+
+        // === Step 4: Update learned progress bar ===
+        function updateLearnedProgress(nodes) {
+            const bar = document.getElementById('kg-learned-progress');
+            const isLearned = document.getElementById('kg-learned-toggle').checked;
+            if (!isLearned) { bar.style.display = 'none'; return; }
+            bar.style.display = 'flex';
+            const kpNodes = nodes.filter(n => n.type === 'KnowledgePoint' || n.type === 'SubPoint' || n.type === 'Concept');
+            const learned = kpNodes.filter(n => learnedKpIds.has(n.id)).length;
+            const total = kpNodes.length;
+            const pct = total ? Math.round(learned / total * 100) : 0;
+            document.getElementById('kg-learned-text').textContent = `已学习 ${learned} / ${total} (${pct}%)`;
+            document.getElementById('kg-learned-fill').style.width = `${pct}%`;
+        }
+
+        // === Search: focus on node with camera animation ===
+        function performSearch() {
+            if (!chartInstance || !fullGraph) return;
+            const query = (document.getElementById('kg-search').value || '').trim().toLowerCase();
+
+            // If empty query, reset view and clear highlights
+            if (!query) {
+                clearSearchHighlight();
+                chartInstance.setOption({ series: [{ center: null, zoom: 1 }] });
+                currentZoom = 1;
+                updateVisibilityByZoom(currentZoom);
+                return;
+            }
+
+            // Find matching nodes from fullGraph
+            const matched = fullGraph.nodes.filter(n => n.name.toLowerCase().includes(query));
+            if (!matched.length) {
+                alert('未找到匹配的知识点');
+                return;
+            }
+
+            // Highlight all matched nodes visually
+            highlightSearchResults(matched.map(n => n.id));
+
+            // Focus on the first match
+            const target = matched[0];
+            focusOnNode(target.id);
+
+            // Show detail sidebar for the matched node
+            showDetailPanel(target);
+        }
+
+        function highlightSearchResults(matchedIds) {
+            const matchedSet = new Set(matchedIds);
+            const option = chartInstance.getOption();
+            const nodes = option.series[0].data;
+
+            const updated = nodes.map(n => {
+                if (matchedSet.has(n.id)) {
+                    return {
+                        ...n,
+                        _searchHighlight: true,
+                        symbolSize: (n._baseSize || n.symbolSize) * 1.4,
+                        itemStyle: {
+                            ...n.itemStyle,
+                            borderColor: '#FF6D00',
+                            borderWidth: 4,
+                            shadowBlur: 20,
+                            shadowColor: 'rgba(255,109,0,0.6)',
+                        },
+                        label: { ...n.label, show: true, color: '#FF6D00', fontWeight: 'bold' }
+                    };
+                }
+                // Dim non-matched nodes
+                return {
+                    ...n,
+                    _searchHighlight: false,
+                    itemStyle: {
+                        ...n.itemStyle,
+                        opacity: 0.3,
+                    },
+                    label: { ...n.label, color: 'rgba(255,255,255,0.3)' }
+                };
+            });
+
+            chartInstance.setOption({ series: [{ data: updated }] });
+        }
+
+        function clearSearchHighlight() {
+            const option = chartInstance.getOption();
+            if (!option.series || !option.series[0]) return;
+            const nodes = option.series[0].data;
+            const hasHighlight = nodes.some(n => n._searchHighlight != null);
+            if (!hasHighlight) return;
+
+            // Restore original styles
+            const updated = nodes.map(n => ({
+                ...n,
+                _searchHighlight: undefined,
+                symbolSize: n._baseSize || n.symbolSize,
+                itemStyle: {
+                    ...n.itemStyle,
+                    borderColor: undefined,
+                    borderWidth: undefined,
+                    shadowBlur: undefined,
+                    shadowColor: undefined,
+                    opacity: n._baseOpacity != null ? n._baseOpacity : 1,
+                },
+                label: { ...n.label, color: 'rgba(255,255,255,0.85)', fontWeight: undefined }
+            }));
+
+            chartInstance.setOption({ series: [{ data: updated }] });
+            chartInstance.dispatchAction({ type: 'downplay', seriesIndex: 0 });
+        }
+
+        function focusOnNode(nodeId) {
+            if (!chartInstance) return;
+            const model = chartInstance.getModel();
+            const series = model.getSeriesByIndex(0);
+            if (!series) return;
+            const data = series.getData();
+
+            // Find node index by id
+            let targetIdx = -1;
+            for (let i = 0; i < data.count(); i++) {
+                if (data.getId(i) === nodeId || data.getName(i) === nodeId) {
+                    targetIdx = i;
+                    break;
+                }
+            }
+            if (targetIdx < 0) return;
+
+            // Get current layout position
+            const layout = data.getItemLayout(targetIdx);
+            if (!layout) return;
+
+            const targetZoom = 1.8;
+
+            // Clear previous highlights
+            chartInstance.dispatchAction({ type: 'downplay', seriesIndex: 0 });
+
+            // Animate camera to target node
+            chartInstance.setOption({
+                series: [{
+                    center: [layout[0], layout[1]],
+                    zoom: targetZoom
+                }]
+            });
+
+            // Sync zoom state
+            currentZoom = targetZoom;
+            updateVisibilityByZoom(currentZoom);
+
+            // Highlight target node
+            chartInstance.dispatchAction({
+                type: 'highlight',
+                seriesIndex: 0,
+                dataIndex: targetIdx
+            });
+
+            // Show tooltip on target
+            chartInstance.dispatchAction({
+                type: 'showTip',
+                seriesIndex: 0,
+                dataIndex: targetIdx
+            });
+        }
+
+        // === Zoom-adaptive visibility ===
+        function updateVisibilityByZoom(zoom) {
+            if (!chartInstance) return;
+            const option = chartInstance.getOption();
+            if (!option.series || !option.series[0] || !option.series[0].data) return;
+            const nodes = option.series[0].data;
+            const links = option.series[0].links || [];
+
+            // Build a set of hidden node IDs
+            const hiddenIds = new Set();
+            const updated = nodes.map(n => {
+                const threshold = zoomThresholds[n.node_type] != null ? zoomThresholds[n.node_type] : 0.6;
+                const visible = zoom >= threshold;
+                const baseSize = n._baseSize || n.symbolSize;
+                const baseOpacity = n._baseOpacity != null ? n._baseOpacity : ((n.itemStyle && n.itemStyle.opacity) || 1);
+                if (!visible) hiddenIds.add(n.id);
+                return {
+                    ...n,
+                    _baseSize: baseSize,
+                    _baseOpacity: baseOpacity,
+                    label: { ...n.label, show: visible },
+                    itemStyle: {
+                        ...n.itemStyle,
+                        opacity: visible ? baseOpacity : (0.2 + threshold * 0.15),
+                    },
+                    symbolSize: visible ? baseSize : baseSize * 0.7,
+                };
+            });
+
+            // Hide edges connected to hidden nodes
+            const updatedLinks = links.map(link => {
+                const srcHidden = hiddenIds.has(link.source);
+                const tgtHidden = hiddenIds.has(link.target);
+                return {
+                    ...link,
+                    lineStyle: {
+                        ...(link.lineStyle || {}),
+                        opacity: (srcHidden || tgtHidden) ? 0 : 0.6,
+                    },
+                };
+            });
+
+            chartInstance.setOption({ series: [{ data: updated, links: updatedLinks }] });
+        }
+
+        // === Step 1: Pure render function ===
+        function renderGraph(nodes, edges) {
+            currentZoom = 1;
+            const chartDiv = document.getElementById('kg-chart');
+            if (!chartInstance) {
+                chartInstance = echarts.init(chartDiv);
+                chartInstance.on('click', handleNodeClick);
+                chartInstance.on('graphRoam', function(params) {
+                    if (params.zoom) {
+                        currentZoom *= params.zoom;
+                    }
+                    updateVisibilityByZoom(currentZoom);
+                });
+                window.addEventListener('resize', () => chartInstance && chartInstance.resize());
+            }
+
+            // Step 6: Pathway overlay
+            const overlayPathId = document.getElementById('kg-pathway-overlay').value;
+            let pathItemMap = {}; // nodeId -> status
+            if (overlayPathId && cachedPathways.length) {
+                const path = cachedPathways.find(p => p.id === overlayPathId);
+                if (path && path.items) {
+                    const completedCount = path.items.filter(i => i.is_completed).length;
+                    path.items.forEach((item, idx) => {
+                        const status = item.is_completed ? 'completed' : (idx === completedCount ? 'current' : 'planned');
+                        pathItemMap[item.kp_id] = status;
+                    });
+                }
+            }
+
+            const categories = categoryList.map(c => ({ name: categoryNames[c] }));
+            const isLearnedMode = document.getElementById('kg-learned-toggle').checked;
+
+            const chartNodes = nodes.map(n => {
+                const nType = n.type || 'KnowledgePoint';
+                const baseSize = nodeTypeSize[nType] || 35;
+                const node = {
+                    name: n.name,
+                    id: n.id,
+                    node_type: nType,
+                    extra: n.extra || {},
+                    category: categoryList.indexOf(nType),
+                    symbolSize: baseSize,
+                    _baseSize: baseSize,
+                    _baseOpacity: 1,
+                    itemStyle: {
+                        color: nodeTypeColor[nType] || '#D4956A',
+                        ...(nodeTypeShadow[nType] || {}),
+                    },
+                };
+                // Step 4: Learned highlight
+                if (isLearnedMode && learnedKpIds.has(n.id)) {
+                    node.itemStyle.borderColor = '#43A047';
+                    node.itemStyle.borderWidth = 3;
+                }
+                // Step 6: Pathway overlay highlight
+                if (overlayPathId && pathItemMap[n.id]) {
+                    const st = pathItemMap[n.id];
+                    if (st === 'completed') { node.itemStyle.borderColor = '#43A047'; node.itemStyle.borderWidth = 3; }
+                    else if (st === 'current') { node.itemStyle.borderColor = '#F57C00'; node.itemStyle.borderWidth = 3; node.symbolSize = baseSize * 1.3; node._baseSize = baseSize * 1.3; }
+                    else if (st === 'planned') { node.itemStyle.borderColor = '#1976D2'; node.itemStyle.borderWidth = 2; }
+                } else if (overlayPathId && Object.keys(pathItemMap).length > 0 && !pathItemMap[n.id]) {
+                    node.itemStyle.opacity = 0.4;
+                    node._baseOpacity = 0.4;
+                }
+                return node;
+            });
+
+            // Build a lookup for node types by id
+            const nodeTypeById = {};
+            nodes.forEach(n => { nodeTypeById[n.id] = n.type || 'KnowledgePoint'; });
+
+            const chartEdges = edges.map(e => {
+                const srcType = nodeTypeById[e.source_id] || 'KnowledgePoint';
+                return {
+                    source: e.source_id,
+                    target: e.target_id,
+                    relation: e.relation,
+                    lineStyle: { width: nodeTypeEdgeWidth[srcType] || 1.2 },
+                };
+            });
+
+            chartInstance.setOption({
+                backgroundColor: 'transparent',
+                animationDurationUpdate: 300,
+                tooltip: {
+                    trigger: 'item',
+                    formatter: params => {
+                        if (params.dataType === 'edge') return params.data.relation || '';
+                        const t = params.data.node_type || '';
+                        return `<b>${params.data.name}</b><br/><span style="font-size:12px;color:#888">${categoryNames[t] || t}</span>`;
+                    }
+                },
+                legend: { data: categories.map(c => c.name), orient: 'horizontal', bottom: 10, textStyle: { fontSize: 12, color: 'rgba(255,255,255,0.7)' } },
+                series: [{
+                    type: 'graph', layout: 'force', roam: true, draggable: true,
+                    categories: categories,
+                    label: { show: true, fontSize: 11, position: 'bottom', formatter: '{b}', color: 'rgba(255,255,255,0.85)' },
+                    edgeSymbol: ['circle', 'arrow'], edgeSymbolSize: [4, 6],
+                    data: chartNodes, links: chartEdges,
+                    lineStyle: { color: 'rgba(180,200,220,0.45)', width: 1.2, curveness: 0.2, opacity: 0.6 },
+                    emphasis: { focus: 'adjacency', lineStyle: { color: '#7EC8E3', width: 2.5, opacity: 1 }, itemStyle: { borderWidth: 3, borderColor: 'rgba(255,255,255,0.8)' } },
+                    // peplusion: 边长度, gravity: 重力, layoutAnimation: 布局动画
+                    force: { repulsion: 200, gravity: 0.1, layoutAnimation: true, edgeLength: [120, 280], friction: 0.6 },
+                }]
+            }, true);
+
+            updateVisibilityByZoom(currentZoom);
+        }
+
+        // === Render node grid ===
+        function renderNodeGrid(nodes) {
+            const grid = document.getElementById('node-grid');
+            grid.innerHTML = nodes.map(n => `
+                <div class="node-item" onclick="window._handleNodeGridClick('${n.id}')">
+                    <div class="node-icon">${nodeTypeIcon[n.type] || '📌'}</div>
+                    <div class="node-name">${n.name}</div>
+                    <div class="node-type">${categoryNames[n.type] || '知识点'}</div>
+                </div>
+            `).join('');
+        }
+
+        // === Step 5: Node click → detail panel ===
+        async function handleNodeClick(params) {
+            if (params.dataType === 'edge') return;
+            const nodeData = params.data;
+            const nodeId = nodeData.id;
+            const node = fullGraph.nodes.find(n => n.id === nodeId);
+            if (!node) return;
+            showDetailPanel(node);
+        }
+
+        window._handleNodeGridClick = function(nodeId) {
+            const node = fullGraph && fullGraph.nodes.find(n => n.id === nodeId);
+            if (node) showDetailPanel(node);
+        };
+
+        async function showDetailPanel(node) {
+            const panel = document.getElementById('kg-detail-panel');
+            const backdrop = document.getElementById('kg-detail-backdrop');
+            const nType = node.type || 'KnowledgePoint';
+            const extra = node.extra || {};
+
+            // Find relations from edges
+            const relations = (fullGraph.edges || []).filter(e => e.source_id === node.id || e.target_id === node.id).map(e => {
+                const isSource = e.source_id === node.id;
+                const otherId = isSource ? e.target_id : e.source_id;
+                const otherNode = fullGraph.nodes.find(n => n.id === otherId);
+                return { direction: isSource ? '→' : '←', relation: e.relation || '关联', otherName: otherNode ? otherNode.name : otherId };
+            });
+
+            let html = `
+                <h3>${nodeTypeIcon[nType] || ''} ${node.name}</h3>
+                <span class="detail-type">${categoryNames[nType] || nType}</span>
+                <div class="detail-id">ID: ${node.id}</div>
+                ${extra.description ? `<div class="detail-desc">${extra.description}</div>` : ''}
+            `;
+
+            if (relations.length) {
+                html += `<div class="detail-section">关联关系 (${relations.length})</div>`;
+                html += relations.map(r => `<div class="relation-item"><span>${r.direction}</span><span style="color:#1976D2;">${r.relation}</span><span>${r.otherName}</span></div>`).join('');
+            }
+
+            html += `<hr style="margin:12px 0;border:none;border-top:1px solid #E0E6ED;">`;
+            html += `<div class="detail-section">关联资源</div><div id="detail-resources"><span style="font-size:12px;color:#9CA3AF;">加载中...</span></div>`;
+            html += `<div class="detail-actions">
+                <button class="btn-primary" onclick="window._generateForKp('${node.id}', '${node.name.replace(/'/g, "\\'")}')">生成学习资源</button>
+                <button class="btn-outline" onclick="window._showAddToPathway('${node.id}', '${node.name.replace(/'/g, "\\'")}')">加入学习路径</button>
+            </div>`;
+            html += `<div id="detail-pathway-list" style="display:none;margin-top:8px;"></div>`;
+
+            panel.innerHTML = `<button class="panel-close" onclick="window._closeDetailPanel()">✕</button>` + html;
+            panel.classList.add('open');
+            backdrop.classList.add('open');
+
+            // Load resources for this node
+            try {
+                const resources = await getResources(userId, { kp_id: node.id }) || [];
+                const resDiv = document.getElementById('detail-resources');
+                if (!resources.length) {
+                    resDiv.innerHTML = '<span style="font-size:12px;color:#9CA3AF;">暂无关联资源</span>';
+                } else {
+                    resDiv.innerHTML = resources.map(r => {
+                        const icon = r.resource_type === 'quiz' ? '📝' : r.resource_type === 'mindmap' ? '🗺️' : r.resource_type === 'code' ? '💻' : '📄';
+                        const action = r.resource_type === 'quiz' ? `onclick="location.href='evaluate.html?resource_id=${r.id}'"` : `onclick="location.href='library.html?preview=${r.id}'"`;
+                        return `<div class="resource-item" ${action}><span>${icon}</span><span style="flex:1;">${r.title || '未命名'}</span><span style="color:#1976D2;font-size:11px;">查看</span></div>`;
+                    }).join('');
+                }
+            } catch(e) { console.warn('load resources error:', e); }
+        }
+
+        // === Close detail panel ===
+        window._closeDetailPanel = function() {
+            document.getElementById('kg-detail-panel').classList.remove('open');
+            document.getElementById('kg-detail-backdrop').classList.remove('open');
+        };
+
+        // === Step 7: Add to pathway ===
+        window._generateForKp = function(kpId, kpName) {
+            location.href = `generate.html?kp_id=${encodeURIComponent(kpId)}&kp_name=${encodeURIComponent(kpName)}`;
+        };
+
+        window._showAddToPathway = function(kpId, kpName) {
+            const listDiv = document.getElementById('detail-pathway-list');
+            if (listDiv.style.display !== 'none') { listDiv.style.display = 'none'; return; }
+            if (!cachedPathways.length) {
+                listDiv.innerHTML = '<div style="font-size:12px;color:#9CA3AF;padding:8px;">暂无学习路径，请先创建</div>';
+                listDiv.style.display = 'block';
+                return;
+            }
+            listDiv.innerHTML = `<div class="pathway-select-list">${cachedPathways.map(p => `<div class="pathway-select-item" onclick="window._addToPathway('${p.id}', '${kpId}', '${kpName}')">${p.name || '未命名路径'} (${(p.items||[]).length}项)</div>`).join('')}</div>`;
+            listDiv.style.display = 'block';
+        };
+
+        window._addToPathway = async function(pathId, kpId, kpName) {
+            const path = cachedPathways.find(p => p.id === pathId);
+            const nextOrder = path && path.items ? path.items.length : 0;
+            try {
+                await addPathwayItem(pathId, userId, kpId, nextOrder);
+                alert(`已将「${kpName}」加入学习路径`);
+                document.getElementById('detail-pathway-list').style.display = 'none';
+                // Refresh cached pathways
+                cachedPathways = await getPathways(userId) || [];
+                populatePathwayOverlay();
+            } catch(e) { alert('添加失败: ' + (e.message || e)); }
+        };
+
+        // === Pathways tab ===
         async function loadPathways() {
-            const pathways = await getPathways(userId) || [];
+            cachedPathways = await getPathways(userId) || [];
+            populatePathwayOverlay();
             const grid = document.getElementById('pathway-grid');
-            if (!pathways.length) {
+            if (!cachedPathways.length) {
                 grid.innerHTML = '<div style="padding:40px;text-align:center;color:#6B7280;font-size:14px;grid-column:1/-1;">暂无学习路径，<a href="chat.html" style="color:#1976D2;">前往对话生成</a></div>';
                 return;
             }
-            grid.innerHTML = pathways.map(p => {
+            grid.innerHTML = cachedPathways.map(p => {
                 const items = p.items || [];
                 const completed = items.filter(i => i.is_completed).length;
                 const pct = items.length ? Math.round(completed / items.length * 100) : 0;
@@ -497,13 +1176,19 @@
                     </div>
                     <div class="pathway-steps">
                         ${items.map((item, idx) => {
-                            const cls = item.is_completed ? 'completed' : (idx < completed ? 'in-progress' : 'pending');
-                            const label = item.is_completed ? '已完成' : (idx < completed ? '进行中' : '待学习');
+                            const cls = item.is_completed ? 'completed' : (idx === completed ? 'in-progress' : 'pending');
+                            const label = item.is_completed ? '已完成' : (idx === completed ? '进行中' : '待学习');
                             return `<div class="step-item ${cls}" onclick="handleToggleItem('${p.id}', '${item.id}', ${!item.is_completed})" style="cursor:pointer;"><span>${idx+1}. ${item.kp_name || item.kp_id}</span><span class="step-status">${label}</span></div>`;
                         }).join('')}
                     </div>
                 </div>`;
             }).join('');
+        }
+
+        // === Step 6: Populate pathway overlay dropdown ===
+        function populatePathwayOverlay() {
+            const sel = document.getElementById('kg-pathway-overlay');
+            sel.innerHTML = '<option value="">路径叠加：无</option>' + cachedPathways.map(p => `<option value="${p.id}">${p.name || '未命名'}</option>`).join('');
         }
 
         function showCreatePathway() {
@@ -530,6 +1215,7 @@
             await loadPathways();
         }
 
+        // === Records tab ===
         async function loadRecords() {
             const records = await getLearningRecords(userId, { limit: 50 }) || [];
             const stats = document.getElementById('records-stats');
@@ -546,7 +1232,7 @@
             list.innerHTML = records.map(r => `
                 <div class="record-item">
                     <div class="record-info">
-                        <div class="record-icon">${r.action === 'complete' ? '<i data-lucide="check-circle"></i>' : '<i data-lucide="play-circle"></i>'}</div>
+                        <div class="record-icon">${r.action === 'complete' ? '✅' : '▶️'}</div>
                         <div>
                             <div class="record-action">${r.action === 'complete' ? '完成学习' : '开始学习'}</div>
                             <div class="record-target">${r.kp_name || r.kp_id || ''}</div>
@@ -557,6 +1243,29 @@
             `).join('');
         }
 
+        // === Event bindings ===
+        document.getElementById('kg-doc-select').addEventListener('change', loadKgGraph);
+        document.getElementById('kg-root-select').addEventListener('change', loadKgGraph);
+        document.getElementById('kg-depth').addEventListener('change', loadKgGraph);
+        document.getElementById('kg-pathway-overlay').addEventListener('change', () => { if (fullGraph) applyFilters(); });
+        document.getElementById('kg-learned-toggle').addEventListener('change', async () => {
+            if (document.getElementById('kg-learned-toggle').checked) await loadLearnedState();
+            if (fullGraph) applyFilters();
+        });
+        document.querySelectorAll('#kg-type-filters input[type="checkbox"]').forEach(cb => {
+            cb.addEventListener('change', () => { if (fullGraph) applyFilters(); });
+        });
+        document.getElementById('kg-search-btn').addEventListener('click', () => { performSearch(); });
+        document.getElementById('kg-search').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') performSearch();
+        });
+
+        // === Init ===
+        loadDocumentOptions();
+        loadKgGraph();
+        loadPathways(); // pre-cache for overlay
+
+        // === Expose to global ===
         window.switchTab = switchTab;
         window.loadKgGraph = loadKgGraph;
         window.showCreatePathway = showCreatePathway;

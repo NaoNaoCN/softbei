@@ -18,6 +18,7 @@ from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth.hash_utils import hash_password, verify_password
+from backend.auth.deps import get_current_user_id
 from backend.agents.graph import get_graph, invoke, stream_invoke
 from backend.middleware.logging_middleware import LoggingMiddleware
 from backend.db.database import close_db, get_session, health_check as db_health, init_db
@@ -348,7 +349,7 @@ class TitleIn(BaseModel):
 @app.get("/chat/{session_id}/messages", tags=["chat"])
 async def get_session_messages(
     session_id: uuid.UUID,
-    user_id: Optional[uuid.UUID] = None,
+    user_id: uuid.UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """读取指定会话的历史消息列表。"""
@@ -358,7 +359,7 @@ async def get_session_messages(
     chat_sess = await select_by_id(db, ChatSession, session_id)
     if not chat_sess:
         raise HTTPException(status_code=404, detail="Session not found")
-    if user_id and chat_sess.user_id != user_id:
+    if chat_sess.user_id != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
     if not chat_sess.messages_table:
         return []
@@ -432,7 +433,7 @@ async def update_session_title(
 async def get_kg_graph(
     root_id: Optional[str] = None,
     doc_id: Optional[str] = None,
-    user_id: Optional[uuid.UUID] = None,
+    user_id: uuid.UUID = Depends(get_current_user_id),
     depth: int = 3,
     db: AsyncSession = Depends(get_session),
 ):
@@ -450,8 +451,9 @@ async def get_kg_graph(
     base_conditions = []
     if doc_id:
         base_conditions.append(KGNode.course_id == doc_id)
-    if user_id:
-        base_conditions.append(KGNode.user_id == user_id)
+    # 始终按用户隔离：用户自己的节点 + 公共节点（user_id 为 NULL）
+    from sqlalchemy import or_
+    base_conditions.append(or_(KGNode.user_id == user_id, KGNode.user_id == None))
 
     if root_id:
         # 有 root_id：加载所有节点建立邻接表，再 BFS 扩展
@@ -537,11 +539,11 @@ async def get_kg_graph(
 async def build_kg_endpoint(
     background_tasks: BackgroundTasks,
     body: dict = Body(...),
+    user_id: uuid.UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """异步构建知识图谱，立即返回任务 ID 供轮询。"""
     doc_id: str = body.get("doc_id")
-    user_id: Optional[uuid.UUID] = uuid.UUID(body["user_id"]) if body.get("user_id") else None
     from backend.db.crud import insert
     from backend.db.models import KGBuildTask
     from backend.models.schemas import KGBuildTaskOut
@@ -549,6 +551,7 @@ async def build_kg_endpoint(
     logger.info(f"[POST /kg/build] 创建异步构建任务，doc_id={doc_id}")
     task = await insert(db, KGBuildTask, data={
         "doc_id": doc_id,
+        "user_id": user_id,
         "status": "pending",
         "progress": 0,
         "stage": "排队中",
@@ -569,6 +572,7 @@ async def build_kg_endpoint(
 @app.get("/kg/build/{task_id}/status", tags=["knowledge-graph"])
 async def get_kg_build_status(
     task_id: uuid.UUID,
+    user_id: uuid.UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """轮询知识图谱构建任务状态。"""
@@ -579,6 +583,8 @@ async def get_kg_build_status(
     task = await select_one(db, KGBuildTask, filters={"id": task_id})
     if not task:
         raise HTTPException(status_code=404, detail="任务不存在")
+    if task.user_id and task.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     return KGBuildTaskOut(
         task_id=task.id,
         doc_id=task.doc_id,
@@ -594,12 +600,18 @@ async def get_kg_build_status(
 @app.get("/kg/build/by-doc/{doc_id}/status", tags=["knowledge-graph"])
 async def get_kg_build_status_by_doc(
     doc_id: str,
+    user_id: uuid.UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """按 doc_id 查询最新的构建任务状态（刷新浏览器后恢复跟踪）。"""
-    from backend.db.crud import select as db_select
+    from backend.db.crud import select as db_select, select_one
     from backend.db.models import KGBuildTask
     from backend.models.schemas import KGBuildTaskOut
+
+    # 校验文档归属
+    doc_resource = await select_one(db, ResourceMeta, filters={"kp_id": doc_id, "user_id": user_id})
+    if not doc_resource:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     tasks = await db_select(
         db, KGBuildTask, filters={"doc_id": doc_id},
@@ -660,6 +672,7 @@ async def start_generation(
 @app.get("/generate/{task_id}/status", response_model=GenerateTaskOut, tags=["generate"])
 async def get_generation_status(
     task_id: uuid.UUID,
+    user_id: uuid.UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """轮询生成任务状态与进度。"""
@@ -706,14 +719,14 @@ async def get_resource_stats(user_id: uuid.UUID, db: AsyncSession = Depends(get_
 @app.get("/resources/{resource_id}", response_model=ResourceMetaOut, tags=["resources"])
 async def get_resource(
     resource_id: uuid.UUID,
-    user_id: Optional[uuid.UUID] = None,
+    user_id: uuid.UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """获取单个资源详情。"""
     res = await resource_svc.get_resource(resource_id, db)
     if not res:
         raise HTTPException(status_code=404)
-    if user_id and res.user_id != user_id:
+    if res.user_id != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
     return res
 
@@ -721,16 +734,15 @@ async def get_resource(
 @app.delete("/resources/{resource_id}", tags=["resources"])
 async def delete_resource(
     resource_id: uuid.UUID,
-    user_id: Optional[uuid.UUID] = None,
+    user_id: uuid.UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """删除资源。"""
-    if user_id:
-        res = await resource_svc.get_resource(resource_id, db)
-        if not res:
-            raise HTTPException(status_code=404)
-        if res.user_id != user_id:
-            raise HTTPException(status_code=403, detail="Access denied")
+    res = await resource_svc.get_resource(resource_id, db)
+    if not res:
+        raise HTTPException(status_code=404)
+    if res.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     await resource_svc.delete_resource(resource_id, db)
     return {"deleted": True}
 
@@ -742,7 +754,7 @@ async def delete_resource(
 @app.get("/resources/{resource_id}/quiz", response_model=list[QuizItemOut], tags=["quiz"])
 async def get_quiz_items(
     resource_id: uuid.UUID,
-    user_id: Optional[uuid.UUID] = None,
+    user_id: uuid.UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """获取某资源下的所有题目。"""
@@ -751,7 +763,7 @@ async def get_quiz_items(
     res = await resource_svc.get_resource(resource_id, db)
     if not res:
         raise HTTPException(status_code=404, detail="Resource not found")
-    if user_id and res.user_id != user_id:
+    if res.user_id != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     # 优先从 content_json.items 读取（AI 生成的题目存储在此）
@@ -1003,18 +1015,17 @@ async def create_pathway(
 @app.get("/pathways/{path_id}", response_model=LearningPathOut, tags=["pathway"])
 async def get_pathway(
     path_id: uuid.UUID,
-    user_id: Optional[uuid.UUID] = None,
+    user_id: uuid.UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """获取单条学习路径详情。"""
     from backend.db.crud import select_one as db_select_one
 
-    if user_id:
-        path_row = await db_select_one(db, LearningPath, filters={"id": path_id})
-        if not path_row:
-            raise HTTPException(status_code=404, detail="Pathway not found")
-        if path_row.user_id != user_id:
-            raise HTTPException(status_code=403, detail="Access denied")
+    path_row = await db_select_one(db, LearningPath, filters={"id": path_id})
+    if not path_row:
+        raise HTTPException(status_code=404, detail="Pathway not found")
+    if path_row.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     result = await pathway_svc.get_pathway(path_id, db)
     if not result:
         raise HTTPException(status_code=404, detail="Pathway not found")
@@ -1236,15 +1247,22 @@ async def list_documents(
     limit: int = 20,
     db: AsyncSession = Depends(get_session),
 ):
-    """列举用户导入的文档列表。"""
-    from backend.db.crud import select as db_select
+    """列举用户导入的 PDF 文档列表（排除系统生成的资源文档）。"""
+    from sqlalchemy import select as sa_select, and_
 
-    resources = await db_select(
-        db, ResourceMeta,
-        filters={"user_id": user_id, "resource_type": "doc"},
-        limit=limit,
-        offset=skip,
+    stmt = (
+        sa_select(ResourceMeta)
+        .where(and_(
+            ResourceMeta.user_id == user_id,
+            ResourceMeta.resource_type == "doc",
+            ResourceMeta.kp_id.like("pdf_%"),
+        ))
+        .order_by(ResourceMeta.created_at.desc())
+        .offset(skip)
+        .limit(limit)
     )
+    result = await db.execute(stmt)
+    resources = result.scalars().all()
     return [
         {
             "id": str(r.id),
@@ -1259,23 +1277,25 @@ async def list_documents(
 @app.delete("/documents/{doc_id}", tags=["documents"])
 async def delete_document(
     doc_id: str,
-    user_id: uuid.UUID,
+    user_id: uuid.UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """删除文档（同时从向量库移除）。"""
     from backend.db.crud import delete_by_id
     from backend.db.vector import delete_by_doc_id
 
+    # 校验文档归属
+    from backend.db.crud import select_one
+    resource = await select_one(db, ResourceMeta, filters={"kp_id": doc_id, "user_id": user_id})
+    if not resource:
+        raise HTTPException(status_code=403, detail="Access denied")
+
     try:
         delete_by_doc_id(doc_id)
     except Exception:
         pass
 
-    from backend.db.crud import select_one
-    resource = await select_one(db, ResourceMeta, filters={"kp_id": doc_id, "user_id": user_id})
-    if resource:
-        await delete_by_id(db, ResourceMeta, resource.id)
-
+    await delete_by_id(db, ResourceMeta, resource.id)
     return {"deleted": True}
 
 
