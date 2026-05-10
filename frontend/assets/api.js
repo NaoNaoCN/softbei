@@ -37,6 +37,10 @@ export async function apiFetch(endpoint, options = {}) {
         window.location.href = 'auth.html';
         return null;
     }
+    if (!resp.ok) {
+        const body = await resp.text();
+        throw new Error(`API ${resp.status}: ${body.slice(0, 200)}`);
+    }
     return resp;
 }
 
@@ -45,26 +49,36 @@ export async function apiFetch(endpoint, options = {}) {
 // ===========================================================
 
 export async function authLogin(username, password) {
-    const resp = await apiFetch('/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-    });
-    if (!resp) return null;
-    const data = await resp.json();
-    if (resp.ok) {
-        setAuth(data.user_id, data.access_token);
+    try {
+        const resp = await apiFetch('/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        if (!resp) return null;
+        const data = await resp.json();
+        if (resp.ok) {
+            setAuth(data.user_id, data.access_token);
+        }
+        return data;
+    } catch (e) {
+        console.error('登录请求失败:', e);
+        return null;
     }
-    return data;
 }
 
 export async function authRegister(username, password) {
-    const resp = await apiFetch('/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-    });
-    return resp?.json();
+    try {
+        const resp = await apiFetch('/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        return resp?.json();
+    } catch (e) {
+        console.error('注册请求失败:', e);
+        return null;
+    }
 }
 
 // ===========================================================
@@ -104,6 +118,14 @@ export async function getResourceStats(user_id) {
     return resp?.json();
 }
 
+export async function getResource(resource_id, user_id) {
+    let url = `/resources/${resource_id}`;
+    if (user_id) url += `?user_id=${encodeURIComponent(user_id)}`;
+    const resp = await apiFetch(url);
+    return resp?.json();
+}
+
+
 export async function deleteResource(resource_id, user_id) {
     const resp = await apiFetch(`/resources/${resource_id}?user_id=${encodeURIComponent(user_id)}`, {
         method: 'DELETE'
@@ -115,11 +137,13 @@ export async function deleteResource(resource_id, user_id) {
 // 生成任务
 // ===========================================================
 
-export async function startGeneration(user_id, kp_id, resource_type, num_questions = 4) {
+export async function startGeneration(user_id, kp_id, resource_type, num_questions = 4, question_type_counts = null) {
+    const body = { kp_id, resource_type, num_questions };
+    if (question_type_counts) body.question_type_counts = question_type_counts;
     const resp = await apiFetch(`/generate?user_id=${encodeURIComponent(user_id)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kp_id, resource_type, num_questions })
+        body: JSON.stringify(body)
     });
     return resp?.json();
 }
@@ -277,7 +301,10 @@ export async function getDocuments(user_id, skip, limit) {
 export async function importDocumentAsync(user_id, file, title) {
     const formData = new FormData();
     formData.append('file', file);
-    if (title) formData.append('title', title);
+    if (title) {
+        console.log('[importDocumentAsync] appending title:', JSON.stringify(title));
+        formData.append('title', title);
+    }
     const resp = await fetch(`${API_BASE}/documents/import/async?user_id=${encodeURIComponent(user_id)}`, {
         method: 'POST',
         body: formData

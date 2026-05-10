@@ -169,6 +169,9 @@ async def merge_chat_updates(
     真正的 LLM 概括由调用方在回复返回后，通过 BackgroundTasks 异步调用 refresh_learning_goal 完成，
     以避免对话接口因多次 LLM 调用叠加而超时。
     """
+    # 防御：LLM 或上游可能传入 None，统一归一为空 dict
+    if not isinstance(updates, dict):
+        updates = {}
     existing = await select_one(db, StudentProfile, filters={"user_id": user_id})
 
     # 准备：追加本轮提问到历史列表（仅记录，不在此处调 LLM）
@@ -212,9 +215,31 @@ async def merge_chat_updates(
     # 只更新非 None 的字段（learning_goal 由后台任务异步覆写）
     update_data = {}
     for key in ["major", "cognitive_style", "daily_time_minutes",
-                "knowledge_mastered", "knowledge_weak", "error_prone", "current_progress"]:
+                "current_progress"]:
         if key in updates and updates[key] is not None:
             update_data[key] = updates[key]
+
+    # 已掌握知识点 / 薄弱知识点 / 易错点：改为增量叠加，去重保序，不做 LLM 概括
+    for list_key in ("knowledge_mastered", "knowledge_weak", "error_prone"):
+        incoming = updates.get(list_key)
+        if not incoming:
+            continue
+        # 兼容单字符串的极端情况
+        if isinstance(incoming, str):
+            incoming = [incoming]
+        existing_list = list(getattr(existing, list_key, None) or [])
+        seen = {item.strip() for item in existing_list if isinstance(item, str) and item.strip()}
+        merged = list(existing_list)
+        for item in incoming:
+            if not isinstance(item, str):
+                continue
+            key = item.strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            merged.append(key)
+        if merged != existing_list:
+            update_data[list_key] = merged
 
     # 增量记录提问
     if new_questions != existing_questions:

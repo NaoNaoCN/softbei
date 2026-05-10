@@ -227,6 +227,10 @@ class GenerateRequest(BaseModel):
     kp_id: str = Field(..., description="目标知识点节点 ID")
     resource_type: ResourceType
     num_questions: int = Field(default=4, ge=1, le=20, description="测验题目数量（仅 quiz 类型生效）")
+    question_type_counts: dict[str, int] = Field(
+        default_factory=dict,
+        description="测验各题型数量，如 {\"single\": 5, \"multi\": 3, \"fill\": 2}，合计不超过 num_questions"
+    )
     extra_params: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -303,6 +307,13 @@ class QuizAttemptOut(BaseModel):
     kp_id: Optional[str] = None
     kp_name: Optional[str] = None
     created_at: datetime
+    # 题目详情（来自 QuizItem）
+    stem: Optional[str] = None
+    options: Optional[list[str]] = None
+    answer: Optional[Any] = None
+    explanation: Optional[str] = None
+    question_type: Optional[str] = None
+    difficulty: Optional[int] = None
 
     model_config = {"from_attributes": True}
 
@@ -354,3 +365,4 @@ class AgentState(BaseModel):
     profile_complete: bool = False       # profile_agent 判断后写入，供条件路由使用
     clarify_message: Optional[str] = None  # 追问内容，情况A/B时写入，透传给前端
     num_questions: int = 4  # 测验题目数量
+    question_type_counts: dict[str, int] = Field(default_factory=dict)  # 各题型数量，如 {"single":5,"multi":3,"fill":2}

@@ -298,6 +298,52 @@
         .progress-bar { height: 6px; background: #E0E6ED; border-radius: 3px; overflow: hidden; }
         .progress-fill { height: 100%; background: #E53935; border-radius: 3px; }
 
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-box {
+            background: #fff;
+            border-radius: 12px;
+            padding: 28px;
+            max-width: 580px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+        }
+        .modal-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #9CA3AF;
+        }
+        .modal-close:hover { color: #374151; }
+        .detail-stem { font-size: 15px; line-height: 1.6; margin-bottom: 16px; font-weight: 500; }
+        .detail-options { list-style: none; padding: 0; margin: 0 0 16px; }
+        .detail-options li { padding: 8px 12px; border-radius: 8px; margin-bottom: 6px; font-size: 14px; border: 1px solid #E0E6ED; }
+        .detail-options li.user-selected { border-color: #1976D2; background: #E3F2FD; }
+        .detail-options li.correct-answer { border-color: #43A047; background: #E8F5E9; }
+        .detail-row { display: flex; gap: 16px; margin-bottom: 12px; font-size: 14px; }
+        .detail-label { font-weight: 600; color: #6B7280; min-width: 70px; }
+        .detail-answer-box { background: #F5F7FA; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+        .detail-explanation { font-size: 13px; color: #6B7280; background: #FFFBEB; border-radius: 8px; padding: 12px; margin-top: 12px; border-left: 3px solid #F59E0B; }
+        .detail-section-title { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .detail-badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 13px; font-weight: 500; }
+        .detail-badge.correct { background: #E8F5E9; color: #43A047; }
+        .detail-badge.wrong { background: #FFEBEE; color: #E53935; }
+
         /* Empty State */
         .empty-state {
             text-align: center;
@@ -386,12 +432,18 @@
         }
 
         async function loadQuizResources() {
-            const data = await getResources(userId, { resource_type: 'quiz', limit: 100 });
-            const select = document.getElementById('quiz-select');
-            if (data && data.items && data.items.length) {
-                select.innerHTML = data.items.map(r => `<option value="${r.id}">${r.title || r.id} (${r.created_at ? new Date(r.created_at).toLocaleDateString() : ''})</option>`).join('');
-            } else {
-                select.innerHTML = '<option value="">暂无可用测验</option>';
+            try {
+                const data = await getResources(userId, { resource_type: 'quiz', limit: 100 });
+                const select = document.getElementById('quiz-select');
+                if (data && data.items && data.items.length) {
+                    select.innerHTML = data.items.map(r => `<option value="${r.id}">${r.title || r.id} (${r.created_at ? new Date(r.created_at).toLocaleDateString() : ''})</option>`).join('');
+                } else {
+                    select.innerHTML = '<option value="">暂无可用测验</option>';
+                }
+            } catch (e) {
+                console.error('加载测验资源失败:', e);
+                const select = document.getElementById('quiz-select');
+                select.innerHTML = '<option value="">加载失败，请刷新重试</option>';
             }
         }
 
@@ -408,26 +460,37 @@
                 return;
             }
             currentQuiz = data;
-            container.innerHTML = data.map((q, idx) => `
-                <div class="quiz-item" id="quiz-${q.id}">
-                    <div class="quiz-meta">第 ${idx + 1} 题 · ${q.question_type === 'multi' ? '多选题' : '单选题'} · ${q.difficulty || 5}分</div>
-                    <div class="quiz-question">${q.stem}</div>
-                    <div class="quiz-options">
+            container.innerHTML = data.map((q, idx) => {
+                const qTypeLabel = q.question_type === 'multi' ? '多选题' : q.question_type === 'fill' ? '填空题' : '单选题';
+                let bodyHtml = '';
+                if (q.question_type === 'fill') {
+                    bodyHtml = `<div style="margin-top:12px;"><input type="text" class="quiz-fill-input" id="fill-${q.id}" placeholder="请输入答案" style="width:100%;padding:10px 14px;border:1px solid #E0E6ED;border-radius:8px;font-size:14px;box-sizing:border-box;" oninput="onFillInput('${q.id}', this.value)"></div>`;
+                } else {
+                    bodyHtml = `<div class="quiz-options">
                         ${(q.options || []).map((opt, oi) => `
                             <div class="quiz-option" data-question="${q.id}" data-option="${oi}" onclick="selectOption(this, '${q.id}', ${q.question_type === 'multi' ? true : false})">
                                 <div class="quiz-option-marker">${String.fromCharCode(65 + oi)}</div>
                                 <span>${opt}</span>
                             </div>
                         `).join('')}
-                    </div>
-                </div>
-            `).join('') + `
+                    </div>`;
+                }
+                return `<div class="quiz-item" id="quiz-${q.id}">
+                    <div class="quiz-meta">第 ${idx + 1} 题 · ${qTypeLabel} · ${q.difficulty || 5}分</div>
+                    <div class="quiz-question">${q.stem}</div>
+                    ${bodyHtml}
+                </div>`;
+            }).join('') + `
                 <div class="submit-bar">
                     <button class="btn-primary" onclick="submitQuiz()">提交全部答案</button>
                     <button class="btn-secondary" onclick="resetQuiz()">重置答题</button>
                 </div>
             `;
             container.style.display = 'block';
+        }
+
+        function onFillInput(questionId, value) {
+            userAnswers[questionId] = [value.trim()];
         }
 
         function selectOption(el, questionId, isMultiple) {
@@ -461,22 +524,30 @@
                 const submittedAns = submitted.find(s => s.qId === q.id);
                 const answerStr = String(q.answer || '');
                 const isMulti = q.question_type === 'multi';
+                const isFill = q.question_type === 'fill';
                 let correctOpts = isMulti
                     ? (() => { try { return JSON.parse(answerStr); } catch { return []; } })()
                     : [answerStr];
 
-                const optionsHtml = (q.options || []).map((opt, oi) => {
-                    const letter = String.fromCharCode(65 + oi);
-                    const isSelected = submittedAns && submittedAns.opts.includes(letter);
-                    const isCorrectOpt = correctOpts.map(String).includes(letter);
-                    let cls = 'quiz-option';
-                    if (submittedAns && isSelected && !submittedAns.isCorrect) cls += ' wrong';
-                    if (isCorrectOpt) cls += ' correct';
-                    return `<div class="${cls}">
-                        <div class="quiz-option-marker">${letter}</div>
-                        <span>${opt}</span>
-                    </div>`;
-                }).join('');
+                let bodyHtml = '';
+                if (isFill) {
+                    const userAns = submittedAns ? submittedAns.opts.join('') : '';
+                    bodyHtml = `<div style="margin-top:12px;padding:10px 14px;background:${submittedAns ? (submittedAns.isCorrect ? '#E8F5E9' : '#FFEBEE') : '#F5F7FA'};border-radius:8px;font-size:14px;"><strong>你的答案：</strong>${userAns || '(未作答)'} &nbsp; <strong>正确答案：</strong>${answerStr}</div>`;
+                } else {
+                    const optionsHtml = (q.options || []).map((opt, oi) => {
+                        const letter = String.fromCharCode(65 + oi);
+                        const isSelected = submittedAns && submittedAns.opts.includes(letter);
+                        const isCorrectOpt = correctOpts.map(String).includes(letter);
+                        let cls = 'quiz-option';
+                        if (submittedAns && isSelected && !submittedAns.isCorrect) cls += ' wrong';
+                        if (isCorrectOpt) cls += ' correct';
+                        return `<div class="${cls}">
+                            <div class="quiz-option-marker">${letter}</div>
+                            <span>${opt}</span>
+                        </div>`;
+                    }).join('');
+                    bodyHtml = `<div class="quiz-options">${optionsHtml}</div>`;
+                }
 
                 let resultText = submittedAns
                     ? (submittedAns.isCorrect ? '✓ 回答正确' : '✗ 回答错误')
@@ -486,13 +557,14 @@
                     ? `<div style="margin-top:10px;padding:12px;background:#F0F7FF;border-radius:8px;font-size:13px;color:#374151;line-height:1.6;border-left:4px solid #1976D2;"><strong>解析：</strong>${q.explanation}</div>`
                     : '';
 
+                const qTypeLabel = isMulti ? '多选题' : isFill ? '填空题' : '单选题';
                 return `<div class="quiz-item" id="quiz-${q.id}">
                     <div class="quiz-meta" style="margin-bottom:12px;">
                         <span style="color:${resultColor};font-weight:600;">${resultText}</span>
-                        <span style="color:#6B7280;"> · ${isMulti ? '多选题' : '单选题'} · ${q.difficulty || 5}分</span>
+                        <span style="color:#6B7280;"> · ${qTypeLabel} · ${q.difficulty || 5}分</span>
                     </div>
                     <div class="quiz-question">${q.stem}</div>
-                    <div class="quiz-options">${optionsHtml}</div>
+                    ${bodyHtml}
                     ${explanationHtml}
                 </div>`;
             }).join('');
@@ -516,6 +588,7 @@
         function resetQuiz() {
             userAnswers = {};
             document.querySelectorAll('.quiz-option').forEach(o => o.classList.remove('selected'));
+            document.querySelectorAll('.quiz-fill-input').forEach(i => i.value = '');
         }
 
         async function loadHistory() {
@@ -530,7 +603,7 @@
                     <thead><tr><th>知识点</th><th>你的答案</th><th>结果</th><th>时间</th></tr></thead>
                     <tbody>
                         ${attempts.map(a => `
-                            <tr>
+                            <tr onclick="showAttemptDetail(${JSON.stringify(a).replace(/"/g, '&quot;')})" style="cursor:pointer">
                                 <td>${a.kp_name || a.kp_id || '-'}</td>
                                 <td>${a.user_answer || '-'}</td>
                                 <td><span class="result-badge ${a.is_correct ? 'correct' : 'wrong'}">${a.is_correct ? '正确' : '错误'}</span></td>
@@ -547,12 +620,12 @@
             const byKp = {};
             attempts.forEach(a => {
                 const kp = a.kp_name || a.kp_id || '未知';
-                if (!byKp[kp]) byKp[kp] = { total: 0, correct: 0, kp_id: a.kp_id };
+                if (!byKp[kp]) byKp[kp] = { total: 0, correct: 0, kp_id: a.kp_id || kp };
                 byKp[kp].total++;
                 if (a.is_correct) byKp[kp].correct++;
             });
             const weak = Object.entries(byKp)
-                .filter(([k, v]) => k !== '未知' && v.correct / v.total < 0.6)
+                .filter(([k, v]) => k !== '未知' && v.total > 0 && v.correct / v.total < 0.6)
                 .sort((a, b) => (a[1].correct / a[1].total) - (b[1].correct / b[1].total));
             const list = document.getElementById('weak-list');
             if (!weak.length) {
@@ -576,6 +649,55 @@
             `}).join('');
         }
 
+        function showAttemptDetail(a) {
+            const modal = document.getElementById('attempt-modal');
+            const content = document.getElementById('attempt-modal-content');
+            const isCorrect = a.is_correct;
+            const userAnswer = a.user_answer !== undefined && a.user_answer !== null ? String(a.user_answer) : '-';
+            const correctAnswer = a.answer !== undefined && a.answer !== null ? String(a.answer) : '-';
+            const qType = a.question_type === 'multi' ? '多选题' : (a.question_type === 'fill' ? '填空题' : '单选题');
+
+            let optionsHtml = '';
+            if (a.options && a.options.length) {
+                const userAnsList = userAnswer.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+                const correctAnsList = correctAnswer.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+                optionsHtml = '<div class="detail-section-title">选项</div><ul class="detail-options">' +
+                    a.options.map((opt, idx) => {
+                        const letter = String.fromCharCode(65 + idx);
+                        const isUser = userAnsList.includes(letter);
+                        const isCorrectOpt = correctAnsList.includes(letter);
+                        let cls = '';
+                        if (isCorrectOpt) cls = 'correct-answer';
+                        else if (isUser) cls = 'user-selected';
+                        return `<li class="${cls}">${opt}${isUser ? ' ← 你的答案' : ''}${isCorrectOpt ? ' ✓ 正确答案' : ''}</li>`;
+                    }).join('') + '</ul>';
+            }
+
+            const fillAnswerHtml = a.question_type === 'fill'
+                ? `<div class="detail-answer-box">
+                    <div class="detail-section-title">你的答案</div>
+                    <div style="font-size:14px;">${userAnswer}</div>
+                   </div>
+                   <div class="detail-answer-box">
+                    <div class="detail-section-title">正确答案</div>
+                    <div style="font-size:14px;font-weight:600;color:#43A047;">${correctAnswer}</div>
+                   </div>`
+                : '';
+
+            content.innerHTML = `
+                <div style="margin-bottom:16px;">
+                    <span style="font-size:13px;color:#6B7280;">${a.kp_name || a.kp_id || '未知知识点'} · ${qType}${a.difficulty ? ' · ' + a.difficulty + '分' : ''}</span>
+                    <span class="detail-badge ${isCorrect ? 'correct' : 'wrong'}" style="margin-left:8px;">${isCorrect ? '正确' : '错误'}</span>
+                </div>
+                <div class="detail-section-title">题目</div>
+                <div class="detail-stem">${a.stem || '(无题目内容)'}</div>
+                ${optionsHtml}
+                ${fillAnswerHtml}
+                ${a.explanation ? `<div class="detail-explanation"><strong>解析：</strong>${a.explanation}</div>` : ''}
+            `;
+            modal.classList.add('active');
+        }
+
         window.switchTab = switchTab;
         window.selectOption = selectOption;
         window.submitQuiz = submitQuiz;
@@ -583,9 +705,18 @@
         window.startQuiz = startQuiz;
         window.loadHistory = loadHistory;
         window.loadWeakAnalysis = loadWeakAnalysis;
+        window.showAttemptDetail = showAttemptDetail;
+        window.onFillInput = onFillInput;
 
         loadQuizResources();
     </script>
+    <!-- Attempt Detail Modal -->
+    <div class="modal-overlay" id="attempt-modal" onclick="if(event.target===this)this.classList.remove('active')">
+        <div class="modal-box">
+            <button class="modal-close" onclick="document.getElementById('attempt-modal').classList.remove('active')">×</button>
+            <div id="attempt-modal-content"></div>
+        </div>
+    </div>
     <script>lucide.createIcons();</script>
 </body>
 </html>
