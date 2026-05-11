@@ -11,14 +11,18 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.crud import select_one, select, insert, update_by_id, delete_by_id
-from backend.db.models import ResourceMeta, GenerationTask, LearningRecord
+from backend.db.models import ResourceMeta, GenerationTask, GenerationBatch, LearningRecord
 from backend.models.schemas import (
+    BatchGenerateOut,
+    BatchGenerateRequest,
+    BatchTaskItem,
     GenerateRequest,
     GenerateTaskOut,
     LearningRecordCreate,
     LearningRecordOut,
     ResourceListOut,
     ResourceMetaOut,
+    ResourceType,
     TaskStatus,
 )
 
@@ -219,3 +223,142 @@ async def list_learning_records(
         offset=skip,
     )
     return [LearningRecordOut.model_validate(r) for r in records]
+
+
+# ----------------------------------------------------------
+# 批量生成
+# ----------------------------------------------------------
+
+async def create_batch(
+    user_id: uuid.UUID,
+    request: BatchGenerateRequest,
+    db: AsyncSession,
+) -> BatchGenerateOut:
+    """
+    创建批量生成批次：为每个 resource_type 创建 ResourceMeta + GenerationTask，
+    并创建 GenerationBatch 关联所有子任务。
+    """
+    from backend.db.models import KGNode
+
+    # 解析知识点名称
+    kp_title = request.kp_id
+    if request.kp_id.startswith("kp_"):
+        node = await select_one(db, KGNode, filters={"id": request.kp_id})
+        if node:
+            kp_title = node.name
+
+    # 创建 batch 记录
+    batch = await insert(
+        db, GenerationBatch,
+        data={
+            "user_id": user_id,
+            "kp_id": request.kp_id,
+            "status": TaskStatus.pending.value,
+            "progress": 0,
+            "resource_types": [rt.value for rt in request.resource_types],
+        },
+        commit=False,
+    )
+    await db.flush()
+
+    # 为每个 resource_type 创建子任务
+    task_items: list[BatchTaskItem] = []
+    for rt in request.resource_types:
+        resource = await insert(
+            db, ResourceMeta,
+            data={
+                "user_id": user_id,
+                "kp_id": request.kp_id,
+                "resource_type": rt.value,
+                "title": f"{kp_title} — {rt.value}",
+            },
+            commit=False,
+        )
+        await db.flush()
+
+        task = await insert(
+            db, GenerationTask,
+            data={
+                "resource_id": resource.id,
+                "batch_id": batch.id,
+                "status": TaskStatus.pending.value,
+                "progress": 0,
+            },
+            commit=False,
+        )
+        await db.flush()
+
+        task_items.append(BatchTaskItem(
+            task_id=task.id,
+            resource_type=rt,
+            status=TaskStatus.pending,
+            progress=0,
+        ))
+
+    await db.commit()
+
+    return BatchGenerateOut(
+        batch_id=batch.id,
+        status=TaskStatus.pending,
+        progress=0,
+        tasks=task_items,
+    )
+
+
+async def get_batch_status(batch_id: uuid.UUID, db: AsyncSession) -> Optional[BatchGenerateOut]:
+    """查询批次状态及所有子任务明细。"""
+    batch = await select_one(db, GenerationBatch, filters={"id": batch_id})
+    if not batch:
+        return None
+
+    tasks = await select(db, GenerationTask, filters={"batch_id": batch_id})
+
+    task_items = []
+    total_progress = 0
+    all_done = True
+    any_failed = False
+
+    for t in tasks:
+        # 获取 resource_type
+        resource = await select_one(db, ResourceMeta, filters={"id": t.resource_id})
+        rt = ResourceType(resource.resource_type) if resource else ResourceType.doc
+
+        task_items.append(BatchTaskItem(
+            task_id=t.id,
+            resource_type=rt,
+            status=TaskStatus(t.status),
+            progress=t.progress,
+            result_id=t.resource_id if t.status == TaskStatus.done.value else None,
+            error_message=t.error_message,
+        ))
+        total_progress += t.progress
+        if t.status != TaskStatus.done.value:
+            all_done = False
+        if t.status == TaskStatus.failed.value:
+            any_failed = True
+
+    num_tasks = len(tasks) or 1
+    avg_progress = total_progress // num_tasks
+
+    # 计算聚合状态
+    if all_done:
+        batch_status = TaskStatus.done
+    elif any_failed and all(t.status in (TaskStatus.done.value, TaskStatus.failed.value) for t in tasks):
+        batch_status = TaskStatus.failed
+    elif any(t.status == TaskStatus.running.value for t in tasks):
+        batch_status = TaskStatus.running
+    else:
+        batch_status = TaskStatus(batch.status)
+
+    # 更新 batch 记录
+    await update_by_id(db, GenerationBatch, batch_id, {
+        "status": batch_status.value,
+        "progress": avg_progress,
+    })
+
+    return BatchGenerateOut(
+        batch_id=batch.id,
+        status=batch_status,
+        progress=avg_progress,
+        tasks=task_items,
+    )

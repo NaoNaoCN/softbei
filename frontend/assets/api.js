@@ -158,6 +158,31 @@ export async function getTaskStatus(task_id) {
     return resp?.json();
 }
 
+export async function startBatchGeneration(userId, kpId, resourceTypes, numQuestions = 4, questionTypeCounts = null) {
+    const body = { kp_id: kpId, resource_types: resourceTypes, num_questions: numQuestions };
+    if (questionTypeCounts) body.question_type_counts = questionTypeCounts;
+    const resp = await apiFetch(`/generate/batch?user_id=${encodeURIComponent(userId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    return resp?.json();
+}
+
+export async function getBatchStatus(batchId) {
+    const resp = await apiFetch(`/generate/batch/${batchId}/status`);
+    return resp?.json();
+}
+
+export async function smartPlanResources(userId, kpId) {
+    const resp = await apiFetch(`/generate/smart?user_id=${encodeURIComponent(userId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kp_id: kpId })
+    });
+    return resp?.json();
+}
+
 // ===========================================================
 // 知识图谱
 // ===========================================================

@@ -9,7 +9,9 @@ import json
 import re
 import traceback
 import uuid
+from typing import Any
 
+import asyncio
 from loguru import logger  # noqa: F401
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -253,3 +255,64 @@ async def _persist_quiz(
         db, ResourceMeta, resource_id,
         {"content_json": {"items": questions}},
     )
+
+
+async def run_batch_generation(
+    batch_id: uuid.UUID,
+    user_id: str,
+    session_id: str,
+    task_configs: list[dict[str, Any]],
+) -> None:
+    """
+    并行执行多个资源生成任务。
+    task_configs: [{"task_id": uuid, "request": dict}, ...]
+    """
+    from backend.db.database import _session_factory
+    from backend.db.models import GenerationBatch
+
+    async def _run_single(cfg: dict) -> None:
+        """包装单个 run_generation 调用，捕获异常避免影响其他任务。"""
+        try:
+            await run_generation(
+                task_id=cfg["task_id"],
+                user_id=user_id,
+                session_id=session_id,
+                request=cfg["request"],
+            )
+        except Exception as e:
+            logger.error("[batch] task %s failed: %s", cfg["task_id"], e)
+
+    # 更新 batch 状态为 running
+    try:
+        async with _session_factory() as db:
+            await update_by_id(db, GenerationBatch, batch_id, {
+                "status": TaskStatus.running.value,
+                "progress": 5,
+            })
+    except Exception:
+        pass
+
+    # 并行执行所有子任务
+    await asyncio.gather(*[_run_single(cfg) for cfg in task_configs], return_exceptions=True)
+
+    # 聚合结果，更新 batch 最终状态
+    try:
+        async with _session_factory() as db:
+            from backend.db.crud import select
+            tasks = await select(db, GenerationTask, filters={"batch_id": batch_id})
+            all_done = all(t.status == TaskStatus.done.value for t in tasks)
+            any_failed = any(t.status == TaskStatus.failed.value for t in tasks)
+
+            if all_done:
+                final_status = TaskStatus.done.value
+            elif any_failed:
+                final_status = TaskStatus.failed.value
+            else:
+                final_status = TaskStatus.done.value
+
+            await update_by_id(db, GenerationBatch, batch_id, {
+                "status": final_status,
+                "progress": 100 if all_done else 80,
+            })
+    except Exception as e:
+        logger.error("[batch] failed to update batch status: %s", e)

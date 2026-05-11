@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>智能对话 - 个性化学习助手</title>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -167,7 +173,7 @@
             gap: 16px;
         }
         .message {
-            max-width: 70%;
+            max-width: 75%;
             display: flex;
             flex-direction: column;
             gap: 6px;
@@ -196,6 +202,36 @@
             padding: 0 4px;
         }
         .message.user .message-time { text-align: right; }
+
+        /* Markdown rendering in assistant messages */
+        .message.assistant .message-bubble h1,
+        .message.assistant .message-bubble h2,
+        .message.assistant .message-bubble h3 { margin: 12px 0 6px; font-size: 1.1em; }
+        .message.assistant .message-bubble h1 { font-size: 1.3em; }
+        .message.assistant .message-bubble p { margin: 6px 0; }
+        .message.assistant .message-bubble ul,
+        .message.assistant .message-bubble ol { padding-left: 20px; margin: 6px 0; }
+        .message.assistant .message-bubble pre {
+            background: #f6f8fa; border-radius: 6px; padding: 10px;
+            overflow-x: auto; margin: 8px 0; font-size: 13px;
+        }
+        .message.assistant .message-bubble code {
+            font-family: 'Fira Code', Consolas, monospace; font-size: 13px;
+        }
+        .message.assistant .message-bubble :not(pre) > code {
+            background: #f0f0f0; padding: 2px 5px; border-radius: 3px;
+        }
+        .message.assistant .message-bubble blockquote {
+            border-left: 3px solid #1976D2; padding-left: 10px; color: #555; margin: 8px 0;
+        }
+        .message.assistant .message-bubble table {
+            border-collapse: collapse; margin: 8px 0; font-size: 13px;
+        }
+        .message.assistant .message-bubble th,
+        .message.assistant .message-bubble td {
+            border: 1px solid #ddd; padding: 6px 10px;
+        }
+        .message.assistant .message-bubble th { background: #f6f8fa; }
 
         /* AI Recommendations */
         .recommendations-panel {
@@ -356,7 +392,7 @@
     </div>
 
     <script type="module">
-        import { isLoggedIn, getUserId, getChatSessions, createChatSession, getChatMessages, sendChatMessage, deleteChatSession } from './assets/api.js';
+        import { isLoggedIn, getUserId, getChatSessions, createChatSession, getChatMessages, sendChatMessage, deleteChatSession, updateSessionTitle, createPathway, addPathwayItem, getBatchStatus } from './assets/api.js';
 
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
@@ -365,6 +401,47 @@
         const userId = getUserId();
         let activeSessionId = null;
         let sessions = [];
+
+        // ---- marked.js + highlight.js 配置 ----
+        if (typeof marked !== 'undefined') {
+            marked.setOptions({
+                highlight: function(code, lang) {
+                    if (lang && hljs.getLanguage(lang)) {
+                        return hljs.highlight(code, { language: lang }).value;
+                    }
+                    return hljs.highlightAuto(code).value;
+                },
+                breaks: true,
+                gfm: true
+            });
+        }
+
+        function renderMarkdown(text) {
+            if (!text || typeof marked === 'undefined') return escapeHtml(text || '');
+            try {
+                const mathPlaceholders = [];
+                // 保护 $$...$$ 块级公式
+                let processed = text.replace(/\$\$([\s\S]*?)\$\$/g, (m) => {
+                    mathPlaceholders.push(m);
+                    return `\x00MATH${mathPlaceholders.length - 1}\x00`;
+                });
+                // 保护 $...$ 行内公式
+                processed = processed.replace(/(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)/g, (m) => {
+                    mathPlaceholders.push(m);
+                    return `\x00MATH${mathPlaceholders.length - 1}\x00`;
+                });
+                let html = marked.parse(processed);
+                html = html.replace(/\x00MATH(\d+)\x00/g, (_, idx) => mathPlaceholders[parseInt(idx)]);
+                return html;
+            } catch (e) {
+                return escapeHtml(text);
+            }
+        }
+
+        function escapeHtml(s) {
+            if (!s) return '';
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
 
         function formatTime(dateStr) {
             const d = new Date(dateStr);
@@ -378,11 +455,58 @@
                 return;
             }
             container.innerHTML = sessions.map(s => `
-                <div class="session-item ${s.id === activeSessionId ? 'active' : ''}" onclick="loadSession('${s.id}')">
-                    <span class="session-title">${s.title || '新会话'}</span>
-                    <button class="session-delete" onclick="event.stopPropagation(); handleDeleteSession('${s.id}')">删除</button>
+                <div class="session-item ${s.id === activeSessionId ? 'active' : ''}" data-sid="${s.id}">
+                    <span class="session-title">${escapeHtml(s.title || '新会话')}</span>
+                    <button class="session-delete">删除</button>
                 </div>
             `).join('');
+
+            // 事件委托
+            container.querySelectorAll('.session-item').forEach(item => {
+                const sid = item.dataset.sid;
+                const titleEl = item.querySelector('.session-title');
+                const delBtn = item.querySelector('.session-delete');
+
+                item.addEventListener('click', () => loadSession(sid));
+                delBtn.addEventListener('click', (e) => { e.stopPropagation(); handleDeleteSession(sid); });
+                titleEl.addEventListener('dblclick', (e) => {
+                    e.stopPropagation();
+                    handleRename(sid, titleEl);
+                });
+            });
+        }
+
+        let renaming = false;
+        function handleRename(sessionId, el) {
+            if (renaming) return;
+            renaming = true;
+            const oldTitle = el.textContent;
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = oldTitle === '新会话' ? '' : oldTitle;
+            input.style.cssText = 'width:100%;font-size:13px;padding:2px 4px;border:1px solid #1976D2;border-radius:4px;outline:none;background:#fff;color:#1A1A2E;';
+            el.replaceWith(input);
+            input.focus();
+            input.select();
+
+            let committed = false;
+            async function commit() {
+                if (committed) return;
+                committed = true;
+                const newTitle = input.value.trim();
+                if (newTitle && newTitle !== oldTitle) {
+                    await updateSessionTitle(sessionId, userId, newTitle);
+                    const s = sessions.find(x => x.id === sessionId);
+                    if (s) s.title = newTitle;
+                }
+                renaming = false;
+                renderSessions();
+            }
+            input.addEventListener('blur', commit);
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+                if (e.key === 'Escape') { input.value = oldTitle; input.blur(); }
+            });
         }
 
         function renderMessages(messages) {
@@ -391,13 +515,145 @@
                 area.innerHTML = '<div style="padding:40px;text-align:center;color:#6B7280;font-size:14px;">发送消息开始对话</div>';
                 return;
             }
-            area.innerHTML = messages.map(m => `
+            area.innerHTML = messages.map(m => {
+                const content = m.role === 'assistant' ? renderMarkdown(m.content) : escapeHtml(m.content);
+                return `
                 <div class="message ${m.role}">
-                    <div class="message-bubble">${m.content}</div>
+                    <div class="message-bubble">${content}</div>
                     <div class="message-time">${formatTime(m.created_at)}</div>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
+            // 渲染 LaTeX 公式
+            if (typeof renderMathInElement !== 'undefined') {
+                renderMathInElement(area, {
+                    delimiters: [
+                        { left: '$$', right: '$$', display: true },
+                        { left: '$', right: '$', display: false },
+                        { left: '\\[', right: '\\]', display: true },
+                        { left: '\\(', right: '\\)', display: false }
+                    ],
+                    throwOnError: false
+                });
+            }
             area.scrollTop = area.scrollHeight;
+        }
+
+        function renderRecommendations(metadata) {
+            // 移除旧的推荐面板
+            const old = document.getElementById('rec-panel');
+            if (old) old.remove();
+
+            const recs = metadata && metadata.recommendations;
+            if (!recs || !recs.length) return;
+
+            const area = document.getElementById('messages-area');
+            const panel = document.createElement('div');
+            panel.id = 'rec-panel';
+            panel.className = 'recommendations-panel';
+            panel.innerHTML = `
+                <div class="recommendations-title">
+                    <i data-lucide="compass" style="width:16px;height:16px;"></i>
+                    推荐学习路线
+                </div>
+                ${recs.map((r, i) => `
+                    <div class="recommendation-item">
+                        <div class="rec-info">
+                            <div class="rec-name">${escapeHtml(r.kp_name || r.name || '未知知识点')}</div>
+                            <div class="rec-reason">${escapeHtml(r.reason || '')}</div>
+                        </div>
+                        <button class="btn-rec" onclick="window.open('generate.html?kp_id=${encodeURIComponent(r.kp_id || '')}','_blank')">去学习</button>
+                    </div>
+                `).join('')}
+                <button class="btn-save-pathway" onclick="handleSavePathway()">保存为学习路径</button>
+            `;
+            panel.dataset.recs = JSON.stringify(recs);
+            area.appendChild(panel);
+            area.scrollTop = area.scrollHeight;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        async function handleSavePathway() {
+            const panel = document.getElementById('rec-panel');
+            if (!panel) return;
+            const recs = JSON.parse(panel.dataset.recs || '[]');
+            if (!recs.length) return;
+            try {
+                const path = await createPathway(userId, '智能推荐路径');
+                if (path && path.id) {
+                    for (let i = 0; i < recs.length; i++) {
+                        if (recs[i].kp_id) {
+                            await addPathwayItem(path.id, userId, recs[i].kp_id, i);
+                        }
+                    }
+                    alert('已保存为学习路径，可在「学习路径」页面查看');
+                }
+            } catch (e) {
+                alert('保存失败: ' + e.message);
+            }
+        }
+        window.handleSavePathway = handleSavePathway;
+
+        const RESOURCE_TYPE_LABELS = { doc: '学习文档', mindmap: '思维导图', quiz: '测验题目', code: '代码示例', summary: '知识总结' };
+
+        function renderBatchProgressCard(batchId) {
+            const area = document.getElementById('messages-area');
+            const card = document.createElement('div');
+            card.id = `batch-card-${batchId}`;
+            card.className = 'message assistant';
+            card.innerHTML = `
+                <div class="message-bubble" style="background:#F0F9FF;border:1px solid #BAE6FD;padding:16px;">
+                    <div style="font-weight:600;margin-bottom:8px;color:#0369A1;">
+                        <span style="margin-right:6px;">⚡</span>正在为您生成额外资源...
+                    </div>
+                    <div class="batch-tasks" style="display:flex;flex-direction:column;gap:8px;"></div>
+                </div>`;
+            area.appendChild(card);
+            area.scrollTop = area.scrollHeight;
+            pollBatchStatus(batchId);
+        }
+
+        async function pollBatchStatus(batchId) {
+            const card = document.getElementById(`batch-card-${batchId}`);
+            if (!card) return;
+            try {
+                const status = await getBatchStatus(batchId);
+                if (!status) return;
+                const tasksDiv = card.querySelector('.batch-tasks');
+                tasksDiv.innerHTML = status.tasks.map(t => {
+                    const label = RESOURCE_TYPE_LABELS[t.resource_type] || t.resource_type;
+                    const isDone = t.status === 'done';
+                    const isFailed = t.status === 'failed';
+                    const icon = isDone ? '✅' : isFailed ? '❌' : '⏳';
+                    const barColor = isDone ? '#10B981' : isFailed ? '#EF4444' : '#3B82F6';
+                    return `<div style="display:flex;align-items:center;gap:8px;">
+                        <span>${icon}</span>
+                        <span style="min-width:70px;font-size:13px;">${label}</span>
+                        <div style="flex:1;height:6px;background:#E5E7EB;border-radius:3px;overflow:hidden;">
+                            <div style="width:${t.progress}%;height:100%;background:${barColor};transition:width 0.3s;"></div>
+                        </div>
+                        <span style="font-size:12px;color:#6B7280;">${t.progress}%</span>
+                    </div>`;
+                }).join('');
+                if (status.status === 'done' || status.status === 'failed') {
+                    const header = card.querySelector('div[style*="font-weight"]');
+                    if (status.status === 'done') {
+                        header.innerHTML = '<span style="margin-right:6px;">✅</span>额外资源生成完成';
+                        const links = status.tasks.filter(t => t.result_id).map(t => {
+                            const label = RESOURCE_TYPE_LABELS[t.resource_type] || t.resource_type;
+                            return `<a href="library.html" style="color:#2563EB;text-decoration:underline;font-size:13px;">${label}</a>`;
+                        }).join('&nbsp;&nbsp;|&nbsp;&nbsp;');
+                        if (links) {
+                            tasksDiv.innerHTML += `<div style="margin-top:8px;padding-top:8px;border-top:1px solid #E5E7EB;">前往资源库查看：${links}</div>`;
+                        }
+                    } else {
+                        header.innerHTML = '<span style="margin-right:6px;">⚠️</span>部分资源生成失败';
+                    }
+                    return;
+                }
+            } catch (e) {
+                console.error('pollBatchStatus error:', e);
+            }
+            setTimeout(() => pollBatchStatus(batchId), 2000);
         }
 
         async function loadSessions() {
@@ -442,7 +698,7 @@
                 const area = document.getElementById('messages-area');
                 area.innerHTML += `
                     <div class="message user">
-                        <div class="message-bubble">${content}</div>
+                        <div class="message-bubble">${escapeHtml(content)}</div>
                         <div class="message-time">${formatTime(new Date().toISOString())}</div>
                     </div>
                     <div class="message assistant" id="thinking-msg">
@@ -466,6 +722,16 @@
                     if (response && response.content) {
                         await loadSession(activeSessionId);
                     }
+                    // 渲染推荐学习路线
+                    if (response && response.metadata) {
+                        renderRecommendations(response.metadata);
+                        // 检测批量生成，显示进度卡片
+                        if (response.metadata.batch_id) {
+                            renderBatchProgressCard(response.metadata.batch_id);
+                        }
+                    }
+                    // 延迟刷新会话列表，等待后台自动命名完成
+                    setTimeout(() => loadSessions(), 3000);
                 } catch (err) {
                     const thinking = document.getElementById('thinking-msg');
                     if (thinking) thinking.remove();

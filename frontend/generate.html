@@ -328,20 +328,25 @@
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label">资源类型</label>
+                        <label class="form-label">资源类型 <span style="font-size:12px;color:#6B7280;">(可多选)</span></label>
+                        <div style="margin-bottom:8px;">
+                            <button type="button" class="btn-smart-recommend" id="smart-recommend-btn" onclick="handleSmartRecommend()" style="padding:6px 14px;font-size:13px;background:#E3F2FD;color:#1976D2;border:1px solid #1976D2;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
+                                <i data-lucide="sparkles" style="width:14px;height:14px;"></i> 智能推荐
+                            </button>
+                        </div>
                         <div class="form-radio-group">
-                            <label class="form-radio selected" onclick="selectRadio(this)">
-                                <input type="radio" name="resource_type" value="doc" checked>
+                            <label class="form-radio selected" onclick="toggleCheckbox(this)">
+                                <input type="checkbox" name="resource_type" value="doc" checked>
                                 <span class="form-radio-icon"><i data-lucide="file-text"></i></span>
                                 <span class="form-radio-text">学习文档</span>
                             </label>
-                            <label class="form-radio" onclick="selectRadio(this)">
-                                <input type="radio" name="resource_type" value="mindmap">
+                            <label class="form-radio" onclick="toggleCheckbox(this)">
+                                <input type="checkbox" name="resource_type" value="mindmap">
                                 <span class="form-radio-icon"><i data-lucide="map"></i></span>
                                 <span class="form-radio-text">思维导图</span>
                             </label>
-                            <label class="form-radio" onclick="selectRadio(this)">
-                                <input type="radio" name="resource_type" value="quiz">
+                            <label class="form-radio" onclick="toggleCheckbox(this)">
+                                <input type="checkbox" name="resource_type" value="quiz">
                                 <span class="form-radio-icon"><i data-lucide="clipboard-list"></i></span>
                                 <span class="form-radio-text">测验题目</span>
                             </label>
@@ -364,13 +369,13 @@
                                   <div style="font-size:12px;color:#6B7280;margin-top:6px;" id="quiz-total-hint">共 4 道</div>
                                 </div>
                             </div>
-                            <label class="form-radio" onclick="selectRadio(this)">
-                                <input type="radio" name="resource_type" value="code">
+                            <label class="form-radio" onclick="toggleCheckbox(this)">
+                                <input type="checkbox" name="resource_type" value="code">
                                 <span class="form-radio-icon"><i data-lucide="code"></i></span>
                                 <span class="form-radio-text">代码示例</span>
                             </label>
-                            <label class="form-radio" onclick="selectRadio(this)">
-                                <input type="radio" name="resource_type" value="summary">
+                            <label class="form-radio" onclick="toggleCheckbox(this)">
+                                <input type="checkbox" name="resource_type" value="summary">
                                 <span class="form-radio-icon"><i data-lucide="layout-list"></i></span>
                                 <span class="form-radio-text">知识总结</span>
                             </label>
@@ -405,6 +410,12 @@
                             <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
                             <div class="progress-text" id="progress-text">生成中，请稍候...</div>
                         </div>
+                        <div id="batch-sub-progress" style="margin-top:12px;"></div>
+                    </div>
+                    <!-- Batch result tabs -->
+                    <div id="batch-result-tabs" style="display:none;">
+                        <div id="batch-tab-bar" style="display:flex;gap:0;border-bottom:2px solid #E0E6ED;margin-bottom:16px;"></div>
+                        <div id="batch-tab-content"></div>
                     </div>
                 </div>
             </div>
@@ -412,7 +423,7 @@
     </div>
 
     <script type="module">
-        import { isLoggedIn, getUserId, getKgGraph, startGeneration, getTaskStatus } from './assets/api.js';
+        import { isLoggedIn, getUserId, getKgGraph, startGeneration, getTaskStatus, startBatchGeneration, getBatchStatus, smartPlanResources } from './assets/api.js';
 
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
@@ -591,11 +602,20 @@
         async function handleGenerate() {
             const kpId = getSelectedKpId();
             const kpName = getSelectedKpName();
-            const resourceType = document.querySelector('input[name="resource_type"]:checked')?.value || 'doc';
+            const selectedTypes = getSelectedResourceTypes();
+
+            if (!kpId) {
+                alert('请选择知识点');
+                return;
+            }
+            if (selectedTypes.length === 0) {
+                alert('请至少选择一种资源类型');
+                return;
+            }
 
             let numQuestions = 4;
             let questionTypeCounts = null;
-            if (resourceType === 'quiz') {
+            if (selectedTypes.includes('quiz')) {
                 const single = parseInt(document.getElementById('count-single').value, 10) || 0;
                 const multi = parseInt(document.getElementById('count-multi').value, 10) || 0;
                 const fill = parseInt(document.getElementById('count-fill').value, 10) || 0;
@@ -603,68 +623,31 @@
                 numQuestions = single + multi + fill;
                 if (numQuestions <= 0 || numQuestions > 20) {
                     alert('题目总数需在 1-20 之间');
-                    btn.disabled = false;
-                    btn.textContent = '开始生成';
                     return;
                 }
-            }
-
-            if (!kpId) {
-                alert('请选择知识点');
-                return;
             }
 
             document.getElementById('result-empty').style.display = 'none';
             document.getElementById('result-progress').style.display = 'block';
             document.getElementById('result-content').style.display = 'none';
+            document.getElementById('batch-result-tabs').style.display = 'none';
 
             const btn = document.getElementById('generate-btn');
             btn.disabled = true;
             btn.textContent = '生成中...';
 
             try {
-                const task = await startGeneration(userId, kpId, resourceType, numQuestions, questionTypeCounts);
-                if (!task || !task.task_id) {
-                    throw new Error('生成任务创建失败');
+                if (selectedTypes.length === 1) {
+                    // 单资源：走原有逻辑
+                    const task = await startGeneration(userId, kpId, selectedTypes[0], numQuestions, questionTypeCounts);
+                    if (!task || !task.task_id) throw new Error('生成任务创建失败');
+                    pollSingleTask(task.task_id, btn);
+                } else {
+                    // 多资源：走批量逻辑
+                    const batch = await startBatchGeneration(userId, kpId, selectedTypes, numQuestions, questionTypeCounts);
+                    if (!batch || !batch.batch_id) throw new Error('批量生成任务创建失败');
+                    pollBatchTask(batch.batch_id, batch.tasks, btn);
                 }
-
-                // Poll status
-                let attempts = 0;
-                const poll = async () => {
-                    if (attempts++ > 200) {
-                        alert('生成超时，请稍后刷新页面查看结果');
-                        btn.disabled = false;
-                        btn.textContent = '开始生成';
-                        return;
-                    }
-                    const status = await getTaskStatus(task.task_id);
-                    if (!status) return poll();
-                    const pct = status.progress || 0;
-                    document.getElementById('progress-fill').style.width = pct + '%';
-                    document.getElementById('progress-text').textContent = status.status_message || `生成中... ${pct}%`;
-                    if (status.status === 'done' || status.status === 'completed') {
-                        btn.disabled = false;
-                        btn.textContent = '开始生成';
-                        document.getElementById('result-progress').style.display = 'none';
-                        document.getElementById('result-content').style.display = 'block';
-                        document.getElementById('result-content').innerHTML = `
-                            <div class="result-success">
-                                <div class="result-success-icon"><i data-lucide="check-circle"></i></div>
-                                <div class="result-success-title">资源生成完成</div>
-                                <div style="font-size:14px;color:#6B7280;margin-top:8px;">资源 ID: ${task.task_id}</div>
-                            </div>
-                        `;
-                    } else if (status.status === 'failed') {
-                        btn.disabled = false;
-                        btn.textContent = '开始生成';
-                        document.getElementById('result-progress').style.display = 'none';
-                        document.getElementById('result-empty').style.display = 'flex';
-                        alert('生成失败: ' + (status.error || '未知错误'));
-                    } else {
-                        setTimeout(poll, 1500);
-                    }
-                };
-                poll();
             } catch (e) {
                 alert('生成失败: ' + e.message);
                 btn.disabled = false;
@@ -674,6 +657,184 @@
             }
         }
 
+        function pollSingleTask(taskId, btn) {
+            let attempts = 0;
+            const poll = async () => {
+                if (attempts++ > 200) {
+                    alert('生成超时，请稍后刷新页面查看结果');
+                    btn.disabled = false;
+                    btn.textContent = '开始生成';
+                    return;
+                }
+                const status = await getTaskStatus(taskId);
+                if (!status) { setTimeout(poll, 1500); return; }
+                const pct = status.progress || 0;
+                document.getElementById('progress-fill').style.width = pct + '%';
+                document.getElementById('progress-text').textContent = `生成中... ${pct}%`;
+                if (status.status === 'done' || status.status === 'completed') {
+                    btn.disabled = false;
+                    btn.textContent = '开始生成';
+                    document.getElementById('result-progress').style.display = 'none';
+                    document.getElementById('result-content').style.display = 'block';
+                    document.getElementById('result-content').innerHTML = `
+                        <div class="result-success">
+                            <div class="result-success-icon"><i data-lucide="check-circle"></i></div>
+                            <div class="result-success-title">资源生成完成</div>
+                            <div style="font-size:14px;color:#6B7280;margin-top:8px;">资源已保存到资源库</div>
+                        </div>`;
+                    lucide.createIcons();
+                } else if (status.status === 'failed') {
+                    btn.disabled = false;
+                    btn.textContent = '开始生成';
+                    document.getElementById('result-progress').style.display = 'none';
+                    document.getElementById('result-empty').style.display = 'flex';
+                    alert('生成失败: ' + (status.error_msg || '未知错误'));
+                } else {
+                    setTimeout(poll, 1500);
+                }
+            };
+            poll();
+        }
+
+        const TYPE_LABELS = { doc: '文档', mindmap: '思维导图', quiz: '测验题', code: '代码', summary: '总结' };
+
+        function pollBatchTask(batchId, initialTasks, btn) {
+            let attempts = 0;
+            const poll = async () => {
+                if (attempts++ > 300) {
+                    alert('生成超时');
+                    btn.disabled = false;
+                    btn.textContent = '开始生成';
+                    return;
+                }
+                const batch = await getBatchStatus(batchId);
+                if (!batch) { setTimeout(poll, 1500); return; }
+
+                const pct = batch.progress || 0;
+                document.getElementById('progress-fill').style.width = pct + '%';
+                document.getElementById('progress-text').textContent = `批量生成中... ${pct}%`;
+
+                // 渲染子任务进度
+                const subEl = document.getElementById('batch-sub-progress');
+                subEl.innerHTML = batch.tasks.map(t => {
+                    const label = TYPE_LABELS[t.resource_type] || t.resource_type;
+                    const statusText = t.status === 'done' ? '完成' : t.status === 'failed' ? '失败' : `${t.progress}%`;
+                    const color = t.status === 'done' ? '#4CAF50' : t.status === 'failed' ? '#F44336' : '#1976D2';
+                    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                        <span style="font-size:13px;min-width:60px;">${label}</span>
+                        <div style="flex:1;height:6px;background:#E0E6ED;border-radius:3px;overflow:hidden;">
+                            <div style="width:${t.progress}%;height:100%;background:${color};transition:width 0.3s;"></div>
+                        </div>
+                        <span style="font-size:12px;color:${color};">${statusText}</span>
+                    </div>`;
+                }).join('');
+
+                if (batch.status === 'done' || batch.status === 'failed') {
+                    btn.disabled = false;
+                    btn.textContent = '开始生成';
+                    document.getElementById('result-progress').style.display = 'none';
+                    window._lastBatchTasks = batch.tasks;
+                    showBatchResults(batch.tasks);
+                } else {
+                    setTimeout(poll, 1500);
+                }
+            };
+            poll();
+        }
+
+        function showBatchResults(tasks) {
+            const tabsContainer = document.getElementById('batch-result-tabs');
+            const tabBar = document.getElementById('batch-tab-bar');
+            const tabContent = document.getElementById('batch-tab-content');
+            tabsContainer.style.display = 'block';
+
+            tabBar.innerHTML = tasks.map((t, i) => {
+                const label = TYPE_LABELS[t.resource_type] || t.resource_type;
+                const isActive = i === 0 ? 'border-bottom:2px solid #1976D2;color:#1976D2;' : '';
+                const icon = t.status === 'done' ? '&#10003;' : '&#10007;';
+                const iconColor = t.status === 'done' ? '#4CAF50' : '#F44336';
+                return `<button onclick="switchBatchTab(${i})" class="batch-tab-btn" data-idx="${i}" style="padding:8px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:500;${isActive}">
+                    <span style="color:${iconColor};margin-right:4px;">${icon}</span>${label}
+                </button>`;
+            }).join('');
+
+            // Show first tab content
+            showTabContent(tasks, 0, tabContent);
+        }
+
+        function showTabContent(tasks, idx, container) {
+            const t = tasks[idx];
+            if (t.status === 'done') {
+                container.innerHTML = `<div class="result-success">
+                    <div class="result-success-icon"><i data-lucide="check-circle"></i></div>
+                    <div class="result-success-title">${TYPE_LABELS[t.resource_type] || t.resource_type} 生成完成</div>
+                    <div style="font-size:14px;color:#6B7280;margin-top:8px;">资源已保存到资源库</div>
+                </div>`;
+            } else {
+                container.innerHTML = `<div style="color:#F44336;padding:16px;">
+                    <strong>生成失败</strong><br>
+                    <span style="font-size:13px;">${t.error_message || '未知错误'}</span>
+                </div>`;
+            }
+            lucide.createIcons();
+        }
+
+        function switchBatchTab(idx) {
+            const btns = document.querySelectorAll('.batch-tab-btn');
+            btns.forEach(b => b.style.borderBottom = 'none');
+            btns.forEach(b => b.style.color = '#1A1A2E');
+            btns[idx].style.borderBottom = '2px solid #1976D2';
+            btns[idx].style.color = '#1976D2';
+            // Re-fetch tasks from last known state
+            if (window._lastBatchTasks) {
+                showTabContent(window._lastBatchTasks, idx, document.getElementById('batch-tab-content'));
+            }
+        }
+        window.switchBatchTab = switchBatchTab;
+
+        function getSelectedResourceTypes() {
+            const checkboxes = document.querySelectorAll('input[name="resource_type"]:checked');
+            return Array.from(checkboxes).map(cb => cb.value);
+        }
+
+        async function handleSmartRecommend() {
+            const kpId = getSelectedKpId();
+            if (!kpId) {
+                alert('请先选择知识点');
+                return;
+            }
+            const btn = document.getElementById('smart-recommend-btn');
+            btn.disabled = true;
+            btn.textContent = '推荐中...';
+            try {
+                const result = await smartPlanResources(userId, kpId);
+                if (result && result.resource_types) {
+                    // 取消所有选中
+                    document.querySelectorAll('input[name="resource_type"]').forEach(cb => {
+                        cb.checked = false;
+                        cb.closest('.form-radio').classList.remove('selected');
+                    });
+                    // 选中推荐的类型
+                    result.resource_types.forEach(rt => {
+                        const cb = document.querySelector(`input[name="resource_type"][value="${rt}"]`);
+                        if (cb) {
+                            cb.checked = true;
+                            cb.closest('.form-radio').classList.add('selected');
+                        }
+                    });
+                    updateGenerateButtonText();
+                    updateQuizVisibility();
+                }
+            } catch (e) {
+                alert('智能推荐失败: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="sparkles" style="width:14px;height:14px;"></i> 智能推荐';
+                lucide.createIcons();
+            }
+        }
+        window.handleSmartRecommend = handleSmartRecommend;
+
         window.handleGenerate = handleGenerate;
         function syncQuizTotal() {
             const s = parseInt(document.getElementById('count-single').value, 10) || 0;
@@ -682,14 +843,24 @@
             const total = s + m + f;
             document.getElementById('quiz-total-hint').textContent = `共 ${total} 道（不超过20道）`;
         }
-        function selectRadio(label) {
-            label.parentElement.querySelectorAll('.form-radio').forEach(el => el.classList.remove('selected'));
-            label.classList.add('selected');
-            label.querySelector('input').checked = true;
+        function toggleCheckbox(label) {
+            const cb = label.querySelector('input');
+            // Toggle is handled by browser default for checkbox, just update styling
+            setTimeout(() => {
+                if (cb.checked) {
+                    label.classList.add('selected');
+                } else {
+                    label.classList.remove('selected');
+                }
+                updateQuizVisibility();
+                updateGenerateButtonText();
+            }, 0);
+        }
+        function updateQuizVisibility() {
+            const quizChecked = document.querySelector('input[name="resource_type"][value="quiz"]')?.checked;
             const quizGroup = document.getElementById('quiz-count-group');
             const typeInputs = document.getElementById('quiz-type-inputs');
-            const resourceType = label.querySelector('input').value;
-            if (resourceType === 'quiz') {
+            if (quizChecked) {
                 quizGroup.style.display = 'block';
                 typeInputs.style.display = 'block';
                 syncQuizTotal();
@@ -698,26 +869,28 @@
                 typeInputs.style.display = 'none';
             }
         }
-        window.selectRadio = selectRadio;
+        function updateGenerateButtonText() {
+            const count = getSelectedResourceTypes().length;
+            const btn = document.getElementById('generate-btn');
+            if (count > 1) {
+                btn.textContent = `批量生成 (${count}项)`;
+            } else {
+                btn.textContent = '开始生成';
+            }
+        }
+        window.toggleCheckbox = toggleCheckbox;
         window.syncQuizTotal = syncQuizTotal;
 
         loadKgNodes().then(() => {
             // 预填充资源类型
             if (prefillType) {
-                const radio = document.querySelector(`input[name="resource_type"][value="${prefillType}"]`);
-                if (radio) {
-                    radio.checked = true;
-                    const label = radio.closest('.form-radio');
-                    if (label) {
-                        label.parentElement.querySelectorAll('.form-radio').forEach(el => el.classList.remove('selected'));
-                        label.classList.add('selected');
-                    }
-                    const quizGroup = document.getElementById('quiz-count-group');
-                    const typeInputs = document.getElementById('quiz-type-inputs');
-                    if (quizGroup && prefillType === 'quiz') {
-                        quizGroup.style.display = 'block';
-                        if (typeInputs) typeInputs.style.display = 'block';
-                    }
+                const cb = document.querySelector(`input[name="resource_type"][value="${prefillType}"]`);
+                if (cb) {
+                    cb.checked = true;
+                    const label = cb.closest('.form-radio');
+                    if (label) label.classList.add('selected');
+                    updateQuizVisibility();
+                    updateGenerateButtonText();
                 }
             }
         });

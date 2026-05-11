@@ -25,6 +25,8 @@ from backend.db.database import close_db, get_session, health_check as db_health
 import backend.db.database as _db_module
 from backend.db.vector import health_check as vec_health, init_vector_db
 from backend.models.schemas import (
+    BatchGenerateOut,
+    BatchGenerateRequest,
     ChatMessageIn,
     ChatMessageOut,
     ChatSessionOut,
@@ -47,6 +49,7 @@ from backend.models.schemas import (
     QuestionType,
     ResourceListOut,
     ResourceMetaOut,
+    ResourceType,
     StudentProfileIn,
     StudentProfileOut,
     TokenOut,
@@ -58,7 +61,7 @@ from backend.models.schemas import (
 from backend.services import profile as profile_svc
 from backend.services import resource as resource_svc
 from backend.services import document as document_svc
-from backend.db.models import User, ChatSession, KGNode, KGEdge, QuizItem, QuizAttempt, LearningPath, LearningPathItem, ResourceMeta
+from backend.db.models import User, ChatSession, KGNode, KGEdge, QuizItem, QuizAttempt, LearningPath, LearningPathItem, ResourceMeta, LearningRecord
 
 # 内存任务字典：{task_id: {status, progress, stage, doc_id, error, result}}
 _doc_import_tasks: dict[str, dict] = {}
@@ -261,6 +264,29 @@ async def create_chat_session(user_id: uuid.UUID, db: AsyncSession = Depends(get
     return ChatSessionOut.model_validate(session)
 
 
+async def _auto_title_session(session_id: uuid.UUID, user_msg: str, ai_msg: str | None):
+    """后台任务：用 LLM 为新会话生成简短标题。"""
+    try:
+        from backend.services.llm import chat_completion
+        from backend.db.database import _session_factory
+        from backend.db.crud import update_by_id
+
+        prompt = (
+            "根据以下对话的第一轮内容，生成一个简短的会话标题（不超过15个字，不要引号和标点）。\n"
+            f"用户：{user_msg[:200]}\n"
+            f"助手：{(ai_msg or '')[:200]}\n"
+            "标题："
+        )
+        title = await chat_completion([{"role": "user", "content": prompt}], max_tokens=30)
+        title = title.strip().strip('"\'""「」').strip()[:20]
+        if title and _session_factory:
+            async with _session_factory() as db:
+                await update_by_id(db, ChatSession, session_id, data={"title": title})
+                await db.commit()
+    except Exception as e:
+        logger.warning(f"[auto_title] failed: {e}")
+
+
 @app.post("/chat/{session_id}", tags=["chat"])
 async def chat(
     session_id: uuid.UUID,
@@ -297,6 +323,10 @@ async def chat(
                         chat_sess.messages_table, "assistant", result.final_content,
                         resource_type=result.resource_type.value if result.resource_type else None,
                     )
+            # 自动命名：会话尚无标题时，用 LLM 生成简短标题
+            if not chat_sess.title:
+                import asyncio
+                asyncio.create_task(_auto_title_session(session_id, body.content, result.final_content))
     except Exception as e:
         logger.warning(f"动态会话表写入失败: {e}")
 
@@ -321,18 +351,61 @@ async def chat(
         except Exception as e:
             logger.warning(f"资源保存失败: {e}")
 
-    logger.warning(
-        "[chat] returning metadata keys=%s recommendations_count=%d",
+    # 检测多资源意图，触发批量生成
+    batch_id = None
+    extra_types = result.metadata.get("extra_resource_types", [])
+    if extra_types and result.kp_id:
+        try:
+            from backend.models.schemas import BatchGenerateRequest, ResourceType as RT
+            from backend.services import resource as resource_svc
+            from backend.services.generation import run_batch_generation
+
+            batch_req = BatchGenerateRequest(
+                kp_id=result.kp_id,
+                resource_types=[RT(t) for t in extra_types],
+            )
+            batch_out = await resource_svc.create_batch(user_id, batch_req, db)
+            batch_id = str(batch_out.batch_id)
+
+            # 构建子任务配置
+            task_configs = []
+            for task_item in batch_out.tasks:
+                task_configs.append({
+                    "task_id": task_item.task_id,
+                    "request": {
+                        "kp_id": result.kp_id,
+                        "resource_type": task_item.resource_type.value,
+                    },
+                })
+            import asyncio
+            asyncio.create_task(run_batch_generation(
+                batch_id=batch_out.batch_id,
+                user_id=str(user_id),
+                session_id=str(session_id),
+                task_configs=task_configs,
+            ))
+            logger.info(f"[chat] 触发批量生成 batch_id={batch_id}, extra_types={extra_types}")
+        except Exception as e:
+            logger.warning(f"[chat] 批量生成触发失败: {e}")
+
+    logger.info(
+        "[chat] returning metadata keys=%s recommendations_count=%d" % (
         list(result.metadata.keys()),
-        len(result.metadata.get("recommendations", [])),
+        len(result.metadata.get("recommendations", []))
+        )
     )
 
     # 学习目标异步刷新已在 merge_chat_updates 内部通过 asyncio.create_task 触发，
     # 与资源生成链路并行，且不依赖本响应是否成功返回，此处无需重复注册。
 
+    # 将 batch_id 注入 metadata 供前端使用
+    response_metadata = dict(result.metadata)
+    if batch_id:
+        response_metadata["batch_id"] = batch_id
+
     return {
         "content": result.final_content,
-        "metadata": result.metadata,
+        "metadata": response_metadata,
         "profile_complete": result.profile_complete,
         "resource_type": result.resource_type.value if result.resource_type else None,
     }
@@ -682,6 +755,69 @@ async def get_generation_status(
     return task
 
 
+@app.post("/generate/batch", response_model=BatchGenerateOut, tags=["generate"])
+async def start_batch_generation(
+    user_id: uuid.UUID,
+    body: BatchGenerateRequest,
+    db: AsyncSession = Depends(get_session),
+):
+    """
+    批量资源生成：一次性生成多种资源类型。
+    返回 batch_id 供前端轮询 /generate/batch/{batch_id}/status。
+    """
+    from backend.services.generation import run_batch_generation
+
+    batch_out = await resource_svc.create_batch(user_id, body, db)
+
+    # 构造每个子任务的配置
+    task_configs = []
+    for task_item in batch_out.tasks:
+        req_dict = {
+            "kp_id": body.kp_id,
+            "resource_type": task_item.resource_type.value,
+            "num_questions": body.num_questions,
+            "question_type_counts": body.question_type_counts,
+            "extra_params": {},
+        }
+        task_configs.append({"task_id": task_item.task_id, "request": req_dict})
+
+    session_id = str(uuid.uuid4())
+    asyncio.create_task(
+        run_batch_generation(batch_out.batch_id, str(user_id), session_id, task_configs)
+    )
+
+    return batch_out
+
+
+@app.get("/generate/batch/{batch_id}/status", response_model=BatchGenerateOut, tags=["generate"])
+async def get_batch_generation_status(
+    batch_id: uuid.UUID,
+    user_id: uuid.UUID = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_session),
+):
+    """轮询批量生成任务状态与进度。"""
+    result = await resource_svc.get_batch_status(batch_id, db)
+    if not result:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    return result
+
+
+@app.post("/generate/smart", tags=["generate"])
+async def smart_plan_resources(
+    user_id: uuid.UUID,
+    kp_id: str = Body(..., embed=True),
+    db: AsyncSession = Depends(get_session),
+):
+    """
+    智能推荐资源类型组合：调用 planner LLM 根据用户画像和知识点推荐。
+    返回推荐的资源类型列表。
+    """
+    from backend.agents.planner_agent import plan_resource_types
+
+    types = await plan_resource_types(str(user_id), kp_id, db)
+    return {"resource_types": [rt.value for rt in types]}
+
+
 # ===========================================================
 # 资源库
 # ===========================================================
@@ -871,6 +1007,16 @@ async def submit_quiz(
             "kp_id": quiz_item.kp_id if quiz_item else found_kp_id,
         },
     )
+
+    # 答对时写入学习记录，标记该知识点已通过测验
+    kp = quiz_item.kp_id if quiz_item else found_kp_id
+    if is_correct and kp:
+        await insert(db, LearningRecord, data={
+            "user_id": user_id,
+            "kp_id": kp,
+            "action": "quiz",
+        })
+
     return QuizAttemptOut(
         id=attempt.id,
         quiz_item_id=attempt.quiz_item_id,

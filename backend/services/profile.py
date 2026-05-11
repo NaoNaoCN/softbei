@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.crud import select_one, select, insert, update_by_id
 from backend.db.models import StudentProfile, ProfileHistory
-from backend.models.schemas import StudentProfileIn, StudentProfileOut
+from backend.models.schemas import CognitiveStyle, StudentProfileIn, StudentProfileOut
 
 _logger = logging.getLogger(__name__)
 
@@ -188,12 +188,23 @@ async def merge_chat_updates(
 
     if not existing:
         # 不存在则创建新画像；学习目标暂用 LLM 单轮提取结果占位，后台任务会重新概括写回
+        # cognitive_style: LLM 可能返回 enum name，需转为 CognitiveStyle 枚举
+        raw_style = updates.get("cognitive_style")
+        cs_enum = None
+        if raw_style:
+            try:
+                cs_enum = CognitiveStyle(raw_style)
+            except ValueError:
+                try:
+                    cs_enum = CognitiveStyle[raw_style]
+                except KeyError:
+                    cs_enum = None
         created = await create_or_update_profile(
             user_id,
             StudentProfileIn(
                 major=updates.get("major"),
                 learning_goal=updates.get("learning_goal"),
-                cognitive_style=updates.get("cognitive_style"),
+                cognitive_style=cs_enum,
                 daily_time_minutes=updates.get("daily_time_minutes"),
                 knowledge_mastered=updates.get("knowledge_mastered") or [],
                 knowledge_weak=updates.get("knowledge_weak") or [],
@@ -217,7 +228,18 @@ async def merge_chat_updates(
     for key in ["major", "cognitive_style", "daily_time_minutes",
                 "current_progress"]:
         if key in updates and updates[key] is not None:
-            update_data[key] = updates[key]
+            val = updates[key]
+            # cognitive_style: LLM 返回 enum name (visual/text/practice)，需转为中文 value
+            if key == "cognitive_style" and isinstance(val, str):
+                try:
+                    val = CognitiveStyle(val).value
+                except ValueError:
+                    try:
+                        val = CognitiveStyle[val].value
+                    except KeyError:
+                        val = None
+            if val is not None:
+                update_data[key] = val
 
     # 已掌握知识点 / 薄弱知识点 / 易错点：改为增量叠加，去重保序，不做 LLM 概括
     for list_key in ("knowledge_mastered", "knowledge_weak", "error_prone"):

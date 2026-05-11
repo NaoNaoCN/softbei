@@ -409,7 +409,7 @@
     </div>
 
     <script type="module">
-        import { isLoggedIn, getUserId, getResources, getQuizItems, submitQuizAnswer, getQuizAttempts } from './assets/api.js';
+        import { isLoggedIn, getUserId, getResources, getQuizItems, submitQuizAnswer, getQuizAttempts, postLearningRecord } from './assets/api.js';
 
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
@@ -517,6 +517,17 @@
                 const isCorrect = !!(result && result.is_correct);
                 if (isCorrect) correct++;
                 submitted.push({ qId, opts, isCorrect });
+            }
+
+            // 对答对题目的知识点记录 complete
+            const completedKps = new Set();
+            for (const s of submitted) {
+                if (!s.isCorrect) continue;
+                const q = currentQuiz.find(q => q.id === s.qId);
+                if (q && q.kp_id && !completedKps.has(q.kp_id)) {
+                    completedKps.add(q.kp_id);
+                    postLearningRecord(userId, { kp_id: q.kp_id, action: 'complete' }).catch(() => {});
+                }
             }
 
             // 先生成带答案和解析的完整 HTML

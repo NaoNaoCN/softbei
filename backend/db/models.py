@@ -179,11 +179,32 @@ class ResourceMeta(Base):
     learning_records: Mapped[list["LearningRecord"]] = relationship(back_populates="resource")
 
 
+class GenerationBatch(Base):
+    """批量生成任务批次，关联多个 GenerationTask。"""
+    __tablename__ = "generation_batch"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
+    kp_id: Mapped[str] = mapped_column(String(256), nullable=False)
+    status: Mapped[str] = mapped_column(
+        Enum(TaskStatus, values_callable=lambda e: [m.value for m in e]),
+        default=TaskStatus.pending,
+        nullable=False,
+    )
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    resource_types: Mapped[list | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    tasks: Mapped[list["GenerationTask"]] = relationship(back_populates="batch")
+
+
 class GenerationTask(Base):
     __tablename__ = "generation_task"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     resource_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("resource_meta.id"), unique=True, nullable=False)
+    batch_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("generation_batch.id"), nullable=True)
     status: Mapped[str] = mapped_column(
         Enum(TaskStatus, values_callable=lambda e: [m.value for m in e]),
         default=TaskStatus.pending,
@@ -195,6 +216,7 @@ class GenerationTask(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     resource: Mapped["ResourceMeta"] = relationship(back_populates="task")
+    batch: Mapped["GenerationBatch | None"] = relationship(back_populates="tasks")
 
 
 # ----------------------------------------------------------

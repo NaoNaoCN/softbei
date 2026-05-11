@@ -47,13 +47,13 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     """
     # 若没有 draft_content，跳过检查
     if not state.draft_content:
-        logger.warning("[SafetyAgent] draft_content 为空，跳过安全检查")
+        logger.info("[SafetyAgent] draft_content 为空，跳过安全检查")
         return state.model_copy(update={
             "safety_passed": True,
             "final_content": "",
         })
 
-    logger.warning("[SafetyAgent] 开始审核，draft_len=%d", len(state.draft_content))
+    logger.info(f"[SafetyAgent] 开始审核，draft_len={len(state.draft_content)}")
 
     # 构造上下文（只取前3条参考资料，draft 只取前500字用于审核）
     context = "\n".join(state.retrieved_docs[:3]) if state.retrieved_docs else "（无参考资料）"
@@ -76,7 +76,7 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
         passed = result.get("passed", True)
         issues = result.get("issues", [])
 
-        logger.warning("[SafetyAgent] passed=%s issues=%s", passed, issues)
+        logger.info("[SafetyAgent] passed=%s issues=%s" % (passed, issues))
 
         # 无论是否通过，始终保留原始 draft_content（不让 LLM 重写文档）
         state = state.model_copy(update={
@@ -89,14 +89,14 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
 
     except json.JSONDecodeError as e:
         # JSON 解析失败时保守通过，但记录警告
-        logger.warning("[SafetyAgent] JSON 解析失败: %s，raw_preview=%.200s", e, raw if 'raw' in dir() else '')
+        logger.info("[SafetyAgent] JSON 解析失败: %s，raw_preview=%.200s" % (e, raw if 'raw' in dir() else ''))
         state = state.model_copy(update={
             "safety_passed": True,
             "final_content": state.draft_content,
         })
     except Exception as e:
         # 调用失败时保守通过
-        logger.warning("[SafetyAgent] LLM 调用失败: %s，保守通过", e)
+        logger.info("[SafetyAgent] LLM 调用失败: %s，保守通过" % e)
         state = state.model_copy(update={
             "safety_passed": True,
             "final_content": state.draft_content,

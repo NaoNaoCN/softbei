@@ -24,12 +24,14 @@ SYSTEM_PROMPT = """你是一个学习计划分析助手。
    - summary: 知识总结（当学生想要复习总结时）
    - kg: 知识图谱构建（当学生想构建知识图谱、分析知识结构时）
 2. 目标知识点名称（从学生消息中提取）
+3. 如果学生明确要求多种资源（如"帮我生成文档和测验"），将主资源放在 resource_type，其余放在 extra_types 数组中
 
 {kp_list_section}
 
-以 JSON 格式返回：{{"resource_type": "doc", "kp_id": "知识点名称"}}
+以 JSON 格式返回：{{"resource_type": "doc", "kp_id": "知识点名称", "extra_types": []}}
 resource_type 不能为 null，如果无法判断具体类型，默认使用 "doc"。
 kp_id 使用学生提到的知识点名称，如"多层感知机"、"反向传播"等。
+extra_types 仅当学生明确要求多种资源时才填写，否则为空数组。例如学生说"生成文档和测验题"，则 resource_type="doc", extra_types=["quiz"]。
 只返回 JSON，不要包含其他内容。"""
 
 
@@ -46,7 +48,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     """
     # 如果已经预设了 resource_type 和 kp_id，直接跳过
     if state.resource_type and state.kp_id:
-        logger.warning(
+        logger.info(
             f"[PlannerAgent] 跳过分析（已预设 resource_type={state.resource_type}, kp_id={state.kp_id}）"
         )
         return state
@@ -59,7 +61,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     profile_ctx = ""
     if state.profile:
         profile_ctx = await profile_svc.build_profile_context(state.profile)
-    print(f"[PlannerAgent] profile_ctx={profile_ctx}")  # 调试输出
+    logger.info(f"[PlannerAgent] profile_ctx={profile_ctx}")  # 调试输出
     # -- 2. 获取可用知识点列表 --
     kp_list = ""
     if db:
@@ -72,7 +74,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
             kp_list = "（知识点列表获取失败）"
 
     # -- 3. 调用 LLM 分析意图 --
-    print(f"[PlannerAgent] Analyzing intent.")
+    logger.info(f"[PlannerAgent] Analyzing intent.")
     kp_section = ""
     if kp_list:
         kp_section = f"可用知识点（优先从中选择）：\n{kp_list}"
@@ -103,6 +105,22 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
         # 设置 kp_id
         if kp_id:
             state = state.model_copy(update={"kp_id": kp_id})
+
+        # 解析 extra_types（多资源意图）
+        extra_types_raw = result.get("extra_types", [])
+        if extra_types_raw and isinstance(extra_types_raw, list):
+            valid_extra = []
+            for et in extra_types_raw:
+                try:
+                    ResourceType(et)
+                    valid_extra.append(et)
+                except ValueError:
+                    pass
+            if valid_extra:
+                metadata = dict(state.metadata)
+                metadata["extra_resource_types"] = valid_extra
+                state = state.model_copy(update={"metadata": metadata})
+                logger.info(f"[PlannerAgent] 检测到多资源意图: extra_types={valid_extra}")
     except (json.JSONDecodeError, Exception) as e:
         logger.warning(f"[PlannerAgent] LLM 解析失败: {e}, raw={raw if 'raw' in dir() else 'N/A'}")
         # 解析失败时默认生成文档
@@ -116,7 +134,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     if not state.kp_id:
         state = state.model_copy(update={"kp_id": state.user_message[:50]})
 
-    logger.warning(f"[PlannerAgent] resource_type={state.resource_type}, kp_id={state.kp_id}")
+    logger.info(f"[PlannerAgent] resource_type={state.resource_type}, kp_id={state.kp_id}")
 
     return state
 
@@ -137,3 +155,83 @@ def route_by_resource_type(state: AgentState) -> str:
     if state.resource_type and state.resource_type in mapping:
         return mapping[state.resource_type]
     return "recommend_agent"  # 默认推荐
+
+
+SMART_PLAN_PROMPT = """你是一个学习资源规划助手。根据学生画像和目标知识点，推荐最适合的 2-3 种资源类型组合。
+
+可选资源类型：
+- doc: 学习文档（适合初学、系统学习）
+- mindmap: 思维导图（适合梳理知识结构、复习）
+- quiz: 测验题目（适合检验掌握程度、备考）
+- code: 代码示例（适合编程类知识点）
+- summary: 知识总结（适合快速回顾、考前复习）
+
+规则：
+- 根据学生的认知风格、学习目标、薄弱点来推荐
+- 编程相关知识点优先推荐 code
+- 薄弱知识点优先推荐 quiz + doc
+- 复习阶段优先推荐 summary + mindmap
+- 返回 2-3 种最合适的类型
+
+以 JSON 数组格式返回，如：["doc", "quiz", "code"]
+只返回 JSON 数组，不要包含其他内容。"""
+
+
+async def plan_resource_types(
+    user_id: str,
+    kp_id: str,
+    db=None,
+) -> list[ResourceType]:
+    """
+    独立调用 planner LLM，根据用户画像和知识点推荐资源类型组合。
+    不依赖 LangGraph 图执行。
+    """
+    # 获取用户画像
+    profile_ctx = ""
+    if db:
+        try:
+            import uuid as _uuid
+            profile = await profile_svc.get_profile(_uuid.UUID(user_id), db)
+            if profile:
+                profile_ctx = f"专业: {profile.major or '未知'}, 目标: {profile.learning_goal or '未知'}, 认知风格: {profile.cognitive_style or '未知'}, 薄弱点: {profile.knowledge_weak or []}"
+        except Exception:
+            pass
+
+    # 获取知识点名称
+    kp_name = kp_id
+    if db and kp_id.startswith("kp_"):
+        try:
+            from backend.db.crud import select_one as db_select_one
+            from backend.db.models import KGNode
+            node = await db_select_one(db, KGNode, filters={"id": kp_id})
+            if node:
+                kp_name = node.name
+        except Exception:
+            pass
+
+    messages = [
+        {"role": "system", "content": SMART_PLAN_PROMPT},
+        {"role": "user", "content": f"学生画像：{profile_ctx}\n目标知识点：{kp_name}"},
+    ]
+
+    try:
+        raw = await chat_completion(messages, temperature=0.3)
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
+            cleaned = cleaned.rsplit("```", 1)[0].strip()
+        result = json.loads(cleaned)
+        if isinstance(result, list):
+            types = []
+            for rt_str in result:
+                try:
+                    types.append(ResourceType(rt_str))
+                except ValueError:
+                    continue
+            if types:
+                return types
+    except Exception as e:
+        logger.warning(f"[plan_resource_types] LLM 解析失败: {e}")
+
+    # 默认推荐
+    return [ResourceType.doc, ResourceType.quiz]

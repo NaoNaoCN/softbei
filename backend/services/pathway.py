@@ -18,7 +18,7 @@ from backend.db.crud import (
     delete,
     delete_by_id,
 )
-from backend.db.models import LearningPath, LearningPathItem, KGNode
+from backend.db.models import LearningPath, LearningPathItem, LearningRecord, KGNode
 from backend.models.schemas import (
     LearningPathCreate,
     LearningPathUpdate,
@@ -185,6 +185,15 @@ async def update_pathway_item(
         return _item_to_out(item)
 
     await update_by_id(db, LearningPathItem, item_id, update_data)
+
+    # 标记完成时，同步写入 LearningRecord 以便"已学习视图"能识别
+    if data.is_completed:
+        await insert(db, LearningRecord, data={
+            "user_id": user_id,
+            "kp_id": item.kp_id,
+            "action": "complete",
+        })
+
     # 重新查询以获取更新后的数据
     updated = await select_one(db, LearningPathItem, filters={"id": item_id}, loadRelations=["kp"])
     return _item_to_out(updated)

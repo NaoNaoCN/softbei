@@ -671,7 +671,7 @@
         async function loadLearnedState() {
             try {
                 const records = await getLearningRecords(userId, { limit: 500 }) || [];
-                learnedKpIds = new Set(records.filter(r => r.action === 'complete').map(r => r.kp_id));
+                learnedKpIds = new Set(records.filter(r => r.action === 'complete' || r.action === 'quiz').map(r => r.kp_id));
             } catch(e) { console.warn('loadLearnedState error:', e); }
         }
 
@@ -720,7 +720,7 @@
             const isLearned = document.getElementById('kg-learned-toggle').checked;
             if (!isLearned) { bar.style.display = 'none'; return; }
             bar.style.display = 'flex';
-            const kpNodes = nodes.filter(n => n.type === 'KnowledgePoint' || n.type === 'SubPoint' || n.type === 'Concept');
+            const kpNodes = nodes;
             const learned = kpNodes.filter(n => learnedKpIds.has(n.id)).length;
             const total = kpNodes.length;
             const pct = total ? Math.round(learned / total * 100) : 0;
@@ -975,6 +975,15 @@
                 if (isLearnedMode && learnedKpIds.has(n.id)) {
                     node.itemStyle.borderColor = '#43A047';
                     node.itemStyle.borderWidth = 3;
+                    node.itemStyle.shadowBlur = 18;
+                    node.itemStyle.shadowColor = 'rgba(67,160,71,0.7)';
+                    node.symbolSize = Math.max(baseSize, 40);
+                    node._baseSize = Math.max(baseSize, 40);
+                    node._baseOpacity = 1;
+                } else if (isLearnedMode && !learnedKpIds.has(n.id)) {
+                    node.itemStyle.opacity = 0.15;
+                    node._baseOpacity = 0.15;
+                    node.label = { show: true, color: 'rgba(255,255,255,0.15)' };
                 }
                 // Step 6: Pathway overlay highlight
                 if (overlayPathId && pathItemMap[n.id]) {
@@ -995,11 +1004,18 @@
 
             const chartEdges = edges.map(e => {
                 const srcType = nodeTypeById[e.source_id] || 'KnowledgePoint';
+                const edgeStyle = { width: nodeTypeEdgeWidth[srcType] || 1.2 };
+                // 已学习视图下，两端都不是已学习节点的边变暗
+                if (isLearnedMode && !learnedKpIds.has(e.source_id) && !learnedKpIds.has(e.target_id)) {
+                    edgeStyle.opacity = 0.08;
+                } else if (isLearnedMode) {
+                    edgeStyle.opacity = 0.35;
+                }
                 return {
                     source: e.source_id,
                     target: e.target_id,
                     relation: e.relation,
-                    lineStyle: { width: nodeTypeEdgeWidth[srcType] || 1.2 },
+                    lineStyle: edgeStyle,
                 };
             });
 

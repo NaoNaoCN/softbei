@@ -257,6 +257,35 @@ class KGBuildTaskOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class BatchGenerateRequest(BaseModel):
+    """批量资源生成请求"""
+    kp_id: str = Field(..., description="目标知识点节点 ID")
+    resource_types: list[ResourceType] = Field(..., min_length=1, description="要生成的资源类型列表")
+    num_questions: int = Field(default=4, ge=1, le=20, description="测验题目数量（仅 quiz 类型生效）")
+    question_type_counts: dict[str, int] = Field(
+        default_factory=dict,
+        description="测验各题型数量，如 {\"single\": 5, \"multi\": 3, \"fill\": 2}"
+    )
+
+
+class BatchTaskItem(BaseModel):
+    """批次中单个子任务的状态"""
+    task_id: uuid.UUID
+    resource_type: ResourceType
+    status: TaskStatus
+    progress: int = Field(ge=0, le=100)
+    result_id: Optional[uuid.UUID] = None
+    error_message: Optional[str] = None
+
+
+class BatchGenerateOut(BaseModel):
+    """批量生成响应"""
+    batch_id: uuid.UUID
+    status: TaskStatus
+    progress: int = Field(ge=0, le=100)
+    tasks: list[BatchTaskItem] = Field(default_factory=list)
+
+
 class ResourceMetaOut(BaseModel):
     id: uuid.UUID
     user_id: uuid.UUID

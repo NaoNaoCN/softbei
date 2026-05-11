@@ -78,7 +78,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
         available_kps = ["（无数据库连接）"]
 
     kp_list = "\n".join(available_kps) if available_kps else "（无可用知识点）"
-    logger.warning("[RecommendAgent] 开始推荐，available_kps=%d goal=%s", len(available_kps), goal or "未设定")
+    logger.info("[RecommendAgent] 开始推荐，available_kps=%d goal=%s" % (len(available_kps), goal or "未设定"))
 
     # 构造 prompt
     prompt = SYSTEM_PROMPT.format(
@@ -101,7 +101,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
             cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
             cleaned = cleaned.rsplit("```", 1)[0].strip()
         recommendations = json.loads(cleaned)
-        logger.warning("[RecommendAgent] 推荐生成成功，共 %d 条", len(recommendations) if isinstance(recommendations, list) else 0)
+        logger.info(f"[RecommendAgent] 推荐生成成功，共 {len(recommendations) if isinstance(recommendations, list) else 0} 条")
 
         # 确保是列表
         if not isinstance(recommendations, list):
@@ -137,12 +137,12 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
                 "final_content": "根据你的学习画像，推荐以下学习路径：\n\n" + readable,
             })
     except json.JSONDecodeError as e:
-        logger.warning("[RecommendAgent] JSON 解析失败: %s，raw_preview=%.200s", e, raw if 'raw' in dir() else '')
+        logger.warning(f"[RecommendAgent] JSON 解析失败: {e}，raw_preview={raw if 'raw' in dir() else ''}")
         new_metadata = dict(state.metadata) if state.metadata else {}
         new_metadata["recommendations"] = []
         state = state.model_copy(update={"metadata": new_metadata})
     except Exception as e:
-        logger.error("[RecommendAgent] 推荐生成失败: %s", e)
+        logger.error(f"[RecommendAgent] 推荐生成失败: {e}")
         new_metadata = dict(state.metadata) if state.metadata else {}
         new_metadata["recommendations"] = []
         state = state.model_copy(update={"metadata": new_metadata})

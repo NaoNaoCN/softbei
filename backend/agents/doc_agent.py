@@ -68,10 +68,10 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
             temperature=0.7,
             max_tokens=4000,
         )
-        logger.info("[DocAgent] 文档生成成功，draft_len=%d", len(draft))
+        logger.info("[DocAgent] 文档生成成功，draft_len=%d" % len(draft))
         state = state.model_copy(update={"draft_content": draft})
     except Exception as e:
-        logger.error("[DocAgent] 生成失败: %s", e)
+        logger.error("[DocAgent] 生成失败: %s" % e)
         state = state.model_copy(update={"draft_content": f"文档生成失败：{e}"})
 
     return state
