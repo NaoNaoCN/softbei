@@ -52,7 +52,7 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
 
     # 检索相关文档
     try:
-        chunks = await retrieve_by_kp(kp_name, n_results=5)
+        chunks = await retrieve_by_kp(kp_name, n_results=5, user_id=state.user_id)
         context = format_context(chunks, max_tokens=3000)
         retrieved_texts = [c.text for c in chunks]
     except Exception:

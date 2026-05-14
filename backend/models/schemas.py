@@ -379,6 +379,8 @@ class AgentState(BaseModel):
     user_id: str
     session_id: str
     user_message: str
+    chat_history: list[dict[str, str]] = Field(default_factory=list)  # 多轮对话历史
+    intent_type: Optional[str] = None  # "generate" | "clarify"
     profile: Optional[StudentProfileIn] = None
     kp_id: Optional[str] = None
     resource_type: Optional[ResourceType] = None

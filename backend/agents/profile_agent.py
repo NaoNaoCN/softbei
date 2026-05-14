@@ -50,6 +50,39 @@ _RESOURCE_CLARIFY_PROMPT = """用户想要学习"{topic}"，但我还需要了�
 
 请用自然语气，在提到"我来帮你生成资料"的同时，追问缺失的信息。控制在 2-3 句话内。"""
 
+# 画像完整但用户无已上传教材时的引导 prompt
+_NO_DOCS_GUIDE_PROMPT = """你是一个友好的学习助手。用户刚完成了学习画像的建立。
+当前画像信息：{known_fields}
+用户的学习目标：{learning_goal}
+
+但用户还没有上传任何课程教材（PDF）。请：
+1. 先简要确认已记录的画像信息
+2. 建议用户到「资源库」页面上传相关课程教材 PDF，这样可以基于教材生成更精准的个性化资源
+3. 同时告知用户也可以直接请求生成资源，系统会用通用知识来生成
+
+语气友好自然，控制在 3-4 句话内。"""
+
+# 画像完整、用户只是自我介绍（无明确资源请求）时的确认 prompt
+_PROFILE_CONFIRM_PROMPT = """你是一个友好的学习助手。用户刚完成了学习画像的建立，但没有明确请求生成学习资源。
+当前画像信息：{known_fields}
+
+用户还没有上传任何课程教材。请：
+1. 简要确认已记录的画像信息（1-2句话概括）
+2. 建议用户到「资源库」页面上传课程教材 PDF，这样能生成更精准的个性化资源
+3. 告知用户也可以直接请求生成资源（如"帮我生成卷积的学习资料"），系统会用通用知识来生成
+
+语气友好自然，控制在 3-4 句话内。"""
+
+# 画像完整、用户只是自我介绍、已有文档时的确认 prompt
+_PROFILE_CONFIRM_PROMPT_WITH_DOCS = """你是一个友好的学习助手。用户刚完成了学习画像的建立，但没有明确请求生成学习资源。
+当前画像信息：{known_fields}
+
+请：
+1. 简要确认已记录的画像信息（1-2句话概括）
+2. 告知用户可以随时请求生成学习资源（如"帮我生成卷积的学习资料"），系统会基于已上传的教材生成个性化内容
+
+语气友好自然，控制在 2-3 句话内。"""
+
 
 def _profile_to_known_fields(profile) -> dict:
     """将 StudentProfileOut 转为非空字段字典。"""
@@ -57,6 +90,19 @@ def _profile_to_known_fields(profile) -> dict:
         return {}
     data = profile.model_dump(exclude={"id", "user_id", "version", "updated_at"}, exclude_none=True)
     return {k: v for k, v in data.items() if v not in ([], "", None)}
+
+
+async def _check_user_has_documents(user_id: str) -> bool:
+    """检查用户是否在向量库中有已上传的文档。"""
+    try:
+        from backend.db.vector import get_collection
+        col = get_collection()
+        # 查询该用户是否有任何文档（只需 1 条即可判断）
+        results = col.get(where={"user_id": user_id}, limit=1)
+        return bool(results and results.get("ids"))
+    except Exception:
+        # 向量库不可用时，保守返回 True（不阻断流程）
+        return True
 
 
 def _merge_profile_in_memory(state: AgentState, updates: dict) -> AgentState:
@@ -109,8 +155,10 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     # -- 1. 提取画像字段 --
     extract_messages = [
         {"role": "system", "content": _EXTRACT_PROMPT},
-        {"role": "user", "content": state.user_message},
     ]
+    # 注入对话历史，帮助理解上下文
+    extract_messages.extend(state.chat_history)
+    extract_messages.append({"role": "user", "content": state.user_message})
     try:
         raw = await chat_completion(extract_messages, temperature=0.1)
         # 处理 markdown 代码块包裹的 JSON
@@ -146,8 +194,10 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     # -- 3. 判断消息意图 --
     intent_messages = [
         {"role": "system", "content": _INTENT_PROMPT},
-        {"role": "user", "content": state.user_message},
     ]
+    # 注入对话历史，帮助理解指代和省略
+    intent_messages.extend(state.chat_history)
+    intent_messages.append({"role": "user", "content": state.user_message})
     try:
         intent_raw = await chat_completion(intent_messages, temperature=0.0)
         is_resource_request = intent_raw.strip().lower().startswith("yes")
@@ -164,7 +214,76 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     _log.warning(f"[ProfileAgent] profile={state.profile}")
     _log.warning(f"[ProfileAgent] complete={complete}, is_resource_request={is_resource_request}")
 
-    # -- 5. 若需要追问，生成 clarify_message --
+    # -- 5. 画像完整且有资源请求意图时，检查用户是否有已上传文档 --
+    has_user_docs = False
+    if complete and is_resource_request:
+        has_user_docs = await _check_user_has_documents(state.user_id)
+        # 仅在首次建立画像时引导上传（version==1），后续用户坚持请求则放行
+        profile_version = getattr(state.profile, 'version', None)
+        is_first_profile = (profile_version is not None and profile_version == 1)
+        if not has_user_docs and is_first_profile:
+            # 用户没有上传过教材，确认画像并引导上传
+            _log.info(f"[ProfileAgent] 画像完整但用户无已上传文档，引导上传教材")
+            known = _profile_to_known_fields(state.profile)
+            guide_prompt = _NO_DOCS_GUIDE_PROMPT.format(
+                known_fields=json.dumps(known, ensure_ascii=False),
+                learning_goal=state.profile.learning_goal or state.user_message[:50],
+            )
+            try:
+                guide_msg = await chat_completion(
+                    [{"role": "user", "content": guide_prompt}], temperature=0.7
+                )
+            except Exception:
+                guide_msg = (
+                    "我已经记录了你的学习画像！不过目前还没有上传课程教材，"
+                    "建议你先到「资源库」页面上传相关 PDF 教材，这样我可以基于你的教材生成更精准的学习资源。"
+                    "当然，你也可以直接让我生成资源，我会用通用知识来帮你。"
+                )
+            state = state.model_copy(update={
+                "profile_complete": False,  # 阻止路由到 planner
+                "clarify_message": guide_msg,
+                "final_content": guide_msg,
+            })
+            return state
+
+    # -- 5b. 画像完整但无资源请求（纯自我介绍）→ 确认画像，不触发生成 --
+    if complete and not is_resource_request:
+        has_user_docs_for_confirm = await _check_user_has_documents(state.user_id)
+        known = _profile_to_known_fields(state.profile)
+        if not has_user_docs_for_confirm:
+            # 无文档：确认画像 + 引导上传
+            confirm_prompt = _PROFILE_CONFIRM_PROMPT.format(
+                known_fields=json.dumps(known, ensure_ascii=False),
+            )
+        else:
+            # 有文档：确认画像 + 提示可以请求资源
+            confirm_prompt = _PROFILE_CONFIRM_PROMPT_WITH_DOCS.format(
+                known_fields=json.dumps(known, ensure_ascii=False),
+            )
+        try:
+            confirm_msg = await chat_completion(
+                [{"role": "user", "content": confirm_prompt}], temperature=0.7
+            )
+        except Exception:
+            if not has_user_docs_for_confirm:
+                confirm_msg = (
+                    "我已经记录了你的学习画像！建议你先到「资源库」页面上传课程教材 PDF，"
+                    "这样我可以基于教材生成更精准的学习资源。"
+                    "当然，你也可以直接告诉我想学什么，比如「帮我生成卷积的学习资料」。"
+                )
+            else:
+                confirm_msg = (
+                    "我已经记录了你的学习画像！你可以随时告诉我想学什么知识点，"
+                    "比如「帮我生成卷积的学习资料」，我会为你生成个性化的学习资源。"
+                )
+        state = state.model_copy(update={
+            "profile_complete": False,  # 阻止路由到 planner
+            "clarify_message": confirm_msg,
+            "final_content": confirm_msg,
+        })
+        return state
+
+    # -- 6. 若需要追问，生成 clarify_message --
     if not complete or (is_resource_request and not complete):
         known = _profile_to_known_fields(state.profile)
         missing = []
@@ -190,9 +309,11 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
             )
 
         try:
-            clarify_msg = await chat_completion(
-                [{"role": "user", "content": clarify_prompt}], temperature=0.7
-            )
+            clarify_messages = [{"role": "system", "content": clarify_prompt}]
+            # 注入历史让追问更自然连贯
+            clarify_messages.extend(state.chat_history)
+            clarify_messages.append({"role": "user", "content": state.user_message})
+            clarify_msg = await chat_completion(clarify_messages, temperature=0.7)
         except Exception as e:
             import logging
             logging.getLogger(__name__).error(f"LLM 调用失败: {e}")

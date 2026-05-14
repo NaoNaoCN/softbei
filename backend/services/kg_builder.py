@@ -139,10 +139,15 @@ def _clean_node_name(name: str) -> str:
 def _parse_json_response(raw: str) -> list[dict]:
     """解析 LLM 返回的 JSON（处理 markdown 代码块包裹）。"""
     cleaned = raw.strip()
+    if not cleaned:
+        return []
     if cleaned.startswith("```"):
         cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
         cleaned = cleaned.rsplit("```", 1)[0].strip()
-    return json.loads(cleaned)
+    if not cleaned:
+        return []
+    result = json.loads(cleaned)
+    return result if isinstance(result, list) else []
 
 
 def _group_by_page(documents: list[str], metadatas: list[dict]) -> list[str]:

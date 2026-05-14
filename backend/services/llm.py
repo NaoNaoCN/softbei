@@ -12,6 +12,7 @@ from typing import AsyncGenerator, Optional
 from loguru import logger  # noqa: F401
 
 from openai import AsyncOpenAI, RateLimitError, PermissionDeniedError
+from httpx import Timeout, ConnectTimeout, ReadTimeout
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from backend.config import config
@@ -36,28 +37,34 @@ def _make_client(provider: str) -> tuple[AsyncOpenAI, str]:
     根据 provider 名称返回 (AsyncOpenAI client, default_model)。
     所有配置均从 backend.config 读取。
     """
+    _timeout = Timeout(connect=10, read=120, write=30, pool=10)
+
     if provider == "spark":
         return AsyncOpenAI(
             api_key=config.llm.api_key,
             base_url="https://spark-api-open.xf-yun.com/v1",
+            timeout=_timeout,
         ), "generalv3.5"
 
     if provider == "deepseek":
         return AsyncOpenAI(
             api_key=config.llm.api_key,
             base_url="https://api.deepseek.com/v1",
+            timeout=_timeout,
         ), "deepseek-chat"
 
     if provider == "qwen":
         return AsyncOpenAI(
             api_key=config.llm.api_key,
             base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        ), "qwen3.5-397b-a17b"
+            timeout=_timeout,
+        ), "MiniMax-M2.5"
 
     if provider == "openai":
         return AsyncOpenAI(
             api_key=config.llm.api_key,
             base_url="https://api.openai.com/v1",
+            timeout=_timeout,
         ), "gpt-4o-mini"
 
     # fallback: 使用配置中的默认 provider
@@ -89,7 +96,7 @@ def _get_embedding_model():
 @retry(
     stop=stop_after_attempt(5),
     wait=wait_exponential(multiplier=2, min=3, max=30),
-    retry=retry_if_exception_type((RateLimitError, PermissionDeniedError)),
+    retry=retry_if_exception_type((RateLimitError, PermissionDeniedError, TimeoutError, ConnectionError, ConnectTimeout, ReadTimeout)),
 )
 async def chat_completion(
     messages: list[dict],
@@ -112,7 +119,7 @@ async def chat_completion(
     _provider = provider or config.llm.provider
     client, default_model = _make_client(_provider)
     _model = model or default_model
-    extra_body = {"enable_thinking": False} if _provider == "qwen" else {}
+    extra_body = {}
     try:
         response = await client.chat.completions.create(
             model=_model,
@@ -209,6 +216,8 @@ async def _api_embedding(text: str) -> list[float]:
     )
     response = await client.embeddings.create(
         model="text-embedding-v4",
+        # model="tongyi-embedding-vision-flash",
+        # model="tongyi-embedding-vision-plus",
         input=text,
     )
     return response.data[0].embedding

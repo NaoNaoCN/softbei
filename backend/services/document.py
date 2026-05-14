@@ -55,7 +55,7 @@ async def import_pdf(
     # 2. 索引到向量库
     indexed_count = 0
     if chunks:
-        indexed_count = await rag_indexer.index_chunks(chunks)
+        indexed_count = await rag_indexer.index_chunks(chunks, user_id=str(user_id))
         logger.info(f"[import_pdf] 索引完成，共索引 {len(chunks)} 个文本块")
     # 3. 创建资源记录（可选）
     resource_id = None
@@ -122,7 +122,7 @@ async def import_pdf_with_progress(
 
         _cb("indexing", 20)
         indexed_count = await rag_indexer.index_chunks(
-            chunks, progress_callback=_index_progress
+            chunks, progress_callback=_index_progress, user_id=str(user_id)
         )
         logger.info(f"[import_pdf_with_progress] 索引完成，共索引 {indexed_count} 个文本块")
 

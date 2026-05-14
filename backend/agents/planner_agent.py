@@ -35,6 +35,19 @@ extra_types 仅当学生明确要求多种资源时才填写，否则为空数�
 只返回 JSON，不要包含其他内容。"""
 
 
+_INTENT_CLASSIFY_PROMPT = """判断学生的消息属于哪种类型：
+1. "generate" — 学生想要生成新的学习资源（学习某个知识点、生成文档/思维导图/测验/代码/总结/知识图谱）
+2. "clarify" — 学生在对之前的对话内容进行追问、请求解释、要求展开某个部分、询问细节
+
+判断依据：
+- 如果消息中包含"你提到的"、"上面的"、"刚才的"、"第X部分"、"详细解释"、"展开说说"等指代之前回答的表述 → clarify
+- 如果消息是一个新的知识点学习请求或资源生成请求 → generate
+- 如果不确定，默认 generate
+
+只返回 JSON：{{"intent": "generate"}} 或 {{"intent": "clarify"}}
+不要包含其他内容。"""
+
+
 async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     """
     PlannerAgent 节点入口。
@@ -62,6 +75,36 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     if state.profile:
         profile_ctx = await profile_svc.build_profile_context(state.profile)
     logger.info(f"[PlannerAgent] profile_ctx={profile_ctx}")  # 调试输出
+
+    # -- 1.5 意图分类：generate vs clarify --
+    if state.chat_history:
+        # 只有有历史时才需要判断是否为追问
+        history_summary = "\n".join(
+            f"{m['role']}: {m['content'][:100]}" for m in state.chat_history[-6:]
+        )
+        classify_prompt = _INTENT_CLASSIFY_PROMPT
+        classify_messages = [
+            {"role": "system", "content": classify_prompt},
+        ]
+        classify_messages.extend(state.chat_history[-6:])
+        classify_messages.append({"role": "user", "content": state.user_message})
+        try:
+            classify_raw = await chat_completion(classify_messages, temperature=0.0)
+            cleaned_classify = classify_raw.strip()
+            if cleaned_classify.startswith("```"):
+                cleaned_classify = cleaned_classify.split("\n", 1)[1] if "\n" in cleaned_classify else cleaned_classify[3:]
+                cleaned_classify = cleaned_classify.rsplit("```", 1)[0].strip()
+            classify_result = json.loads(cleaned_classify)
+            intent = classify_result.get("intent", "generate")
+            if intent == "clarify":
+                logger.info(f"[PlannerAgent] 意图分类: clarify，路由到 clarify_agent")
+                state = state.model_copy(update={"intent_type": "clarify"})
+                return state
+        except Exception as e:
+            logger.warning(f"[PlannerAgent] 意图分类失败: {e}，默认 generate")
+
+    state = state.model_copy(update={"intent_type": "generate"})
+
     # -- 2. 获取可用知识点列表 --
     kp_list = ""
     if db:
@@ -81,8 +124,12 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     prompt = SYSTEM_PROMPT.format(kp_list_section=kp_section)
     messages = [
         {"role": "system", "content": prompt},
-        {"role": "user", "content": f"学生画像：{profile_ctx}\n\n学生需求：{state.user_message}"},
     ]
+    # 注入对话历史，帮助理解"再来一个"、"换成代码"等指代
+    messages.extend(state.chat_history)
+    messages.append(
+        {"role": "user", "content": f"学生画像：{profile_ctx}\n\n学生需求：{state.user_message}"}
+    )
 
     try:
         raw = await chat_completion(messages, temperature=0.1)
@@ -141,9 +188,13 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
 
 def route_by_resource_type(state: AgentState) -> str:
     """
-    LangGraph 条件路由：根据 resource_type 决定下一个 Agent 节点名称。
+    LangGraph 条件路由：根据 intent_type 和 resource_type 决定下一个 Agent 节点名称。
     返回值需与 graph.py 中注册的节点名对应。
     """
+    # 追问/澄清意图 → clarify_agent
+    if state.intent_type == "clarify":
+        return "clarify_agent"
+
     mapping = {
         ResourceType.doc: "doc_agent",
         ResourceType.mindmap: "mindmap_agent",

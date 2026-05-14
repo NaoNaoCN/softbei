@@ -290,8 +290,9 @@
                         <div class="form-group">
                             <label class="form-label">每日学习时间（分钟）</label>
                             <select class="form-select" id="edit-daily-time">
+                                <option value="">未设置</option>
                                 <option value="30">30 分钟</option>
-                                <option value="60" selected>60 分钟</option>
+                                <option value="60">60 分钟</option>
                                 <option value="90">90 分钟</option>
                                 <option value="120">120 分钟</option>
                             </select>
@@ -299,6 +300,7 @@
                         <div class="form-group">
                             <label class="form-label">认知风格</label>
                             <select class="form-select" id="edit-cognitive">
+                                <option value="">未设置</option>
                                 <option value="视觉型">视觉型</option>
                                 <option value="听觉型">听觉型</option>
                                 <option value="阅读型">阅读型</option>
@@ -384,8 +386,8 @@
 
             // Edit form
             document.getElementById('edit-major').value = profile.major || '';
-            document.getElementById('edit-daily-time').value = profile.daily_time_minutes ? String(profile.daily_time_minutes) : '60';
-            document.getElementById('edit-cognitive').value = profile.cognitive_style || '视觉型';
+            document.getElementById('edit-daily-time').value = profile.daily_time_minutes ? String(profile.daily_time_minutes) : '';
+            document.getElementById('edit-cognitive').value = profile.cognitive_style || '';
             document.getElementById('edit-goal').value = profile.learning_goal || '';
             document.getElementById('edit-mastered').value = (profile.knowledge_mastered || []).join(', ');
             document.getElementById('edit-weak').value = (profile.knowledge_weak || []).join(', ');
@@ -393,10 +395,12 @@
         }
 
         async function handleSave() {
+            const dailyTimeVal = document.getElementById('edit-daily-time').value;
+            const cognitiveVal = document.getElementById('edit-cognitive').value;
             const data = {
                 major: document.getElementById('edit-major').value.trim(),
-                daily_time_minutes: parseInt(document.getElementById('edit-daily-time').value) || 60,
-                cognitive_style: document.getElementById('edit-cognitive').value,
+                daily_time_minutes: dailyTimeVal ? parseInt(dailyTimeVal) : null,
+                cognitive_style: cognitiveVal || null,
                 learning_goal: document.getElementById('edit-goal').value.trim(),
                 knowledge_mastered: document.getElementById('edit-mastered').value.split(',').map(s => s.trim()).filter(Boolean),
                 knowledge_weak: document.getElementById('edit-weak').value.split(',').map(s => s.trim()).filter(Boolean),

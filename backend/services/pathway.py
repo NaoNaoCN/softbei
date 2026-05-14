@@ -139,16 +139,25 @@ async def add_pathway_item(
     if not path:
         return None
 
-    # 校验 kp_id 在知识图谱中存在
+    # 查找节点，确保属于当前用户或公共节点
     kp_node = await select_one(db, KGNode, filters={"id": data.kp_id})
-    if not kp_node:
-        return None
+    resolved_kp_id = data.kp_id
+
+    if kp_node and kp_node.user_id and str(kp_node.user_id) != str(user_id):
+        # 节点属于其他用户，尝试按名称查找当前用户的同名节点
+        own_node = await select_one(db, KGNode, filters={"name": kp_node.name, "user_id": user_id})
+        if own_node:
+            resolved_kp_id = own_node.id
+            kp_node = own_node
+        # 如果找不到同名节点，仍使用原 ID（FK 约束允许跨用户引用）
+
+    kp_name = kp_node.name if kp_node else data.kp_id
 
     item = await insert(
         db, LearningPathItem,
         data={
             "path_id": path_id,
-            "kp_id": data.kp_id,
+            "kp_id": resolved_kp_id,
             "order_index": data.order_index,
         },
     )
@@ -156,7 +165,7 @@ async def add_pathway_item(
         id=item.id,
         order_index=item.order_index,
         kp_id=item.kp_id,
-        kp_name=item.kp_id,  # kp.name 需额外查询，此处先用 kp_id
+        kp_name=kp_name,
         is_completed=item.is_completed,
     )
 

@@ -1,4 +1,5 @@
 .claude
+.playwright-mcp
 # /CLAUDE.md
 *.pdf
 /demo

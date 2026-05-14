@@ -28,6 +28,12 @@ SYSTEM_PROMPT = """你是一位智能学习顾问。
 可选知识点（来自知识图谱）：
 {available_kps}
 
+重要规则：
+- 你必须且只能从上面的"可选知识点"列表中选择推荐项
+- kp_id 必须使用列表中冒号前的 ID（如 "kp_abc123"），不得自行编造
+- kp_name 必须使用列表中冒号后的名称
+- 如果可选知识点为空或不可用，返回空数组 []
+
 以 JSON 数组返回，每项包含：
 {{"kp_id": "...", "kp_name": "...", "reason": "推荐原因"}}
 """
@@ -65,14 +71,25 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
         weak = getattr(state.profile, "knowledge_weak", []) or []
         goal = getattr(state.profile, "learning_goal", "") or ""
 
-    # 查询可用知识点
+    # 查询可用知识点（按当前用户过滤）
     available_kps = []
+    valid_kp_ids: set[str] = set()
     if db:
         try:
             from backend.db.models import KGNode
-            nodes = await db_select(db, KGNode)
+            from sqlalchemy import select as sa_select, or_
+            import uuid as _uuid
+            user_uuid = _uuid.UUID(state.user_id) if isinstance(state.user_id, str) else state.user_id
+            stmt = sa_select(KGNode).where(
+                or_(KGNode.user_id == user_uuid, KGNode.user_id == None)
+            )
+            result = await db.execute(stmt)
+            nodes = result.scalars().all()
             available_kps = [f"- {n.id}: {n.name}" for n in nodes]
-        except Exception:
+            logger.info(f"[RecommendAgent] 从数据库查询到 {len(available_kps)} 个可用知识点")
+            valid_kp_ids = {n.id for n in nodes}
+        except Exception as exc:
+            logger.warning(f"[RecommendAgent] 查询知识图谱失败: {exc}")
             available_kps = ["（知识点列表获取失败）"]
     else:
         available_kps = ["（无数据库连接）"]
@@ -106,6 +123,13 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
         # 确保是列表
         if not isinstance(recommendations, list):
             recommendations = []
+
+        # 过滤掉 kp_id 不在知识图谱中的虚假推荐
+        if valid_kp_ids:
+            valid_recs = [r for r in recommendations if r.get("kp_id") in valid_kp_ids]
+            if len(valid_recs) < len(recommendations):
+                logger.warning(f"[RecommendAgent] 过滤掉 {len(recommendations) - len(valid_recs)} 条无效推荐（kp_id 不存在于知识图谱）")
+            recommendations = valid_recs
 
         # 更新 state
         new_metadata = dict(state.metadata) if state.metadata else {}

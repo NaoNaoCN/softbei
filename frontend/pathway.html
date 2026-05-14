@@ -86,6 +86,13 @@
                 radial-gradient(ellipse at 25% 70%, rgba(90,170,170,0.05) 0%, transparent 50%),
                 /* Base gradient - lighter */
                 linear-gradient(135deg, #1e2530 0%, #252d3a 40%, #2a3245 70%, #1e2530 100%);
+            transition: background 0.3s ease;
+        }
+        .kg-graph-area.light-bg {
+            background: linear-gradient(135deg, #F8FAFC 0%, #EEF2F7 50%, #E8EDF4 100%);
+        }
+        .kg-graph-area.light-bg::before {
+            display: none;
         }
         .kg-graph-area::before {
             content: '';
@@ -415,6 +422,8 @@
 
         body.kg-fullscreen .main { margin-left: 0; padding: 0; }
         body.kg-fullscreen #tab-kg { position: fixed; inset: 0; z-index: 9999; background: #0f1923; padding: 16px; overflow: auto; display: block !important; }
+        body.kg-fullscreen .kg-graph-area.light-bg ~ * ,
+        body.kg-fullscreen:has(.kg-graph-area.light-bg) #tab-kg { background: #F0F2F5; }
         body.kg-fullscreen #kg-chart { height: calc(100vh - 120px) !important; }
 
         .kg-fullscreen-close {
@@ -462,6 +471,9 @@
                 <div class="kg-filter">
                     <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
                         <input type="checkbox" id="kg-learned-toggle"> 已学习视图
+                    </label>
+                    <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+                        <input type="checkbox" id="kg-bg-toggle"> 浅色背景
                     </label>
                     <button class="btn-secondary" onclick="enterKgFullscreen()">全屏查看</button>
                 </div>
@@ -579,6 +591,28 @@
 
         const nodeTypeSize = { 'Course': 90, 'Chapter': 55, 'KnowledgePoint': 30, 'SubPoint': 20, 'Concept': 10 };
         const nodeTypeColor = { 'Course': '#5B8DB8', 'Chapter': '#6BA389', 'KnowledgePoint': '#D4956A', 'SubPoint': '#9B85B2', 'Concept': '#C27E7E' };
+
+        // 提升颜色饱和度和亮度，用于已学习高亮
+        function boostColor(hex, satMul, lightMul) {
+            let r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
+            const max = Math.max(r,g,b), min = Math.min(r,g,b);
+            let h, s, l = (max+min)/2;
+            if (max === min) { h = s = 0; }
+            else {
+                const d = max - min;
+                s = l > 0.5 ? d/(2-max-min) : d/(max+min);
+                if (max===r) h = ((g-b)/d + (g<b?6:0))/6;
+                else if (max===g) h = ((b-r)/d+2)/6;
+                else h = ((r-g)/d+4)/6;
+            }
+            s = Math.min(1, s * satMul);
+            l = Math.min(0.85, l * lightMul);
+            function hue2rgb(p,q,t){ if(t<0)t+=1; if(t>1)t-=1; if(t<1/6)return p+(q-p)*6*t; if(t<1/2)return q; if(t<2/3)return p+(q-p)*(2/3-t)*6; return p; }
+            let ro,go,bo;
+            if (s===0) { ro=go=bo=l; }
+            else { const q=l<0.5?l*(1+s):l+s-l*s, p=2*l-q; ro=hue2rgb(p,q,h+1/3); go=hue2rgb(p,q,h); bo=hue2rgb(p,q,h-1/3); }
+            return `rgb(${Math.round(ro*255)},${Math.round(go*255)},${Math.round(bo*255)})`;
+        }
         const nodeTypeShadow = {
             'Course':          { shadowBlur: 40, shadowColor: 'rgba(91,141,184,0.45)', shadowOffsetY: 4 },
             'Chapter':         { shadowBlur: 25, shadowColor: 'rgba(107,163,137,0.35)', shadowOffsetY: 3 },
@@ -803,6 +837,7 @@
             const hasHighlight = nodes.some(n => n._searchHighlight != null);
             if (!hasHighlight) return;
 
+            const restoreColor = document.getElementById('kg-bg-toggle').checked ? 'rgba(30,30,50,0.85)' : 'rgba(255,255,255,0.85)';
             // Restore original styles
             const updated = nodes.map(n => ({
                 ...n,
@@ -816,7 +851,7 @@
                     shadowColor: undefined,
                     opacity: n._baseOpacity != null ? n._baseOpacity : 1,
                 },
-                label: { ...n.label, color: 'rgba(255,255,255,0.85)', fontWeight: undefined }
+                label: { ...n.label, color: restoreColor, fontWeight: undefined }
             }));
 
             chartInstance.setOption({ series: [{ data: updated }] });
@@ -891,6 +926,16 @@
                 const visible = zoom >= threshold;
                 const baseSize = n._baseSize || n.symbolSize;
                 const baseOpacity = n._baseOpacity != null ? n._baseOpacity : ((n.itemStyle && n.itemStyle.opacity) || 1);
+                // 已学习节点：保留大小缩放但比普通节点稍大，不弱化透明度和标签
+                if (n._learned) {
+                    const sz = visible ? baseSize : baseSize * 0.85;
+                    if (!visible) hiddenIds.add(n.id);
+                    return {
+                        ...n,
+                        symbolSize: sz,
+                        label: { ...n.label, show: true },
+                    };
+                }
                 if (!visible) hiddenIds.add(n.id);
                 return {
                     ...n,
@@ -953,6 +998,9 @@
 
             const categories = categoryList.map(c => ({ name: categoryNames[c] }));
             const isLearnedMode = document.getElementById('kg-learned-toggle').checked;
+            const isLightBg = document.getElementById('kg-bg-toggle').checked;
+            const labelColor = isLightBg ? 'rgba(30,30,50,0.85)' : 'rgba(255,255,255,0.85)';
+            const dimLabelColor = isLightBg ? 'rgba(30,30,50,0.15)' : 'rgba(255,255,255,0.15)';
 
             const chartNodes = nodes.map(n => {
                 const nType = n.type || 'KnowledgePoint';
@@ -973,17 +1021,21 @@
                 };
                 // Step 4: Learned highlight
                 if (isLearnedMode && learnedKpIds.has(n.id)) {
-                    node.itemStyle.borderColor = '#43A047';
+                    const baseColor = nodeTypeColor[nType] || '#D4956A';
+                    const bright = boostColor(baseColor, 1.4, 1.3);
+                    node.itemStyle.color = bright;
+                    node.itemStyle.borderColor = bright;
                     node.itemStyle.borderWidth = 3;
-                    node.itemStyle.shadowBlur = 18;
-                    node.itemStyle.shadowColor = 'rgba(67,160,71,0.7)';
+                    node.itemStyle.shadowBlur = 20;
+                    node.itemStyle.shadowColor = bright;
                     node.symbolSize = Math.max(baseSize, 40);
                     node._baseSize = Math.max(baseSize, 40);
                     node._baseOpacity = 1;
+                    node._learned = true;
                 } else if (isLearnedMode && !learnedKpIds.has(n.id)) {
                     node.itemStyle.opacity = 0.15;
                     node._baseOpacity = 0.15;
-                    node.label = { show: true, color: 'rgba(255,255,255,0.15)' };
+                    node.label = { show: true, color: dimLabelColor };
                 }
                 // Step 6: Pathway overlay highlight
                 if (overlayPathId && pathItemMap[n.id]) {
@@ -1030,11 +1082,11 @@
                         return `<b>${params.data.name}</b><br/><span style="font-size:12px;color:#888">${categoryNames[t] || t}</span>`;
                     }
                 },
-                legend: { data: categories.map(c => c.name), orient: 'horizontal', bottom: 10, textStyle: { fontSize: 12, color: 'rgba(255,255,255,0.7)' } },
+                legend: { data: categories.map(c => c.name), orient: 'horizontal', bottom: 10, textStyle: { fontSize: 12, color: isLightBg ? 'rgba(30,30,50,0.7)' : 'rgba(255,255,255,0.7)' } },
                 series: [{
                     type: 'graph', layout: 'force', roam: true, draggable: true,
                     categories: categories,
-                    label: { show: true, fontSize: 11, position: 'bottom', formatter: '{b}', color: 'rgba(255,255,255,0.85)' },
+                    label: { show: true, fontSize: 11, position: 'bottom', formatter: '{b}', color: labelColor },
                     edgeSymbol: ['circle', 'arrow'], edgeSymbolSize: [4, 6],
                     data: chartNodes, links: chartEdges,
                     lineStyle: { color: 'rgba(180,200,220,0.45)', width: 1.2, curveness: 0.2, opacity: 0.6 },
@@ -1274,6 +1326,13 @@
         document.getElementById('kg-search-btn').addEventListener('click', () => { performSearch(); });
         document.getElementById('kg-search').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') performSearch();
+        });
+        document.getElementById('kg-bg-toggle').addEventListener('change', () => {
+            const area = document.querySelector('.kg-graph-area');
+            const isLight = document.getElementById('kg-bg-toggle').checked;
+            area.classList.toggle('light-bg', isLight);
+            // Update label colors for readability on light background
+            if (chartInstance && fullGraph) applyFilters();
         });
 
         // === Init ===

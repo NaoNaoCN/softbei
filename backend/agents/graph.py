@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from langgraph.graph import END, StateGraph
 
 from backend.agents import (
+    clarify_agent,
     code_agent,
     doc_agent,
     kg_agent,
@@ -24,6 +25,7 @@ from backend.agents import (
 )
 from backend.models.schemas import AgentState
 from backend.services.profile import get_profile
+from backend.services.chat_history import load_chat_history
 
 # ----------------------------------------------------------
 # 数据库会话注入辅助
@@ -50,20 +52,26 @@ def build_graph() -> StateGraph:
     """
     构建并返回编译后的 LangGraph 状态机。
 
-    节点拓扑：
-    profile_agent
-      ├─ (画像不足) → END          ← 情况A/B：追问，本轮结束
-      └─ (画像足够) → planner_agent ← 情况C：正常生成流程
-                    ↙  ↙  ↙  ↘  ↘
-                doc mindmap quiz code summary
-                    ↘  ↘  ↘  ↙  ↙
-                     safety_agent
-                          ↓
-                   recommend_agent → END
+    节点拓扑（条件路由，非并行）：
+
+    START → profile_agent
+              ├─ (画像不足) → END
+              └─ (画像足够) → planner_agent
+                              │ (先判断 intent_type)
+                              ├─ intent="clarify" → clarify_agent → END
+                              │
+                              │ (intent="generate", 按 resource_type 路由)
+                              ├─ doc_agent ─────┐
+                              ├─ mindmap_agent ─┤
+                              ├─ quiz_agent ────┼─→ safety_agent → recommend_agent → END
+                              ├─ code_agent ────┤
+                              ├─ summary_agent ─┘
+                              ├─ kg_agent ──────────────────────→ recommend_agent → END
+                              └─ recommend_agent → END           ← 兜底路由
     """
     graph = StateGraph(AgentState)
 
-    # -- 注册节点（使用 wrapper 以支持 db 注入）--
+    # -- 注册节点 --
     graph.add_node("profile_agent", profile_agent.run)
     graph.add_node("planner_agent", planner_agent.run)
     graph.add_node("doc_agent", doc_agent.run)
@@ -74,6 +82,7 @@ def build_graph() -> StateGraph:
     graph.add_node("safety_agent", safety_agent.run)
     graph.add_node("recommend_agent", recommend_agent.run)
     graph.add_node("kg_agent", kg_agent.run)
+    graph.add_node("clarify_agent", clarify_agent.run)
 
     # -- 起始节点 --
     graph.set_entry_point("profile_agent")
@@ -88,7 +97,7 @@ def build_graph() -> StateGraph:
         },
     )
 
-    # planner → 条件路由（按 resource_type）
+    # planner → 条件路由（按 intent_type + resource_type）
     graph.add_conditional_edges(
         "planner_agent",
         planner_agent.route_by_resource_type,
@@ -100,6 +109,7 @@ def build_graph() -> StateGraph:
             "summary_agent": "summary_agent",
             "kg_agent": "kg_agent",
             "recommend_agent": "recommend_agent",
+            "clarify_agent": "clarify_agent",
         },
     )
 
@@ -111,6 +121,7 @@ def build_graph() -> StateGraph:
     graph.add_edge("safety_agent", "recommend_agent")
     graph.add_edge("kg_agent", "recommend_agent")  # KG 跳过 safety，直接到 recommend
     graph.add_edge("recommend_agent", END)
+    graph.add_edge("clarify_agent", END)  # clarify 直接结束，无需 safety
 
     return graph.compile()
 
@@ -137,18 +148,20 @@ async def invoke(user_id: str, session_id: str, message: str, db: AsyncSession) 
     :param db:        数据库会话
     :return:           最终 AgentState
     """
-    # 从数据库加载已有画像，避免每次都从零开始
     import uuid
     existing_profile = await get_profile(uuid.UUID(user_id), db)
+
+    # 加载多轮对话历史
+    chat_history = await load_chat_history(session_id, db)
 
     initial_state = AgentState(
         user_id=user_id,
         session_id=session_id,
         user_message=message,
         profile=existing_profile,
+        chat_history=chat_history,
     )
 
-    # profile_agent 需要 db 参数
     result = await get_graph().ainvoke(
         initial_state,
         config={"configurable": {"db": db}},
@@ -161,15 +174,18 @@ async def stream_invoke(user_id: str, session_id: str, message: str, db: AsyncSe
     流式执行图推理，逐步 yield AgentState 快照。
     供 FastAPI StreamingResponse 或 Streamlit 实时显示使用。
     """
-    # 从数据库加载已有画像，避免每次都从零开始
     import uuid
     existing_profile = await get_profile(uuid.UUID(user_id), db)
+
+    # 加载多轮对话历史
+    chat_history = await load_chat_history(session_id, db)
 
     initial_state = AgentState(
         user_id=user_id,
         session_id=session_id,
         user_message=message,
         profile=existing_profile,
+        chat_history=chat_history,
     )
     async for event in get_graph().astream(
         initial_state,

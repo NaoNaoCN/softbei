@@ -24,6 +24,7 @@ async def index_chunks(
     collection_name: Optional[str] = None,
     batch_size: int = 32,
     progress_callback: Optional[Callable[[int, int], None]] = None,
+    user_id: Optional[str] = None,
 ) -> int:
     """
     将文本块批量嵌入并写入向量库。
@@ -32,10 +33,11 @@ async def index_chunks(
     :param collection_name:    目标集合名，None 使用默认集合
     :param batch_size:         每批嵌入请求的大小
     :param progress_callback:  可选回调 (batch_num, total_batches)，每批完成后调用
+    :param user_id:            上传用户 ID，写入 metadata 用于账户隔离
     :return:                   成功写入的 chunk 数量
     """
     total = 0
-    logger.info(f"[Indexer] 开始索引 {len(chunks)} 个文本块，batch_size={batch_size}")
+    logger.info(f"[Indexer] 开始索引 {len(chunks)} 个文本块，batch_size={batch_size}, user_id={user_id}")
     batches = list(range(0, len(chunks), batch_size))
     total_batches = len(batches)
     for batch_num, i in enumerate(batches, start=1):
@@ -52,6 +54,7 @@ async def index_chunks(
                     "source": c.source_path,
                     "page": str(c.page or ""),
                     "section": c.section or "",
+                    "user_id": user_id or "",
                 }
                 for c in batch
             ],

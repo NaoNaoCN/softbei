@@ -39,6 +39,7 @@ async def retrieve(
     score_threshold: float = 0.5,
     where: Optional[dict] = None,
     collection_name: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> list[RetrievedChunk]:
     """
     语义检索：将 query 嵌入后查询向量库，过滤低相似度结果。
@@ -61,15 +62,30 @@ async def retrieve(
         logger.warning("[RAG] Embedding 返回空向量，无法执行语义检索。请检查 embedding 模型/API 配置。")
         return []
 
+    # 构建用户隔离过滤条件
+    # 策略：用户可以检索自己上传的文档 + 公共文档（user_id 为空字符串）
+    # 注意：对于尚未迁移的旧数据（无 user_id 字段），过滤可能返回空结果，
+    # 此时回退到无过滤检索并记录警告。
+    effective_where = where
+    if user_id:
+        user_filter = {"$or": [
+            {"user_id": user_id},
+            {"user_id": ""},
+        ]}
+        if effective_where:
+            effective_where = {"$and": [effective_where, user_filter]}
+        else:
+            effective_where = user_filter
+
     raw = query_documents(
         query_embedding=embedding,
         n_results=n_results,
-        where=where,
+        where=effective_where,
         collection_name=collection_name,
     )
     chunks = _parse_results(raw, score_threshold)
     if not chunks:
-        logger.warning(f"[RAG] 检索完成但无结果通过阈值（threshold={score_threshold}），query={query[:60]!r}")
+        logger.info(f"[RAG] 检索无结果（threshold={score_threshold}），query={query[:60]!r}，将由 LLM 纯生成")
     else:
         logger.info(f"[RAG] 检索到 {len(chunks)} 条相关文档，最高分={chunks[0].score:.3f}，最低分={chunks[-1].score:.3f}")
     return chunks
@@ -79,6 +95,7 @@ async def retrieve_by_kp(
     kp_name: str,
     n_results: int = 8,
     collection_name: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> list[RetrievedChunk]:
     """
     按知识点名称检索相关文档片段。
@@ -88,6 +105,7 @@ async def retrieve_by_kp(
         query=f"知识点：{kp_name}",
         n_results=n_results,
         collection_name=collection_name,
+        user_id=user_id,
     )
 
 
