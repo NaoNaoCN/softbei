@@ -48,7 +48,7 @@ async def retrieve(
     try:
         from backend.db.vector import get_collection
         col = get_collection()
-        doc_count = col.count()
+        doc_count = await col.count()
         if doc_count == 0:
             logger.warning("[RAG] 向量库为空（0 条文档），RAG 降级为纯 LLM 生成。请运行 python -m backend.rag.indexer 导入文档。")
             return []
@@ -77,7 +77,7 @@ async def retrieve(
         else:
             effective_where = user_filter
 
-    raw = query_documents(
+    raw = await query_documents(
         query_embedding=embedding,
         n_results=n_results,
         where=effective_where,
@@ -145,14 +145,14 @@ def format_context(chunks: list[RetrievedChunk], max_tokens: int = 3000) -> str:
 # ----------------------------------------------------------
 
 def _parse_results(raw: dict, score_threshold: float) -> list[RetrievedChunk]:
-    """将 ChromaDB QueryResult 转换为 RetrievedChunk 列表并过滤。"""
+    """将 QueryResult 转换为 RetrievedChunk 列表并过滤。"""
     chunks: list[RetrievedChunk] = []
     ids = (raw.get("ids") or [[]])[0]
     documents = (raw.get("documents") or [[]])[0]
     distances = (raw.get("distances") or [[]])[0]
     metadatas = (raw.get("metadatas") or [[]])[0]
     for cid, doc, dist, meta in zip(ids, documents, distances, metadatas):
-        # ChromaDB cosine distance → similarity: score = 1 - distance
+        # cosine distance → similarity: score = 1 - distance
         score = 1.0 - float(dist)
         if score < score_threshold:
             continue

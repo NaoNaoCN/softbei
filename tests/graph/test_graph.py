@@ -92,11 +92,15 @@ class TestInvoke:
         mock_db = MagicMock()
 
         # 模拟图的 invoke 返回最终状态字典
-        with patch.object(graph, "get_graph") as mock_get_graph:
+        with patch.object(graph, "get_graph") as mock_get_graph, \
+             patch.object(graph, "get_profile", new_callable=AsyncMock) as mock_get_profile, \
+             patch.object(graph, "load_chat_history", new_callable=AsyncMock) as mock_get_history:
+            mock_get_profile.return_value = None
+            mock_get_history.return_value = []
             mock_graph_instance = MagicMock()
             mock_graph_instance.ainvoke = AsyncMock(return_value={
-                "user_id": "u1",
-                "session_id": "s1",
+                "user_id": "00000000-0000-0000-0000-000000000001",
+                "session_id": "00000000-0000-0000-0000-000000000002",
                 "user_message": "hello",
                 "profile": None,
                 "profile_complete": False,
@@ -106,14 +110,14 @@ class TestInvoke:
             mock_get_graph.return_value = mock_graph_instance
 
             result = await graph.invoke(
-                user_id="u1",
-                session_id="s1",
+                user_id="00000000-0000-0000-0000-000000000001",
+                session_id="00000000-0000-0000-0000-000000000002",
                 message="hello",
                 db=mock_db,
             )
 
             assert isinstance(result, AgentState)
-            assert result.user_id == "u1"
+            assert result.user_id == "00000000-0000-0000-0000-000000000001"
             mock_graph_instance.ainvoke.assert_called_once()
 
         graph._compiled_graph = None
@@ -125,11 +129,15 @@ class TestInvoke:
 
         mock_db = MagicMock()
 
-        with patch.object(graph, "get_graph") as mock_get_graph:
+        with patch.object(graph, "get_graph") as mock_get_graph, \
+             patch.object(graph, "get_profile", new_callable=AsyncMock) as mock_get_profile, \
+             patch.object(graph, "load_chat_history", new_callable=AsyncMock) as mock_get_history:
+            mock_get_profile.return_value = None
+            mock_get_history.return_value = []
             mock_graph_instance = MagicMock()
             mock_graph_instance.ainvoke = AsyncMock(return_value={
-                "user_id": "u1",
-                "session_id": "s1",
+                "user_id": "00000000-0000-0000-0000-000000000001",
+                "session_id": "00000000-0000-0000-0000-000000000002",
                 "user_message": "hi",
                 "profile": None,
                 "profile_complete": True,
@@ -137,7 +145,7 @@ class TestInvoke:
             })
             mock_get_graph.return_value = mock_graph_instance
 
-            await graph.invoke("u1", "s1", "hi", db=mock_db)
+            await graph.invoke("00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002", "hi", db=mock_db)
 
             call_kwargs = mock_graph_instance.ainvoke.call_args[1]
             assert "config" in call_kwargs
@@ -161,16 +169,20 @@ class TestStreamInvoke:
         mock_db = MagicMock()
 
         async def mock_astream(state, config):
-            yield {"user_id": "u1", "session_id": "s1", "user_message": "hi", "profile": None, "metadata": {}, "profile_complete": False}
-            yield {"user_id": "u1", "session_id": "s1", "user_message": "hi", "profile": None, "metadata": {}, "profile_complete": True}
+            yield {"user_id": "00000000-0000-0000-0000-000000000001", "session_id": "00000000-0000-0000-0000-000000000002", "user_message": "hi", "profile": None, "metadata": {}, "profile_complete": False}
+            yield {"user_id": "00000000-0000-0000-0000-000000000001", "session_id": "00000000-0000-0000-0000-000000000002", "user_message": "hi", "profile": None, "metadata": {}, "profile_complete": True}
 
-        with patch.object(graph, "get_graph") as mock_get_graph:
+        with patch.object(graph, "get_graph") as mock_get_graph, \
+             patch.object(graph, "get_profile", new_callable=AsyncMock) as mock_get_profile, \
+             patch.object(graph, "load_chat_history", new_callable=AsyncMock) as mock_get_history:
+            mock_get_profile.return_value = None
+            mock_get_history.return_value = []
             mock_graph_instance = MagicMock()
             mock_graph_instance.astream = mock_astream
             mock_get_graph.return_value = mock_graph_instance
 
             events = []
-            async for event in graph.stream_invoke("u1", "s1", "hi", db=mock_db):
+            async for event in graph.stream_invoke("00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002", "hi", db=mock_db):
                 events.append(event)
 
             assert len(events) == 2

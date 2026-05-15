@@ -465,13 +465,13 @@
             <!-- Document Import -->
             <div class="import-section">
                 <div class="import-title" onclick="document.getElementById('import-form').style.display=document.getElementById('import-form').style.display=='none'?'block':'none'">
-                    <span>上传 PDF 文件</span>
+                    <span>上传文档</span>
                     <span id="import-arrow">▼</span>
                 </div>
                 <div class="import-area" onclick="document.getElementById('file-input').click()">
                     <div class="import-icon"><i data-lucide="file-plus"></i></div>
-                    <div class="import-text">点击选择 PDF 文件或拖拽到此处上传</div>
-                    <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="handleFileSelect(this)">
+                    <div class="import-text">点击选择文档或拖拽到此处上传（PDF/DOCX/MD/TXT）</div>
+                    <input type="file" id="file-input" accept=".pdf,.docx,.doc,.md,.txt" style="display:none" onchange="handleFileSelect(this)">
                 </div>
                 <div class="import-form" id="import-form">
                     <div class="form-row">
@@ -669,8 +669,17 @@
             }
         }
 
+        const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.doc', '.md', '.txt'];
+
         function handleFileSelect(input) {
             if (input.files[0]) {
+                const name = input.files[0].name.toLowerCase();
+                const ext = '.' + name.split('.').pop();
+                if (!SUPPORTED_EXTENSIONS.includes(ext)) {
+                    alert('不支持的文件格式：' + ext + '\n支持：' + SUPPORTED_EXTENSIONS.join(', '));
+                    input.value = '';
+                    return;
+                }
                 document.querySelector('.import-form').style.display = 'block';
                 document.querySelector('.import-text').textContent = input.files[0].name;
             }

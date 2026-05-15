@@ -98,7 +98,7 @@ async def _check_user_has_documents(user_id: str) -> bool:
         from backend.db.vector import get_collection
         col = get_collection()
         # 查询该用户是否有任何文档（只需 1 条即可判断）
-        results = col.get(where={"user_id": user_id}, limit=1)
+        results = await col.get(where={"user_id": user_id}, limit=1)
         return bool(results and results.get("ids"))
     except Exception:
         # 向量库不可用时，保守返回 True（不阻断流程）

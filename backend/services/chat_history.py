@@ -72,7 +72,7 @@ async def load_chat_history(
     max_tokens: int = DEFAULT_MAX_TOKENS,
 ) -> list[dict[str, str]]:
     """
-    从动态会话表加载历史消息并截断。
+    从 ChatMessage 表加载历史消息并截断。
 
     :param session_id: 会话 UUID 字符串
     :param db: 数据库会话
@@ -80,23 +80,21 @@ async def load_chat_history(
     :param max_tokens: 历史 token 预算
     :return: 截断后的历史消息列表
     """
-    from backend.db.crud import select_by_id
-    from backend.db.dynamic_chat import read_messages
-    from backend.db.models import ChatSession
+    from backend.db.crud import select as db_select
+    from backend.db.models import ChatMessage
     import uuid as uuid_mod
 
     try:
-        # session_id 可能是字符串，需要转为 UUID
         sid = uuid_mod.UUID(session_id) if isinstance(session_id, str) else session_id
-        session = await select_by_id(db, ChatSession, sid)
-        if not session or not session.messages_table:
-            return []
-
-        messages = await read_messages(session.messages_table)
+        messages = await db_select(
+            db, ChatMessage,
+            filters={"session_id": sid},
+            order_by=ChatMessage.created_at.asc(),
+        )
         if not messages:
             return []
 
-        history = [{"role": m["role"], "content": m["content"]} for m in messages]
+        history = [{"role": m.role, "content": m.content} for m in messages]
         return truncate_history(history, max_turns, max_tokens)
 
     except Exception as e:

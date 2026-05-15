@@ -15,6 +15,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     JSON,
     String,
@@ -102,15 +103,59 @@ class ChatSession(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
     title: Mapped[str | None] = mapped_column(String(256))
-    # 该会话独立的消息表名（动态建表，与 chat_session 同级）
-    messages_table: Mapped[str | None] = mapped_column(String(128))
-    # 最后一次使用时间（用于过期清理）
     last_used_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     user: Mapped["User"] = relationship(back_populates="sessions")
+
+
+# ----------------------------------------------------------
+# 3b. ChatMessage（取代动态 per-session 消息表）
+# ----------------------------------------------------------
+
+class ChatMessage(Base):
+    __tablename__ = "chat_message"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("chat_session.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[str | None] = mapped_column(Text)
+    resource_type: Mapped[str | None] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_chat_message_session_time", "session_id", "created_at"),
+    )
+
+
+# ----------------------------------------------------------
+# 3c. DocumentChunk（向量存储）
+# ----------------------------------------------------------
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunk"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    chunk_id: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
+    doc_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    collection_name: Mapped[str] = mapped_column(String(64), default="knowledge_base", index=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)
+    source: Mapped[str | None] = mapped_column(String(512))
+    page: Mapped[int | None] = mapped_column(Integer)
+    section: Mapped[str | None] = mapped_column(String(256))
+    user_id: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_document_chunk_doc_id", "doc_id"),
+    )
 
 
 # ----------------------------------------------------------

@@ -12,7 +12,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install dependencies
 pip install -r requirements.txt
 
-# Or run backend only (frontend at http://localhost:8000/app)
+# Run database migrations (first time or after schema changes)
+alembic upgrade head
+
+# Run backend (frontend at http://localhost:8000/app)
 uvicorn backend.main:app --reload --port 8000
 
 # Build knowledge base vector index
@@ -22,10 +25,7 @@ python -m backend.rag.indexer
 pytest tests/ -v
 
 # Run lightweight tests (no DB/LLM deps)
-pytest tests/test_schemas.py tests/test_rag.py -v
-
-# Run a single test file
-pytest tests/test_crud.py -v
+pytest tests/test_schemas.py -v
 
 # Run a single test function
 pytest tests/test_schemas.py::test_user_create -v
@@ -33,11 +33,11 @@ pytest tests/test_schemas.py::test_user_create -v
 
 ## Architecture
 
-**Stack:** FastAPI (async) + HTML/CSS/JS frontend + LangGraph agents + ChromaDB (RAG) + SQLAlchemy 2.0 (async ORM)
+**Stack:** FastAPI (async) + HTML/CSS/JS frontend + LangGraph agents + PostgreSQL vector store (JSON + numpy cosine) + SQLAlchemy 2.0 (async ORM) + PostgreSQL
 
 **LLM & Config:** Provider/model configured in `configs/config.yaml` via `${ENV_VAR}` substitution. Currently uses Qwen (`qwen3.5-flash`) via DashScope. Multi-provider support (spark/deepseek/qwen/openai) in `backend/services/llm.py`. Config is a module-level singleton: `from backend.config import config`.
 
-**Required env vars** (see `.env.example`): `LLM_API_KEY`, `JWT_SECRET`, `DATABASE_URL` (defaults to SQLite `dev.db`).
+**Required env vars** (see `.env.example`): `LLM_API_KEY`, `JWT_SECRET`, `DATABASE_URL` (PostgreSQL, e.g. `postgresql+asyncpg://user:pass@localhost:5432/softbei`).
 
 ### Agent Pipeline (LangGraph)
 
@@ -53,14 +53,15 @@ Resource generation is triggered via `POST /generate`, runs as a background task
 
 ### Database Layer
 
-- ORM models in `backend/db/models.py`: `User`, `StudentProfile`, `ProfileHistory`, `ChatSession`, `KGNode`, `KGEdge`, `ResourceMeta`, `GenerationTask`, `KGBuildTask`, `QuizItem`, `QuizAttempt`, `LearningPath`, `LearningPathItem`, `LearningRecord`
+- **PostgreSQL** via `asyncpg` driver. Schema managed by **Alembic** (`migrations/`).
+- ORM models in `backend/db/models.py`: `User`, `StudentProfile`, `ProfileHistory`, `ChatSession`, `ChatMessage`, `KGNode`, `KGEdge`, `ResourceMeta`, `GenerationBatch`, `GenerationTask`, `KGBuildTask`, `QuizItem`, `QuizAttempt`, `LearningPath`, `LearningPathItem`, `LearningRecord`
 - Generic async CRUD in `backend/db/crud.py`: `insert`, `select`, `select_one`, `update_by_id`, `delete_by_id`, `count`. Supports relation loading via `loadRelations` param.
-- Dev: SQLite (`aiosqlite`). Prod: MySQL (`aiomysql`).
-- Chat messages use **dynamic per-session tables** (created at runtime), not a static `chat_message` table.
+- Chat messages stored in static `chat_message` table.
+- Connection pool: `pool_size=10 + max_overflow=20`, `pool_pre_ping=True`.
 
 ### RAG Pipeline
 
-`backend/rag/loader.py` → `indexer.py` → `retriever.py`. Loader parses PDF/DOCX/Markdown/TXT into `TextChunk` objects. Indexer vectorizes with BGE-M3 into ChromaDB. Retriever does semantic search with citation formatting.
+`backend/rag/loader.py` → `indexer.py` → `retriever.py`. Loader parses PDF/DOCX/Markdown/TXT into `TextChunk` objects. Indexer vectorizes with BGE-M3 into PostgreSQL `document_chunk` table. Retriever does semantic search via numpy cosine similarity with citation formatting.
 
 ### Frontend
 

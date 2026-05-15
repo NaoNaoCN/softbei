@@ -1,11 +1,11 @@
 """
 tests/rag/test_vector.py
-backend/db/vector.py 单元测试。
-使用 unittest.mock 模拟 ChromaDB 客户端。
+backend/db/vector.py 单元测试（pgvector 实现）。
+使用 unittest.mock 模拟数据库引擎。
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from backend.db import vector
 
@@ -21,10 +21,6 @@ class TestConstants:
         """COLLECTION_NAME 应来自 config.vector_db.collection。"""
         assert vector.COLLECTION_NAME == vector.config.vector_db.collection
 
-    def test_persist_dir_from_config(self):
-        """CHROMA_PERSIST_DIR 应来自 config.vector_db.persist_dir。"""
-        assert vector.CHROMA_PERSIST_DIR == vector.config.vector_db.persist_dir
-
 
 # ===========================================================
 # init_vector_db tests
@@ -33,77 +29,19 @@ class TestConstants:
 class TestInitVectorDb:
     """init_vector_db 函数测试。"""
 
-    def test_init_vector_db_creates_client(self):
-        """init_vector_db 应创建 ChromaDB 客户端。"""
-        vector._client = None
-        vector._collection = None
+    def test_init_vector_db_sets_proxy(self):
+        """init_vector_db 应正常执行（no-op，仅日志）。"""
+        vector._collection_proxy = None
+        vector.init_vector_db()
+        # init_vector_db 是 no-op，仅记录日志
+        # 验证不会抛出异常
 
-        mock_client = MagicMock()
-        mock_collection = MagicMock()
-        mock_client.get_or_create_collection.return_value = mock_collection
-
-        with patch("backend.db.vector.chromadb.PersistentClient", return_value=mock_client):
-            vector.init_vector_db()
-
-        assert vector._client is mock_client
-        assert vector._collection is mock_collection
-        mock_client.get_or_create_collection.assert_called_once()
-
-    def test_init_vector_db_telemetry_disabled(self):
-        """init_vector_db 应禁用匿名遥测。"""
-        vector._client = None
-        vector._collection = None
-
-        mock_client = MagicMock()
-        mock_collection = MagicMock()
-        mock_client.get_or_create_collection.return_value = mock_collection
-
-        with patch("backend.db.vector.chromadb.PersistentClient", return_value=mock_client) as mock_pc:
-            vector.init_vector_db()
-            _, kwargs = mock_pc.call_args
-            assert kwargs["settings"].anonymized_telemetry is False
-
-    def test_init_vector_db_uses_cosine_metadata(self):
-        """默认集合应使用 cosine 距离度量。"""
-        vector._client = None
-        vector._collection = None
-
-        mock_client = MagicMock()
-        mock_collection = MagicMock()
-        mock_client.get_or_create_collection.return_value = mock_collection
-
-        with patch("backend.db.vector.chromadb.PersistentClient", return_value=mock_client):
-            vector.init_vector_db()
-
-        _, kwargs = mock_client.get_or_create_collection.call_args
-        assert kwargs["metadata"]["hnsw:space"] == "cosine"
-
-
-# ===========================================================
-# get_collection tests
-# ===========================================================
-
-class TestGetCollection:
-    """get_collection 函数测试。"""
-
-    def test_get_collection_before_init_raises(self):
-        """集合未初始化时应抛出 RuntimeError。"""
-        vector._collection = None
-        with pytest.raises(RuntimeError, match="not initialized"):
-            vector.get_collection()
-
-    def test_get_collection_returns_collection(self):
-        """初始化后应返回集合对象。"""
-        vector._collection = None
-        mock_client = MagicMock()
-        mock_collection = MagicMock()
-        mock_client.get_or_create_collection.return_value = mock_collection
-
-        with patch("backend.db.vector.chromadb.PersistentClient", return_value=mock_client):
-            vector.init_vector_db()
-
-        result = vector.get_collection()
-        assert result is mock_collection
+    def test_get_collection_creates_proxy(self):
+        """get_collection 应返回 _CollectionProxy 实例。"""
+        vector._collection_proxy = None
+        col = vector.get_collection()
+        assert isinstance(col, vector._CollectionProxy)
+        assert col.collection_name == vector.COLLECTION_NAME
 
 
 # ===========================================================
@@ -113,189 +51,106 @@ class TestGetCollection:
 class TestGetOrCreateCollection:
     """get_or_create_collection 函数测试。"""
 
-    def test_get_or_create_collection_before_init_raises(self):
-        """客户端未初始化时应抛出 RuntimeError。"""
-        vector._client = None
-        with pytest.raises(RuntimeError, match="not initialized"):
-            vector.get_or_create_collection("test_collection")
-
-    def test_get_or_create_collection_creates_named_collection(self):
-        """按名称创建/获取集合，传入 name 参数。"""
-        vector._client = None
-        vector._collection = None
-
-        mock_client = MagicMock()
-        mock_collection = MagicMock()
-        mock_client.get_or_create_collection.return_value = mock_collection
-
-        with patch("backend.db.vector.chromadb.PersistentClient", return_value=mock_client):
-            vector.init_vector_db()
-
-        result = vector.get_or_create_collection("custom_collection")
-        mock_client.get_or_create_collection.assert_called_with(
-            name="custom_collection",
-            metadata={"hnsw:space": "cosine"},
-        )
-        assert result is mock_collection
+    def test_returns_named_proxy(self):
+        """get_or_create_collection 应返回指定名称的代理。"""
+        col = vector.get_or_create_collection("test_coll")
+        assert isinstance(col, vector._CollectionProxy)
+        assert col.collection_name == "test_coll"
 
 
 # ===========================================================
-# upsert_documents tests
+# _read_where_clause tests
 # ===========================================================
 
-class TestUpsertDocuments:
-    """upsert_documents 函数测试。"""
+class TestBuildWhereClause:
+    """_build_where_clause 函数测试。"""
 
-    def test_upsert_uses_default_collection(self):
-        """不指定 collection_name 时使用默认集合。"""
-        vector._collection = None
-        mock_client = MagicMock()
-        mock_collection = MagicMock()
-        mock_client.get_or_create_collection.return_value = mock_collection
+    def test_empty_where_returns_empty(self):
+        clause, params = vector._build_where_clause(None)
+        assert clause == ""
+        assert params == {}
 
-        with patch("backend.db.vector.chromadb.PersistentClient", return_value=mock_client):
-            vector.init_vector_db()
+    def test_simple_equality(self):
+        clause, params = vector._build_where_clause({"user_id": "abc"})
+        assert "user_id =" in clause
+        assert list(params.values()) == ["abc"]
 
-        vector.upsert_documents(
-            ids=["1"],
-            documents=["doc text"],
-            embeddings=[[0.1, 0.2]],
+    def test_or_clause(self):
+        clause, params = vector._build_where_clause(
+            {"$or": [{"user_id": "a"}, {"user_id": ""}]}
         )
-        mock_collection.upsert.assert_called_once()
+        assert "OR" in clause
+        assert len(params) == 2
 
-    def test_upsert_uses_named_collection(self):
-        """指定 collection_name 时使用命名集合。"""
-        vector._client = None
-        vector._collection = None
-
-        mock_client = MagicMock()
-        mock_collection = MagicMock()
-        mock_client.get_or_create_collection.return_value = mock_collection
-
-        with patch("backend.db.vector.chromadb.PersistentClient", return_value=mock_client):
-            vector.init_vector_db()
-
-        vector.upsert_documents(
-            ids=["1"],
-            documents=["doc text"],
-            embeddings=[[0.1, 0.2]],
-            collection_name="custom",
+    def test_and_clause(self):
+        clause, params = vector._build_where_clause(
+            {"$and": [{"doc_id": "doc1"}, {"user_id": "u1"}]}
         )
-        mock_client.get_or_create_collection.assert_called_with(
-            name="custom",
-            metadata={"hnsw:space": "cosine"},
-        )
-
-    def test_upsert_fills_empty_metadata(self):
-        """metadatas 为 None 时应填充空字典列表。"""
-        vector._collection = None
-        mock_client = MagicMock()
-        mock_collection = MagicMock()
-        mock_client.get_or_create_collection.return_value = mock_collection
-
-        with patch("backend.db.vector.chromadb.PersistentClient", return_value=mock_client):
-            vector.init_vector_db()
-
-        vector.upsert_documents(
-            ids=["1", "2"],
-            documents=["doc1", "doc2"],
-            embeddings=[[0.1], [0.2]],
-            metadatas=None,
-        )
-        _, kwargs = mock_collection.upsert.call_args
-        assert kwargs["metadatas"] == [{}, {}]
+        assert "AND" in clause
+        assert len(params) == 2
 
 
 # ===========================================================
-# query_documents tests
+# _convert_metadata_to_columns tests
 # ===========================================================
 
-class TestQueryDocuments:
-    """query_documents 函数测试。"""
+class TestConvertMetadata:
+    """_convert_metadata_to_columns 函数测试。"""
 
-    def test_query_uses_default_collection(self):
-        """不指定 collection_name 时使用默认集合。"""
-        vector._collection = None
-        mock_client = MagicMock()
-        mock_collection = MagicMock()
-        mock_collection.query.return_value = {"ids": [], "documents": []}
-        mock_client.get_or_create_collection.return_value = mock_collection
+    def test_full_metadata(self):
+        result = vector._convert_metadata_to_columns({
+            "source": "test.pdf",
+            "page": "3",
+            "section": "Intro",
+            "user_id": "user1",
+        })
+        assert result["source"] == "test.pdf"
+        assert result["page"] == 3
+        assert result["section"] == "Intro"
+        assert result["user_id"] == "user1"
 
-        with patch("backend.db.vector.chromadb.PersistentClient", return_value=mock_client):
-            vector.init_vector_db()
-
-        vector.query_documents(query_embedding=[0.1, 0.2], n_results=3)
-        mock_collection.query.assert_called_once()
-
-    def test_query_passes_n_results(self):
-        """query_documents 应传递 n_results 参数。"""
-        vector._collection = None
-        mock_client = MagicMock()
-        mock_collection = MagicMock()
-        mock_collection.query.return_value = {"ids": [], "documents": []}
-        mock_client.get_or_create_collection.return_value = mock_collection
-
-        with patch("backend.db.vector.chromadb.PersistentClient", return_value=mock_client):
-            vector.init_vector_db()
-
-        vector.query_documents(query_embedding=[0.1], n_results=7)
-        _, kwargs = mock_collection.query.call_args
-        assert kwargs["n_results"] == 7
-
-    def test_query_passes_where_filter(self):
-        """query_documents 应传递 where 过滤条件。"""
-        vector._collection = None
-        mock_client = MagicMock()
-        mock_collection = MagicMock()
-        mock_collection.query.return_value = {"ids": [], "documents": []}
-        mock_client.get_or_create_collection.return_value = mock_collection
-
-        with patch("backend.db.vector.chromadb.PersistentClient", return_value=mock_client):
-            vector.init_vector_db()
-
-        filter_where = {"kp_id": "kp_01"}
-        vector.query_documents(query_embedding=[0.1], n_results=5, where=filter_where)
-        _, kwargs = mock_collection.query.call_args
-        assert kwargs["where"] == filter_where
+    def test_empty_metadata(self):
+        result = vector._convert_metadata_to_columns({})
+        assert result["source"] == ""
+        assert result["page"] is None
+        assert result["section"] == ""
+        assert result["user_id"] == ""
 
 
 # ===========================================================
-# delete_documents tests
+# _compute_cosine_similarity tests
 # ===========================================================
 
-class TestDeleteDocuments:
-    """delete_documents 函数测试。"""
+class TestCosineSimilarity:
+    """_compute_cosine_similarity 函数测试。"""
 
-    def test_delete_uses_default_collection(self):
-        """不指定 collection_name 时使用默认集合。"""
-        vector._collection = None
-        mock_client = MagicMock()
-        mock_collection = MagicMock()
-        mock_client.get_or_create_collection.return_value = mock_collection
+    def test_identical_vectors(self):
+        emb = [1.0, 0.0, 0.0]
+        candidates = [("id1", "doc1", emb, {"k": "v"})]
+        result = vector._compute_cosine_similarity(emb, candidates)
+        assert len(result) == 1
+        assert result[0][2] == pytest.approx(1.0, rel=0.01)
 
-        with patch("backend.db.vector.chromadb.PersistentClient", return_value=mock_client):
-            vector.init_vector_db()
+    def test_orthogonal_vectors(self):
+        query = [1.0, 0.0]
+        candidates = [("id1", "doc1", [0.0, 1.0], {})]
+        result = vector._compute_cosine_similarity(query, candidates)
+        assert result[0][2] == pytest.approx(0.0, abs=0.01)
 
-        vector.delete_documents(ids=["id1", "id2"])
-        mock_collection.delete.assert_called_once_with(ids=["id1", "id2"])
+    def test_sorted_by_score(self):
+        query = [1.0, 0.0]
+        candidates = [
+            ("id1", "doc1", [0.0, 1.0], {}),
+            ("id2", "doc2", [1.0, 0.0], {}),
+            ("id3", "doc3", [0.7, 0.7], {}),
+        ]
+        result = vector._compute_cosine_similarity(query, candidates)
+        scores = [r[2] for r in result]
+        assert scores == sorted(scores, reverse=True)
 
-    def test_delete_with_named_collection(self):
-        """指定 collection_name 时使用命名集合。"""
-        vector._client = None
-        vector._collection = None
-
-        mock_client = MagicMock()
-        mock_collection = MagicMock()
-        mock_client.get_or_create_collection.return_value = mock_collection
-
-        with patch("backend.db.vector.chromadb.PersistentClient", return_value=mock_client):
-            vector.init_vector_db()
-
-        vector.delete_documents(ids=["id1"], collection_name="custom")
-        mock_client.get_or_create_collection.assert_called_with(
-            name="custom",
-            metadata={"hnsw:space": "cosine"},
-        )
+    def test_empty_candidates(self):
+        result = vector._compute_cosine_similarity([1.0], [])
+        assert result == []
 
 
 # ===========================================================
@@ -305,30 +160,21 @@ class TestDeleteDocuments:
 class TestVectorHealthCheck:
     """health_check 函数测试。"""
 
-    def test_health_check_returns_true_on_success(self):
-        """集合 count() 成功时返回 True。"""
-        vector._collection = None
-        mock_client = MagicMock()
-        mock_collection = MagicMock()
-        mock_collection.count.return_value = 10
-        mock_client.get_or_create_collection.return_value = mock_collection
+    @pytest.mark.asyncio
+    async def test_health_check_returns_true(self):
+        """数据库可用时返回 True。"""
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock()
+        mock_engine = MagicMock()
+        mock_engine.connect.return_value.__aenter__.return_value = mock_conn
 
-        with patch("backend.db.vector.chromadb.PersistentClient", return_value=mock_client):
-            vector.init_vector_db()
-
-        result = vector.health_check()
+        with patch("backend.db.vector.get_engine", return_value=mock_engine):
+            result = await vector.health_check()
         assert result is True
 
-    def test_health_check_returns_false_on_exception(self):
-        """集合 count() 抛出异常时返回 False。"""
-        vector._collection = None
-        mock_client = MagicMock()
-        mock_collection = MagicMock()
-        mock_collection.count.side_effect = RuntimeError("connection failed")
-        mock_client.get_or_create_collection.return_value = mock_collection
-
-        with patch("backend.db.vector.chromadb.PersistentClient", return_value=mock_client):
-            vector.init_vector_db()
-
-        result = vector.health_check()
+    @pytest.mark.asyncio
+    async def test_health_check_returns_false_on_error(self):
+        """数据库不可用时返回 False。"""
+        with patch("backend.db.vector.get_engine", side_effect=RuntimeError("no conn")):
+            result = await vector.health_check()
         assert result is False

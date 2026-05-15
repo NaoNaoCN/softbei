@@ -1,6 +1,7 @@
 """
 backend/db/database.py
-MySQL / SQLite 数据库连接池与基础 CRUD 助手（异步 SQLAlchemy 2.x）。
+PostgreSQL 数据库连接池与基础 CRUD 助手（异步 SQLAlchemy 2.x）。
+Schema 管理由 Alembic 负责，此处不再调用 create_all。
 """
 
 from __future__ import annotations
@@ -27,8 +28,7 @@ class Base(DeclarativeBase):
     pass
 
 
-# 导入所有模型，确保 Base.metadata 在 create_all 前已注册全部表
-# 注意：必须在 Base 定义之后、init_db() 调用之前完成导入
+# 导入所有模型，确保 Base.metadata 在 Alembic / 运行时已注册全部表
 def _import_models() -> None:
     from backend.db import models  # noqa: F401
 
@@ -50,34 +50,35 @@ def get_engine() -> AsyncEngine:
 
 async def init_db() -> None:
     """
-    创建引擎、建立连接池，并在开发模式下自动建表。
+    创建 PostgreSQL 异步引擎、建立连接池。
     应在 FastAPI lifespan 的 startup 阶段调用。
+
+    Schema 管理由 Alembic 负责，此处不调用 create_all。
     """
     global _engine, _session_factory
     db_cfg = config.database
-    engine_kwargs: dict = dict(echo=db_cfg.echo, pool_pre_ping=True)
-    if "sqlite" not in db_cfg.url:
-        # 连接池参数仅适用于非 SQLite 数据库
-        engine_kwargs.update(
-            pool_size=db_cfg.pool_size,
-            max_overflow=db_cfg.max_overflow,
-            pool_timeout=db_cfg.pool_timeout,
-            pool_recycle=db_cfg.pool_recycle,
-        )
-    else:
-        # SQLite 需要设置 busy_timeout，避免锁冲突时直接失败
-        engine_kwargs["connect_args"] = {"timeout": 30}
-    _engine = create_async_engine(db_cfg.url, **engine_kwargs)
-    _session_factory = async_sessionmaker(
-        _engine,
-        expire_on_commit=False,
-        class_=AsyncSession,
+
+    connect_args = {
+        "timeout": db_cfg.pool_timeout,
+        "command_timeout": 60,
+    }
+
+    _engine = create_async_engine(
+        db_cfg.url,
+        echo=db_cfg.echo,
+        pool_size=db_cfg.pool_size,
+        max_overflow=db_cfg.max_overflow,
+        pool_timeout=db_cfg.pool_timeout,
+        pool_recycle=db_cfg.pool_recycle,
+        pool_pre_ping=True,
+        connect_args=connect_args,
     )
-    # 开发/测试时自动建表
-    if "sqlite" in db_cfg.url:
-        _import_models()
-        async with _engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+
+    _session_factory = async_sessionmaker(
+        bind=_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
 
 
 async def close_db() -> None:

@@ -81,9 +81,10 @@ class TestParseResults:
 class TestRetrieve:
     """retrieve 语义检索完整调用链测试。"""
 
+    @patch("backend.db.vector.get_collection")
     @patch("backend.rag.retriever.query_documents")
     @patch("backend.rag.retriever.get_embedding", new_callable=AsyncMock)
-    async def test_basic(self, mock_embed, mock_query):
+    async def test_basic(self, mock_embed, mock_query, mock_get_col):
         """应先调用 get_embedding 再调用 query_documents，返回解析后的 chunks。"""
         mock_embed.return_value = [0.1] * 768
         mock_query.return_value = {
@@ -92,17 +93,24 @@ class TestRetrieve:
             "distances": [[0.2]],
             "metadatas": [[{"doc_id": "d1", "source": "f.txt"}]],
         }
+        mock_col = MagicMock()
+        mock_col.count = AsyncMock(return_value=5)
+        mock_get_col.return_value = mock_col
         chunks = await retrieve("test query", n_results=5)
         mock_embed.assert_awaited_once_with("test query")
         mock_query.assert_called_once()
         assert len(chunks) == 1
 
+    @patch("backend.db.vector.get_collection")
     @patch("backend.rag.retriever.query_documents")
     @patch("backend.rag.retriever.get_embedding", new_callable=AsyncMock)
-    async def test_params_passed(self, mock_embed, mock_query):
-        """n_results、where、collection_name 参数应正确传递给 query_documents。"""        
+    async def test_params_passed(self, mock_embed, mock_query, mock_get_col):
+        """n_results、where、collection_name 参数应正确传递给 query_documents。"""
         mock_embed.return_value = [0.0]
         mock_query.return_value = {"ids": [[]], "documents": [[]], "distances": [[]], "metadatas": [[]]}
+        mock_col = MagicMock()
+        mock_col.count = AsyncMock(return_value=5)
+        mock_get_col.return_value = mock_col
         await retrieve("q", n_results=10, where={"doc_id": "x"}, collection_name="col")
         _, kwargs = mock_query.call_args
         assert kwargs["n_results"] == 10
@@ -143,8 +151,8 @@ class TestFormatContext:
         assert "S1" in ctx
 
     def test_empty(self):
-        """空 chunks 列表应返回空字符串。"""
-        assert format_context([]) == ""
+        """空 chunks 列表应返回占位文本。"""
+        assert "暂无参考资料" in format_context([])
 
     def test_truncation(self):
         """超过 max_tokens 估算时应截断，不包含所有 chunks。"""
@@ -263,10 +271,10 @@ class TestMakeClient:
 
     @patch("backend.services.llm.config")
     def test_qwen(self, mock_config):
-        """qwen provider 应返回 qwen3.5-flash 模型。"""        
+        """qwen provider 应返回 MiniMax-M2.5 模型。"""
         mock_config.llm.api_key = "test_key"
         client, model = _make_client("qwen")
-        assert model == "qwen3.5-flash"
+        assert model == "MiniMax-M2.5"
 
     @patch("backend.services.llm.config")
     def test_openai(self, mock_config):
@@ -336,11 +344,19 @@ class TestChatCompletion:
 
 class TestGetEmbedding:
     @patch("backend.services.llm.config")
-    async def test_spark_not_implemented(self, mock_config):
+    @patch("backend.services.llm.AsyncOpenAI")
+    async def test_spark_embedding_calls_api(self, mock_client_cls, mock_config):
+        """use_spark=True 时应调用 API embedding。"""
         mock_config.embedding.use_spark = True
+        mock_config.llm.api_key = "test_key"
+        mock_client = AsyncMock()
+        mock_emb = MagicMock()
+        mock_emb.data = [MagicMock(embedding=[0.1, 0.2])]
+        mock_client.embeddings.create.return_value = mock_emb
+        mock_client_cls.return_value = mock_client
         from backend.services.llm import get_embedding
-        with pytest.raises(NotImplementedError):
-            await get_embedding("test")
+        result = await get_embedding("test")
+        assert result == [0.1, 0.2]
 
     @patch("backend.services.llm._get_embedding_model")
     @patch("backend.services.llm.config")

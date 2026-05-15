@@ -23,7 +23,7 @@ from backend.agents.graph import get_graph, invoke, stream_invoke
 from backend.middleware.logging_middleware import LoggingMiddleware
 from backend.db.database import close_db, get_session, health_check as db_health, init_db
 import backend.db.database as _db_module
-from backend.db.vector import health_check as vec_health, init_vector_db
+from backend.db.vector import health_check as vec_health_check, init_vector_db
 from backend.models.schemas import (
     BatchGenerateOut,
     BatchGenerateRequest,
@@ -61,7 +61,7 @@ from backend.models.schemas import (
 from backend.services import profile as profile_svc
 from backend.services import resource as resource_svc
 from backend.services import document as document_svc
-from backend.db.models import User, ChatSession, KGNode, KGEdge, QuizItem, QuizAttempt, LearningPath, LearningPathItem, ResourceMeta, LearningRecord
+from backend.db.models import User, ChatSession, ChatMessage, KGNode, KGEdge, QuizItem, QuizAttempt, LearningPath, LearningPathItem, ResourceMeta, LearningRecord
 
 # 内存任务字典：{task_id: {status, progress, stage, doc_id, error, result}}
 _doc_import_tasks: dict[str, dict] = {}
@@ -88,16 +88,22 @@ async def lifespan(app: FastAPI):
     init_vector_db()
     get_graph()  # 预热 LangGraph
 
-    # 启动动态会话表过期清理后台任务
-    from backend.db.dynamic_chat import start_cleanup_task
-    cleanup_task = asyncio.create_task(start_cleanup_task())
+    # 启动聊天会话过期清理后台任务
+    from backend.services.chat_cleanup import start_cleanup_task as start_chat_cleanup_task
+    cleanup_task = asyncio.create_task(start_chat_cleanup_task())
+
+    # 启动文档文件清理后台任务
+    from backend.services.cleanup import start_cleanup_task as start_doc_cleanup_task
+    doc_cleanup_task = asyncio.create_task(start_doc_cleanup_task())
 
     # 知识库为空时，自动从 knowledge_base/ai_intro 索引
     from backend.db.vector import get_collection
     from backend.rag.indexer import index_directory
     import os
     KB_DIR = "knowledge_base/ai_intro"
-    if get_collection().count() == 0 and os.path.isdir(KB_DIR):
+    col = get_collection()
+    doc_count = await col.count()
+    if doc_count == 0 and os.path.isdir(KB_DIR):
         logger.info("[Lifespan] 知识库为空，开始自动索引...")
         indexed = await index_directory(KB_DIR)
         logger.info(f"[Lifespan] 知识库索引完成，共写入 {indexed} 个文本块。")
@@ -108,6 +114,11 @@ async def lifespan(app: FastAPI):
         cleanup_task.cancel()
         try:
             await cleanup_task
+        except (asyncio.CancelledError, Exception):
+            pass
+        doc_cleanup_task.cancel()
+        try:
+            await doc_cleanup_task
         except (asyncio.CancelledError, Exception):
             pass
         await close_db()
@@ -149,7 +160,7 @@ async def health():
     return {
         "status": "ok",
         "db": await db_health(),
-        "vector_db": vec_health(),
+        "vector_db": await vec_health_check(),
     }
 
 
@@ -237,30 +248,10 @@ async def list_sessions(user_id: uuid.UUID, db: AsyncSession = Depends(get_sessi
 
 @app.post("/chat/sessions", response_model=ChatSessionOut, tags=["chat"])
 async def create_chat_session(user_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
-    """创建新的对话会话，同时为该会话创建一张独立的消息表。"""
-    from backend.db.crud import insert, select_by_id, update_by_id
-    from backend.db.dynamic_chat import build_table_name, create_session_table
+    """创建新的对话会话。"""
+    from backend.db.crud import insert
 
-    # 1. 查用户名（用于表名拼接）
-    user = await select_by_id(db, User, user_id)
-    username = user.username if user else "anon"
-
-    # 2. 插入 chat_session 记录
     session = await insert(db, ChatSession, data={"user_id": user_id})
-
-    # 3. 以 username + 创建时间 + session_id 生成动态表名，并创建表
-    table_name = build_table_name(username, str(session.id), session.created_at)
-    try:
-        await create_session_table(table_name)
-    except Exception as e:
-        logger.warning(f"动态会话表创建失败: {e}")
-        table_name = None
-
-    # 4. 回写 messages_table 字段
-    if table_name:
-        await update_by_id(db, ChatSession, session.id, data={"messages_table": table_name})
-        session.messages_table = table_name
-
     return ChatSessionOut.model_validate(session)
 
 
@@ -306,29 +297,33 @@ async def chat(
         return StreamingResponse(event_generator(), media_type="text/event-stream")
     result = await invoke(str(user_id), str(session_id), body.content, db)
 
-    # 刷新 last_used_at，并将本轮对话写入动态会话表
+    # 刷新 last_used_at，并持久化本轮对话消息
     try:
-        from backend.db.crud import select_by_id, update_by_id
-        from backend.db.dynamic_chat import insert_message
+        from backend.db.crud import select_by_id, update_by_id, insert as crud_insert
         chat_sess = await select_by_id(db, ChatSession, session_id)
         if chat_sess:
             await update_by_id(
                 db, ChatSession, session_id,
                 data={"last_used_at": datetime.utcnow()},
             )
-            if chat_sess.messages_table:
-                await insert_message(chat_sess.messages_table, "user", body.content)
-                if result.final_content:
-                    await insert_message(
-                        chat_sess.messages_table, "assistant", result.final_content,
-                        resource_type=result.resource_type.value if result.resource_type else None,
-                    )
+            await crud_insert(db, ChatMessage, data={
+                "session_id": session_id,
+                "role": "user",
+                "content": body.content,
+            })
+            if result.final_content:
+                await crud_insert(db, ChatMessage, data={
+                    "session_id": session_id,
+                    "role": "assistant",
+                    "content": result.final_content,
+                    "resource_type": result.resource_type.value if result.resource_type else None,
+                })
             # 自动命名：会话尚无标题时，用 LLM 生成简短标题
             if not chat_sess.title:
                 import asyncio
                 asyncio.create_task(_auto_title_session(session_id, body.content, result.final_content))
     except Exception as e:
-        logger.warning(f"动态会话表写入失败: {e}")
+        logger.warning(f"聊天消息持久化失败: {e}")
 
     # 如果生成了资源，持久化到 resource_meta 表
     if result.resource_type and result.draft_content:
@@ -426,17 +421,28 @@ async def get_session_messages(
     db: AsyncSession = Depends(get_session),
 ):
     """读取指定会话的历史消息列表。"""
-    from backend.db.crud import select_by_id
-    from backend.db.dynamic_chat import read_messages
+    from backend.db.crud import select_by_id, select as db_select
 
     chat_sess = await select_by_id(db, ChatSession, session_id)
     if not chat_sess:
         raise HTTPException(status_code=404, detail="Session not found")
     if chat_sess.user_id != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
-    if not chat_sess.messages_table:
-        return []
-    return await read_messages(chat_sess.messages_table)
+
+    messages = await db_select(
+        db, ChatMessage,
+        filters={"session_id": session_id},
+        order_by=ChatMessage.created_at.asc(),
+    )
+    return [
+        {
+            "role": m.role,
+            "content": m.content,
+            "resource_type": m.resource_type,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+        }
+        for m in messages
+    ]
 
 @app.get("/documents/file/{filename}", tags=["documents"])
 async def get_document_file(filename: str):
@@ -468,15 +474,12 @@ async def delete_chat_session(
     user_id: uuid.UUID,
     db: AsyncSession = Depends(get_session),
 ):
-    """删除会话及其动态消息表。"""
+    """删除会话及其关联消息（ChatMessage 通过外键 CASCADE 自动删除）。"""
     from backend.db.crud import select_by_id, delete_by_id
-    from backend.db.dynamic_chat import drop_session_table
 
     chat_sess = await select_by_id(db, ChatSession, session_id)
     if not chat_sess or chat_sess.user_id != user_id:
         raise HTTPException(status_code=404, detail="Session not found")
-    if chat_sess.messages_table:
-        await drop_session_table(chat_sess.messages_table)
     await delete_by_id(db, ChatSession, session_id)
     return {"deleted": True}
 
@@ -1260,25 +1263,26 @@ async def import_document(
     db: AsyncSession = Depends(get_session),
 ):
     """
-    上传并导入 PDF 文档。
+    上传并导入文档（支持 PDF / DOCX / DOC / Markdown / TXT）。
 
     - 保存文件到 uploaded_docs 目录
-    - 解析 PDF 内容并切分为文本块
+    - 转换为 Markdown 并切分为文本块
     - 索引到向量库（供 RAG 检索使用）
     - 创建资源记录到数据库
     """
-    file_name = file.filename or "unknown.pdf"
-    if not file_name.lower().endswith(".pdf"):
+    file_name = file.filename or "unknown"
+    suffix = file_name.lower().rsplit(".", 1)[-1] if "." in file_name else ""
+    if f".{suffix}" not in document_svc.SUPPORTED_SUFFIXES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="只支持 PDF 格式文件",
+            detail=f"不支持的文件格式：.{suffix}，支持：{', '.join(sorted(document_svc.SUPPORTED_SUFFIXES))}",
         )
 
     try:
         content = await file.read()
         saved_path = document_svc.save_uploaded_file(content, file_name)
         logger.warning(f"[import_document] 文件 {file_name} 已保存到 {saved_path}，开始处理...")
-        result = await document_svc.import_pdf(
+        result = await document_svc.import_document(
             file_path=saved_path,
             user_id=user_id,
             title=title,
@@ -1308,14 +1312,16 @@ async def import_document_async(
     title: Annotated[Optional[str], Form()] = None,
 ):
     """
-    异步导入 PDF 文档。立即返回 task_id，前端轮询 /documents/import/{task_id}/status。
+    异步导入文档（支持 PDF / DOCX / DOC / Markdown / TXT）。
+    立即返回 task_id，前端轮询 /documents/import/{task_id}/status。
     """
     logger.info(f"[import_document_async] received title={title!r}, file.filename={file.filename!r}")
-    file_name = file.filename or "unknown.pdf"
-    if not file_name.lower().endswith(".pdf"):
+    file_name = file.filename or "unknown"
+    suffix = file_name.lower().rsplit(".", 1)[-1] if "." in file_name else ""
+    if f".{suffix}" not in document_svc.SUPPORTED_SUFFIXES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="只支持 PDF 格式文件",
+            detail=f"不支持的文件格式：.{suffix}，支持：{', '.join(sorted(document_svc.SUPPORTED_SUFFIXES))}",
         )
 
     content = await file.read()
@@ -1347,7 +1353,7 @@ async def import_document_async(
                 raise RuntimeError("Database not initialized.")
             async with sf() as bg_db:
                 try:
-                    result = await document_svc.import_pdf_with_progress(
+                    result = await document_svc.import_document_with_progress(
                         file_path=saved_path,
                         user_id=user_id,
                         title=title,
@@ -1386,6 +1392,29 @@ async def get_import_task_status(task_id: str):
     return {"task_id": task_id, **task}
 
 
+@app.post("/documents/cleanup", tags=["documents"])
+async def manual_cleanup(
+    dry_run: bool = True,
+    retention_days: int = 30,
+    orphan_retention_days: int = 7,
+    db: AsyncSession = Depends(get_session),
+):
+    """
+    手动触发文档文件清理。
+
+    - **dry_run**: true 时仅预览不实际删除（默认 true）
+    - **retention_days**: 已索引文件的保留天数
+    - **orphan_retention_days**: 孤儿文件的保留天数
+    """
+    from backend.services.cleanup import cleanup_uploaded_docs
+    result = await cleanup_uploaded_docs(
+        retention_days=retention_days,
+        orphan_retention_days=orphan_retention_days,
+        dry_run=dry_run,
+    )
+    return {"success": True, "dry_run": dry_run, **result}
+
+
 @app.get("/documents", tags=["documents"])
 async def list_documents(
     user_id: uuid.UUID,
@@ -1393,7 +1422,7 @@ async def list_documents(
     limit: int = 20,
     db: AsyncSession = Depends(get_session),
 ):
-    """列举用户导入的 PDF 文档列表（排除系统生成的资源文档）。"""
+    """列举用户导入的文档列表（排除系统生成的资源文档）。"""
     from sqlalchemy import select as sa_select, and_
 
     stmt = (
@@ -1401,7 +1430,7 @@ async def list_documents(
         .where(and_(
             ResourceMeta.user_id == user_id,
             ResourceMeta.resource_type == "doc",
-            ResourceMeta.kp_id.like("pdf_%"),
+            ResourceMeta.kp_id.like("doc_%"),
         ))
         .order_by(ResourceMeta.created_at.desc())
         .offset(skip)
@@ -1437,7 +1466,7 @@ async def delete_document(
         raise HTTPException(status_code=403, detail="Access denied")
 
     try:
-        delete_by_doc_id(doc_id)
+        await delete_by_doc_id(doc_id)
     except Exception:
         pass
 

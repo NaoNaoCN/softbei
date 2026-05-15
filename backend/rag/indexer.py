@@ -22,7 +22,7 @@ from backend.services.llm import get_embedding
 async def index_chunks(
     chunks: list[TextChunk],
     collection_name: Optional[str] = None,
-    batch_size: int = 32,
+    batch_size: int = 128,
     progress_callback: Optional[Callable[[int, int], None]] = None,
     user_id: Optional[str] = None,
 ) -> int:
@@ -44,7 +44,7 @@ async def index_chunks(
         batch = chunks[i : i + batch_size]
         logger.info(f"[Indexer] 正在 embedding 第 {i+1}-{i+len(batch)}/{len(chunks)} 块...")
         embeddings = await _embed_batch([c.text for c in batch])
-        upsert_documents(
+        await upsert_documents(
             ids=[c.chunk_id for c in batch],
             documents=[c.text for c in batch],
             embeddings=embeddings,

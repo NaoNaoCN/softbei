@@ -11,9 +11,8 @@ database:
   pool_timeout: 30
   pool_recycle: 3600
 
-# 向量库配置
+# 向量库配置（PostgreSQL + pgvector/numpy）
 vector_db:
-  persist_dir: "./chroma_data"
   collection: "knowledge_base"
 
 # LLM 配置
@@ -32,6 +31,13 @@ embedding:
 rag:
   chunk_size: 500
   chunk_overlap: 50
+
+# 文档存储配置
+storage:
+  cleanup:
+    enabled: true               # 是否启用自动清理
+    retention_days: 30          # 已索引文件保留天数
+    orphan_retention_days: 7    # 孤儿文件（导入失败/中断）的保留天数
 
 # JWT 配置
 jwt:

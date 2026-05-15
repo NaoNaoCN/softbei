@@ -21,6 +21,7 @@ def patch_llm_layer():
     )
     query_patcher = patch(
         "backend.db.vector.query_documents",
+        new_callable=AsyncMock,
         return_value={
             "ids": [[]],
             "documents": [[]],

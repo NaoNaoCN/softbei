@@ -1,6 +1,6 @@
 """
 backend/services/kg_builder.py
-知识图谱自动构建服务：从 ChromaDB 文本块中提取知识点和关系，写入 KGNode + KGEdge。
+知识图谱自动构建服务：从向量库文本块中提取知识点和关系，写入 KGNode + KGEdge。
 """
 
 from __future__ import annotations
@@ -572,15 +572,15 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
     """
     从已导入文档构建知识图谱。
 
-    流程：ChromaDB 取文本 → 聚合 → 提取节点 → 推断关系 → 写 DB
+    流程：向量库取文本 → 聚合 → 提取节点 → 推断关系 → 写 DB
     :param on_progress: 可选回调 async def(progress: int, stage: str)
     返回 {"nodes_count": int, "edges_count": int, "doc_id": str}
     """
-    # 1. 从 ChromaDB 获取文本块
+    # 1. 从向量库获取文本块
     logger.info(f"[KG] 开始构建知识图谱，doc_id={doc_id}")
     if on_progress:
         await on_progress(5, "文本处理中")
-    result = get_documents_by_doc_id(doc_id)
+    result = await get_documents_by_doc_id(doc_id)
     documents = result.get("documents", [])
     metadatas = result.get("metadatas", [])
 

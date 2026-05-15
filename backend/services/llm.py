@@ -209,15 +209,18 @@ async def _local_embedding(text: str) -> list[float]:
 
 
 async def _api_embedding(text: str) -> list[float]:
-    """调用通义千问 text-embedding-v4 API。"""
-    client = AsyncOpenAI(
-        api_key=config.llm.api_key,
-        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-    )
-    response = await client.embeddings.create(
-        model="text-embedding-v4",
-        # model="tongyi-embedding-vision-flash",
-        # model="tongyi-embedding-vision-plus",
-        input=text,
-    )
-    return response.data[0].embedding
+    """调用通义千问 text-embedding-v4 API。失败时自动降级到本地 BGE-M3。"""
+    try:
+        client = AsyncOpenAI(
+            api_key=config.llm.api_key,
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            timeout=Timeout(connect=10, read=60, write=30, pool=10),
+        )
+        response = await client.embeddings.create(
+            model="text-embedding-v4",
+            input=text,
+        )
+        return response.data[0].embedding
+    except Exception as e:
+        logger.warning(f"[Embedding] API embedding 失败: {e}，降级到本地 BGE-M3")
+        return await _local_embedding(text)

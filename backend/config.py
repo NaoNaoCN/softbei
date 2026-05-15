@@ -36,7 +36,6 @@ class DatabaseConfig:
 @dataclass
 class VectorDBConfig:
     """向量库配置"""
-    persist_dir: str = "./chroma_data"
     collection: str = "knowledge_base"
 
 
@@ -72,6 +71,20 @@ class JWTConfig:
 
 
 @dataclass
+class StorageCleanupConfig:
+    """文档存储清理配置"""
+    enabled: bool = True
+    retention_days: int = 30
+    orphan_retention_days: int = 7
+
+
+@dataclass
+class StorageConfig:
+    """文档存储配置"""
+    cleanup: StorageCleanupConfig = field(default_factory=StorageCleanupConfig)
+
+
+@dataclass
 class Config:
     """全局配置"""
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
@@ -80,6 +93,7 @@ class Config:
     rag: RAGConfig = field(default_factory=RAGConfig)
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     jwt: JWTConfig = field(default_factory=JWTConfig)
+    storage: StorageConfig = field(default_factory=StorageConfig)
 
 
 # ===========================================================
@@ -127,7 +141,7 @@ def _build_config() -> Config:
 
     return Config(
         database=DatabaseConfig(
-            url=db.get("url", "") or "sqlite+aiosqlite:///dev.db",
+            url=db.get("url", ""),
             echo=db.get("echo", False),
             pool_size=db.get("pool_size", 10),
             max_overflow=db.get("max_overflow", 20),
@@ -135,7 +149,6 @@ def _build_config() -> Config:
             pool_recycle=db.get("pool_recycle", 3600),
         ),
         vector_db=VectorDBConfig(
-            persist_dir=vec.get("persist_dir", "./chroma_data"),
             collection=vec.get("collection", "knowledge_base"),
         ),
         llm=LLMConfig(
@@ -156,6 +169,13 @@ def _build_config() -> Config:
             secret=jwt.get("secret", ""),
             algorithm=jwt.get("algorithm", "HS256"),
             expire_hours=jwt.get("expire_hours", 24),
+        ),
+        storage=StorageConfig(
+            cleanup=StorageCleanupConfig(
+                enabled=yaml_config.get("storage", {}).get("cleanup", {}).get("enabled", True),
+                retention_days=yaml_config.get("storage", {}).get("cleanup", {}).get("retention_days", 30),
+                orphan_retention_days=yaml_config.get("storage", {}).get("cleanup", {}).get("orphan_retention_days", 7),
+            ),
         ),
     )
 

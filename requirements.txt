@@ -19,13 +19,15 @@ langgraph>=0.1.0
 openai>=1.25.0          # 讯飞星火 API 兼容 OpenAI SDK
 
 # ---- RAG / 向量检索 ----
-chromadb>=0.5.0         # 本地模式，无需外部服务
-sentence-transformers>=3.0.0  # BGE-M3 embedding
+pgvector>=0.4.0         # PostgreSQL 向量存储
+numpy>=1.26.0
+sentence-transformers>=3.0.0  # BGE-M3 embedding（保留用于本地 embedding）
 
 # ---- 数据库 ----
 sqlalchemy>=2.0.0
-aiomysql>=0.2.0         # MySQL 异步驱动
-aiosqlite>=0.20.0       # SQLite 开发模式
+asyncpg>=0.29.0         # PostgreSQL 异步驱动
+alembic>=1.13.0         # 数据库迁移管理
+aiosqlite>=0.20.0       # SQLite（测试用）
 PyYAML>=6.0             # YAML 配置文件解析
 
 # ---- 数据处理 ----
@@ -37,6 +39,8 @@ pandas>=2.2.0
 pypdf>=4.2.0
 python-docx>=1.1.0
 markdown>=3.6
+pymupdf4llm>=0.3.0      # PDF → Markdown（保留标题/表格/列表结构）
+mammoth>=1.8.0           # DOCX → Markdown
 
 # ---- 工具 ----
 httpx>=0.27.0

@@ -13,10 +13,13 @@ from typing import Optional
 
 from loguru import logger  # noqa: F401
 
+import pymupdf4llm           # PDF → Markdown
+import mammoth               # DOCX → Markdown
+
 from langchain_community.document_loaders import (
-    PyPDFLoader,           # PDF 加载
-    UnstructuredWordDocumentLoader,  # DOCX/DOC 加载
-    TextLoader,            # TXT 加载
+    PyPDFLoader,           # PDF 加载（保留用于 load_directory 等场景）
+    UnstructuredWordDocumentLoader,  # DOCX/DOC 加载（保留）
+    TextLoader,            # TXT 加载（保留）
 )
 from langchain_core.documents import Document
 
@@ -132,9 +135,54 @@ def extract_toc(file_path: str | Path) -> list[dict] | None:
     return toc_items if toc_items else None
 
 
+def convert_to_markdown(file_path: str | Path) -> str:
+    """
+    将任意支持格式的文件转换为 Markdown 文本。
+
+    支持格式：
+    - .pdf  → pymupdf4llm（保留标题、表格、列表等结构）
+    - .docx / .doc → mammoth
+    - .md / .txt → 直接读取
+
+    :param file_path: 文件路径
+    :return:          Markdown 文本
+    """
+    path = Path(file_path)
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {file_path}")
+
+    suffix = path.suffix.lower()
+
+    if suffix == ".pdf":
+        try:
+            return pymupdf4llm.to_markdown(str(path))
+        except Exception as e:
+            raise RuntimeError(f"Failed to convert PDF to Markdown: {path}: {e}") from e
+
+    elif suffix in (".docx", ".doc"):
+        try:
+            with open(path, "rb") as f:
+                result = mammoth.convert_to_markdown(f)
+            if result.messages:
+                for msg in result.messages:
+                    logger.warning(f"[mammoth] {path.name}: {msg}")
+            return result.value
+        except Exception as e:
+            raise RuntimeError(f"Failed to convert DOCX to Markdown: {path}: {e}") from e
+
+    elif suffix in (".md", ".txt"):
+        try:
+            return path.read_text(encoding="utf-8")
+        except Exception as e:
+            raise RuntimeError(f"Failed to read file: {path}: {e}") from e
+
+    else:
+        raise ValueError(f"Unsupported file format: {suffix}")
+
+
 def load_file(file_path: str | Path, doc_id: Optional[str] = None) -> list[TextChunk]:
     """
-    加载单个文件，自动根据扩展名选择解析器，返回文本块列表。
+    加载单个文件：先转换为 Markdown，再按章节切分为文本块。
 
     支持格式：.pdf / .docx / .doc / .md / .txt
     :param file_path: 文件路径
@@ -144,19 +192,11 @@ def load_file(file_path: str | Path, doc_id: Optional[str] = None) -> list[TextC
     if not path.exists():
         raise FileNotFoundError(f"File not found: {file_path}")
 
-    suffix = path.suffix.lower()
     _doc_id = doc_id or path.stem
 
-    if suffix == ".pdf":
-        return _load_pdf(path, _doc_id)
-    elif suffix in (".docx", ".doc"):
-        return _load_docx(path, _doc_id)
-    elif suffix == ".md":
-        return _load_markdown(path, _doc_id)
-    elif suffix == ".txt":
-        return _load_txt(path, _doc_id)
-    else:
-        raise ValueError(f"Unsupported file format: {suffix}")
+    # 统一流程：转为 Markdown → 按标题切分 → 字符级切分
+    md_text = convert_to_markdown(path)
+    return _parse_markdown_to_chunks(md_text, _doc_id, str(path))
 
 
 def load_directory(
@@ -355,6 +395,41 @@ def _load_txt(path: Path, doc_id: str) -> list[TextChunk]:
 # ----------------------------------------------------------
 # 私有辅助函数
 # ----------------------------------------------------------
+
+def _parse_markdown_to_chunks(
+    md_text: str,
+    doc_id: str,
+    source_path: str,
+) -> list[TextChunk]:
+    """
+    将 Markdown 文本按 ## 标题切分章节，每节再做字符级切分。
+
+    :param md_text:     Markdown 文本
+    :param doc_id:      文档 ID
+    :param source_path: 原始文件路径
+    :return:            TextChunk 列表
+    """
+    sections = _split_markdown_by_headers(md_text)
+
+    chunks: list[TextChunk] = []
+    chunk_index = 0
+
+    for section_title, section_text in sections:
+        sub_chunks = split_text(section_text)
+        for sub_chunk in sub_chunks:
+            chunk = TextChunk(
+                chunk_id=f"{doc_id}_{chunk_index}",
+                text=sub_chunk,
+                doc_id=doc_id,
+                source_path=source_path,
+                section=section_title,
+                metadata={},
+            )
+            chunks.append(chunk)
+            chunk_index += 1
+
+    return chunks
+
 
 def _split_markdown_by_headers(text: str) -> list[tuple[str, str]]:
     """
