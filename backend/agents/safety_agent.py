@@ -9,7 +9,9 @@ import json
 
 from loguru import logger  # noqa: F401
 
+from backend.config import config
 from backend.models.schemas import AgentState
+from backend.agents.utils import parse_json_llm_response
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
 
@@ -55,22 +57,21 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
 
     logger.info(f"[SafetyAgent] 开始审核，draft_len={len(state.draft_content)}")
 
-    # 构造上下文（只取前3条参考资料，draft 只取前500字用于审核）
-    context = "\n".join(state.retrieved_docs[:3]) if state.retrieved_docs else "（无参考资料）"
-    draft_preview = state.draft_content[:500]
+    # 构造上下文（只取前 N 条参考资料，draft 只取前 N 字用于审核）
+    max_ref = config.agents.safety.max_ref_docs
+    preview_chars = config.agents.safety.draft_preview_chars
+    context = "\n".join(state.retrieved_docs[:max_ref]) if state.retrieved_docs else "（无参考资料）"
+    draft_preview = state.draft_content[:preview_chars]
     prompt = SYSTEM_PROMPT.format(context=context, draft_preview=draft_preview)
 
     try:
         raw = await chat_completion(
             [{"role": "user", "content": prompt}],
-            temperature=0.1,
-            max_tokens=300,  # 只需返回 passed + issues，300 token 足够
+            temperature=config.agents.safety.temperature,
+            max_tokens=config.agents.safety.max_tokens,  # 只需返回 passed + issues
         )
         # 去除 markdown 代码块包裹
-        cleaned = raw.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-            cleaned = cleaned.rsplit("```", 1)[0].strip()
+        cleaned = parse_json_llm_response(raw)
         result = json.loads(cleaned)
 
         passed = result.get("passed", True)
@@ -103,8 +104,3 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
         })
 
     return state
-
-
-def should_skip_safety(state: AgentState) -> bool:
-    """若没有 draft_content 则跳过安全检查。"""
-    return not bool(state.draft_content)

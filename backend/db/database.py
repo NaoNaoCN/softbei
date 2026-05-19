@@ -60,7 +60,7 @@ async def init_db() -> None:
 
     connect_args = {
         "timeout": db_cfg.pool_timeout,
-        "command_timeout": 60,
+        "command_timeout": db_cfg.command_timeout,
     }
 
     _engine = create_async_engine(

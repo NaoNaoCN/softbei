@@ -8,7 +8,6 @@ backend/services/document.py
 from __future__ import annotations
 
 import time
-import uuid
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -16,17 +15,21 @@ from loguru import logger  # noqa: F401
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.config import config
 from backend.db.crud import insert
 from backend.db.models import ResourceMeta
 from backend.rag import loader, indexer as rag_indexer
+from backend.utils.snowflake import generate_id
 
 
 # ----------------------------------------------------------
 # 配置
 # ----------------------------------------------------------
 
-UPLOAD_DIR = Path(__file__).parent.parent.parent / "uploaded_docs"
+UPLOAD_DIR = Path(__file__).parent.parent.parent / config.storage.upload_dir
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+SUPPORTED_SUFFIXES = set(config.storage.supported_extensions)
 
 
 # ----------------------------------------------------------
@@ -35,7 +38,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 async def import_document(
     file_path: str,
-    user_id: uuid.UUID,
+    user_id: int,
     title: Optional[str] = None,
     db: Optional[AsyncSession] = None,
 ) -> dict:
@@ -50,7 +53,7 @@ async def import_document(
     """
     t_start = time.perf_counter()
     path = Path(file_path)
-    doc_id = f"doc_{uuid.uuid4().hex[:12]}"
+    doc_id = f"doc_{hex(generate_id())[2:2 + config.storage.doc_id_hex_length]}"
     doc_title = title or path.stem
     file_size_bytes = path.stat().st_size
 
@@ -122,7 +125,7 @@ async def import_document(
 
 async def import_document_with_progress(
     file_path: str,
-    user_id: uuid.UUID,
+    user_id: int,
     title: Optional[str] = None,
     db: Optional[AsyncSession] = None,
     progress_callback: Optional[Callable[[str, int], None]] = None,
@@ -138,7 +141,7 @@ async def import_document_with_progress(
 
     t_start = time.perf_counter()
     path = Path(file_path)
-    doc_id = f"doc_{uuid.uuid4().hex[:12]}"
+    doc_id = f"doc_{hex(generate_id())[2:2 + config.storage.doc_id_hex_length]}"
     doc_title = title or path.stem
     file_size_bytes = path.stat().st_size
     logger.info(f"[import_document_with_progress] received title={title!r}, final doc_title={doc_title!r}")
@@ -225,9 +228,6 @@ async def import_document_with_progress(
     }
 
 
-SUPPORTED_SUFFIXES = {".pdf", ".docx", ".doc", ".md", ".txt"}
-
-
 def save_uploaded_file(content: bytes, original_name: str) -> str:
     """
     将上传的文件内容保存到 upload 目录。
@@ -237,10 +237,11 @@ def save_uploaded_file(content: bytes, original_name: str) -> str:
     :return:               保存后的文件路径
     """
     suffix = Path(original_name).suffix.lower()
-    if suffix not in SUPPORTED_SUFFIXES:
-        raise ValueError(f"不支持的文件格式：{suffix}，支持：{', '.join(sorted(SUPPORTED_SUFFIXES))}")
+    supported = set(config.storage.supported_extensions)
+    if suffix not in supported:
+        raise ValueError(f"不支持的文件格式：{suffix}，支持：{', '.join(sorted(supported))}")
 
-    unique_name = f"{uuid.uuid4().hex[:12]}_{original_name}"
+    unique_name = f"{hex(generate_id())[2:2 + config.storage.doc_id_hex_length]}_{original_name}"
     dest = UPLOAD_DIR / unique_name
     dest.write_bytes(content)
     return str(dest)

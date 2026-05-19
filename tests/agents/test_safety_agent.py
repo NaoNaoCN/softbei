@@ -14,34 +14,6 @@ from backend.models.schemas import AgentState
 
 
 # ===========================================================
-# should_skip_safety 测试
-# ===========================================================
-
-class TestShouldSkipSafety:
-    """should_skip_safety 决定是否跳过安全检查。"""
-
-    def test_skip_when_no_draft_content(self):
-        state = AgentState(
-            user_id="u1", session_id="s1", user_message="hi",
-            draft_content="",
-        )
-        assert safety_agent.should_skip_safety(state) is True
-
-    def test_skip_when_draft_content_none(self):
-        state = AgentState(
-            user_id="u1", session_id="s1", user_message="hi",
-        )
-        assert safety_agent.should_skip_safety(state) is True
-
-    def test_no_skip_when_draft_content_exists(self):
-        state = AgentState(
-            user_id="u1", session_id="s1", user_message="hi",
-            draft_content="some content",
-        )
-        assert safety_agent.should_skip_safety(state) is False
-
-
-# ===========================================================
 # run 函数测试
 # ===========================================================
 

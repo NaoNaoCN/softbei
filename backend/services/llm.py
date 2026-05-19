@@ -1,8 +1,8 @@
 """
 backend/services/llm.py
 LLM 调用服务层。
-统一封装讯飞星火（主）与多个 OpenAI 兼容接口（备），对 Agent 层屏蔽底层细节。
-支持 provider: "spark" | "deepseek" | "qwen" | "openai"
+统一封装多个 OpenAI 兼容接口，对 Agent 层屏蔽底层细节。
+所有 provider 的 URL、model、超时、重试策略均从 configs/config.yaml 读取。
 """
 
 from __future__ import annotations
@@ -32,43 +32,40 @@ def _is_quota_error(exc: RateLimitError) -> bool:
 # 客户端工厂
 # ===========================================================
 
+def _get_provider_config(provider: str):
+    """根据 provider 名称获取对应的配置。"""
+    p = config.llm.providers
+    mapping = {
+        "spark": p.spark,
+        "deepseek": p.deepseek,
+        "qwen": p.qwen,
+        "openai": p.openai,
+    }
+    return mapping.get(provider)
+
+
 def _make_client(provider: str) -> tuple[AsyncOpenAI, str]:
     """
     根据 provider 名称返回 (AsyncOpenAI client, default_model)。
-    所有配置均从 backend.config 读取。
+    所有配置从 backend.config 读取。
     """
-    _timeout = Timeout(connect=10, read=120, write=30, pool=10)
+    t = config.llm.timeout
+    _timeout = Timeout(connect=t.connect, read=t.read, write=t.write, pool=t.pool)
 
-    if provider == "spark":
+    prov = _get_provider_config(provider)
+    if prov and prov.base_url:
         return AsyncOpenAI(
             api_key=config.llm.api_key,
-            base_url="https://spark-api-open.xf-yun.com/v1",
+            base_url=prov.base_url,
             timeout=_timeout,
-        ), "generalv3.5"
+        ), prov.default_model or config.llm.model
 
-    if provider == "deepseek":
-        return AsyncOpenAI(
-            api_key=config.llm.api_key,
-            base_url="https://api.deepseek.com/v1",
-            timeout=_timeout,
-        ), "deepseek-chat"
-
-    if provider == "qwen":
-        return AsyncOpenAI(
-            api_key=config.llm.api_key,
-            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-            timeout=_timeout,
-        ), "MiniMax-M2.5"
-
-    if provider == "openai":
-        return AsyncOpenAI(
-            api_key=config.llm.api_key,
-            base_url="https://api.openai.com/v1",
-            timeout=_timeout,
-        ), "gpt-4o-mini"
-
-    # fallback: 使用配置中的默认 provider
-    return _make_client(config.llm.provider)
+    # fallback: 使用配置中的默认 base_url 和 model
+    return AsyncOpenAI(
+        api_key=config.llm.api_key,
+        base_url=config.llm.base_url,
+        timeout=_timeout,
+    ), config.llm.model
 
 
 # ===========================================================
@@ -82,6 +79,10 @@ def _get_embedding_model():
     """单例加载 sentence-transformers BGE-M3 模型（避免每次重新加载）。"""
     global _embedding_model
     if _embedding_model is None:
+        import os
+        if config.embedding.hf_mirror:
+            os.environ["HF_ENDPOINT"] = config.embedding.hf_mirror
+            logger.info(f"[Embedding] 使用 HF 镜像: {config.embedding.hf_mirror}")
         logger.info("[Embedding] 开始加载模型...")
         from sentence_transformers import SentenceTransformer
         _embedding_model = SentenceTransformer(config.embedding.model)
@@ -94,39 +95,41 @@ def _get_embedding_model():
 # ===========================================================
 
 @retry(
-    stop=stop_after_attempt(5),
-    wait=wait_exponential(multiplier=2, min=3, max=30),
+    stop=stop_after_attempt(config.llm.retry.max_attempts),
+    wait=wait_exponential(
+        multiplier=config.llm.retry.backoff_multiplier,
+        min=config.llm.retry.backoff_min_seconds,
+        max=config.llm.retry.backoff_max_seconds,
+    ),
     retry=retry_if_exception_type((RateLimitError, PermissionDeniedError, TimeoutError, ConnectionError, ConnectTimeout, ReadTimeout)),
 )
 async def chat_completion(
     messages: list[dict],
     model: Optional[str] = None,
     temperature: float = 0.7,
-    max_tokens: int = 2048,
+    max_tokens: int | None = None,
     provider: Optional[str] = None,
 ) -> str:
     """
     单次非流式对话调用。
-    返回模型输出的文本内容。
 
-    :param messages:    OpenAI 格式消息列表 [{"role": ..., "content": ...}]
+    :param messages:    OpenAI 格式消息列表
     :param model:       模型名称，None 则使用 provider 默认模型
     :param temperature: 温度
-    :param max_tokens:  最大输出 token 数
+    :param max_tokens:  最大输出 token 数，None 则使用配置默认值
     :param provider:    "spark" | "deepseek" | "qwen" | "openai"，None 则读配置文件
     :return:            模型文本输出
     """
     _provider = provider or config.llm.provider
     client, default_model = _make_client(_provider)
     _model = model or default_model
-    extra_body = {}
+    _max_tokens = max_tokens if max_tokens is not None else config.llm.default_max_tokens
     try:
         response = await client.chat.completions.create(
             model=_model,
             messages=messages,
             temperature=temperature,
-            max_tokens=max_tokens,
-            extra_body=extra_body,
+            max_tokens=_max_tokens,
         )
         return response.choices[0].message.content or ""
     except RateLimitError as e:
@@ -136,7 +139,7 @@ async def chat_completion(
                 model=next_model,
                 messages=messages,
                 temperature=temperature,
-                max_tokens=max_tokens,
+                max_tokens=_max_tokens,
             )
             return response.choices[0].message.content or ""
         raise
@@ -146,22 +149,20 @@ async def stream_chat_completion(
     messages: list[dict],
     model: Optional[str] = None,
     temperature: float = 0.7,
-    max_tokens: int = 2048,
+    max_tokens: int | None = None,
     provider: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
-    """
-    流式对话调用，逐 token yield 文本片段。
-    供 FastAPI StreamingResponse 或 Streamlit st.write_stream 使用。
-    """
+    """流式对话调用，逐 token yield 文本片段。"""
     _provider = provider or config.llm.provider
     client, default_model = _make_client(_provider)
     _model = model or default_model
+    _max_tokens = max_tokens if max_tokens is not None else config.llm.default_max_tokens
     try:
         stream = await client.chat.completions.create(
             model=_model,
             messages=messages,
             temperature=temperature,
-            max_tokens=max_tokens,
+            max_tokens=_max_tokens,
             stream=True,
         )
         async for chunk in stream:
@@ -175,7 +176,7 @@ async def stream_chat_completion(
                 model=next_model,
                 messages=messages,
                 temperature=temperature,
-                max_tokens=max_tokens,
+                max_tokens=_max_tokens,
                 stream=True,
             )
             async for chunk in stream2:
@@ -209,15 +210,15 @@ async def _local_embedding(text: str) -> list[float]:
 
 
 async def _api_embedding(text: str) -> list[float]:
-    """调用通义千问 text-embedding-v4 API。失败时自动降级到本地 BGE-M3。"""
+    """调用远程 Embedding API。失败时自动降级到本地 BGE-M3。"""
     try:
         client = AsyncOpenAI(
             api_key=config.llm.api_key,
-            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-            timeout=Timeout(connect=10, read=60, write=30, pool=10),
+            base_url=config.embedding.api_base_url,
+            timeout=Timeout(connect=config.embedding.timeout_connect, read=config.embedding.timeout_read, write=config.embedding.timeout_write, pool=config.embedding.timeout_pool),
         )
         response = await client.embeddings.create(
-            model="text-embedding-v4",
+            model=config.embedding.api_model,
             input=text,
         )
         return response.data[0].embedding

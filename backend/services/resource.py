@@ -5,11 +5,11 @@ backend/services/resource.py
 
 from __future__ import annotations
 
-import uuid
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.config import config
 from backend.db.crud import select_one, select, insert, update_by_id, delete_by_id
 from backend.db.models import ResourceMeta, GenerationTask, GenerationBatch, LearningRecord
 from backend.models.schemas import (
@@ -31,7 +31,7 @@ from backend.models.schemas import (
 # 资源元数据
 # ----------------------------------------------------------
 
-async def get_resource(resource_id: uuid.UUID, db: AsyncSession) -> Optional[ResourceMetaOut]:
+async def get_resource(resource_id: int, db: AsyncSession) -> Optional[ResourceMetaOut]:
     """按 ID 查询资源元数据。"""
     resource = await select_one(db, ResourceMeta, filters={"id": resource_id})
     if not resource:
@@ -49,14 +49,16 @@ async def get_resource(resource_id: uuid.UUID, db: AsyncSession) -> Optional[Res
 
 
 async def list_resources(
-    user_id: uuid.UUID,
+    user_id: int,
     db: AsyncSession,
     resource_type: Optional[str] = None,
     kp_id: Optional[str] = None,
     skip: int = 0,
-    limit: int = 20,
+    limit: int = None,
 ) -> ResourceListOut:
     """分页列举用户的资源，可按类型或知识点过滤。"""
+    if limit is None:
+        limit = config.pagination.default_limit
     import sqlalchemy as sa
 
     filters = {"user_id": user_id}
@@ -96,7 +98,7 @@ async def list_resources(
     return ResourceListOut(items=items, total=total)
 
 
-async def delete_resource(resource_id: uuid.UUID, db: AsyncSession) -> bool:
+async def delete_resource(resource_id: int, db: AsyncSession) -> bool:
     """物理删除资源元数据（级联删除 quiz_item 等）。"""
     return await delete_by_id(db, ResourceMeta, resource_id)
 
@@ -106,7 +108,7 @@ async def delete_resource(resource_id: uuid.UUID, db: AsyncSession) -> bool:
 # ----------------------------------------------------------
 
 async def create_generation_task(
-    user_id: uuid.UUID,
+    user_id: int,
     request: GenerateRequest,
     db: AsyncSession,
 ) -> GenerateTaskOut:
@@ -151,7 +153,7 @@ async def create_generation_task(
     )
 
 
-async def get_task_status(task_id: uuid.UUID, db: AsyncSession) -> Optional[GenerateTaskOut]:
+async def get_task_status(task_id: int, db: AsyncSession) -> Optional[GenerateTaskOut]:
     """轮询接口：返回任务当前状态与进度。"""
     task = await select_one(db, GenerationTask, filters={"id": task_id})
     if not task:
@@ -166,12 +168,12 @@ async def get_task_status(task_id: uuid.UUID, db: AsyncSession) -> Optional[Gene
 
 
 async def update_task_progress(
-    task_id: uuid.UUID,
+    task_id: int,
     progress: int,
     status: TaskStatus,
     db: AsyncSession,
     error_msg: Optional[str] = None,
-    result_id: Optional[uuid.UUID] = None,
+    result_id: Optional[int] = None,
 ) -> None:
     """由 Agent 执行过程中调用，更新进度与状态。"""
     update_data = {"progress": progress, "status": status.value}
@@ -187,7 +189,7 @@ async def update_task_progress(
 # ----------------------------------------------------------
 
 async def record_learning(
-    user_id: uuid.UUID,
+    user_id: int,
     data: LearningRecordCreate,
     db: AsyncSession,
 ) -> LearningRecordOut:
@@ -206,13 +208,15 @@ async def record_learning(
 
 
 async def list_learning_records(
-    user_id: uuid.UUID,
+    user_id: int,
     db: AsyncSession,
     skip: int = 0,
-    limit: int = 20,
+    limit: int = None,
     kp_id: Optional[str] = None,
 ) -> list[LearningRecordOut]:
     """列举用户的学习历史。"""
+    if limit is None:
+        limit = config.pagination.default_limit
     filters: dict = {"user_id": user_id}
     if kp_id is not None:
         filters["kp_id"] = kp_id
@@ -230,7 +234,7 @@ async def list_learning_records(
 # ----------------------------------------------------------
 
 async def create_batch(
-    user_id: uuid.UUID,
+    user_id: int,
     request: BatchGenerateRequest,
     db: AsyncSession,
 ) -> BatchGenerateOut:
@@ -305,7 +309,7 @@ async def create_batch(
     )
 
 
-async def get_batch_status(batch_id: uuid.UUID, db: AsyncSession) -> Optional[BatchGenerateOut]:
+async def get_batch_status(batch_id: int, db: AsyncSession) -> Optional[BatchGenerateOut]:
     """查询批次状态及所有子任务明细。"""
     batch = await select_one(db, GenerationBatch, filters={"id": batch_id})
     if not batch:

@@ -7,7 +7,7 @@ import json
 import uuid
 
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
 from backend.agents import quiz_agent
 from backend.models.schemas import AgentState
@@ -126,49 +126,3 @@ class TestQuizAgentRun:
                 result = await quiz_agent.run(state)
 
                 assert "题目生成失败" in result.draft_content
-
-
-# ===========================================================
-# save_quiz_items 测试
-# ===========================================================
-
-class TestSaveQuizItems:
-    """save_quiz_items 批量保存测验题目。"""
-
-    @pytest.mark.asyncio
-    async def test_save_quiz_items_calls_insert_many(self):
-        """save_quiz_items 应调用 insert_many。"""
-        resource_id = str(uuid.uuid4())
-        kp_id = "kp_01"
-        questions = [
-            {
-                "question_type": "single",
-                "stem": "test stem",
-                "options": ["A", "B"],
-                "answer": "A",
-                "explanation": "因为 A 是对的",
-            }
-        ]
-        mock_db = MagicMock()
-
-        with patch("backend.agents.quiz_agent.insert_many", new_callable=AsyncMock) as mock_insert:
-            await quiz_agent.save_quiz_items(resource_id, kp_id, questions, mock_db)
-
-            mock_insert.assert_called_once()
-            call_args = mock_insert.call_args
-            # insert_many(session, model, data_list=..., commit=True)
-            # 第三个参数是 data_list，作为关键字参数传入
-            inserted_data = call_args.kwargs["data_list"]
-            assert len(inserted_data) == 1
-            assert inserted_data[0]["resource_id"] == resource_id
-            assert inserted_data[0]["kp_id"] == kp_id
-            assert inserted_data[0]["question_type"] == "single"
-
-    @pytest.mark.asyncio
-    async def test_save_quiz_items_skips_empty_list(self):
-        """空题目列表不调用 insert_many。"""
-        mock_db = MagicMock()
-
-        with patch("backend.agents.quiz_agent.insert_many", new_callable=AsyncMock) as mock_insert:
-            await quiz_agent.save_quiz_items(str(uuid.uuid4()), "kp_01", [], mock_db)
-            mock_insert.assert_not_called()

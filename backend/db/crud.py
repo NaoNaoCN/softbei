@@ -11,7 +11,6 @@ from sqlalchemy import select as sa_select, delete as sa_delete, update as sa_up
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.db.database import get_session
 
 ModelT = TypeVar("ModelT")
 

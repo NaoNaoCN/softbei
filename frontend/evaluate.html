@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>学习评估 - 个性化学习助手</title>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="./assets/styles.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -358,13 +359,13 @@
     <div class="layout">
         <nav class="sidebar">
             <div class="sidebar-logo">个性化学习助手</div>
-            <a href="index.html" class="nav-item"><span class="icon"><i data-lucide="home"></i></span><span>首页</span></a>
-            <a href="chat.html" class="nav-item"><span class="icon"><i data-lucide="message-circle"></i></span><span>智能对话</span></a>
-            <a href="profile.html" class="nav-item"><span class="icon"><i data-lucide="user"></i></span><span>我的画像</span></a>
-            <a href="generate.html" class="nav-item"><span class="icon"><i data-lucide="sparkles"></i></span><span>生成资源</span></a>
-            <a href="pathway.html" class="nav-item"><span class="icon"><i data-lucide="map"></i></span><span>学习路径</span></a>
-            <a href="library.html" class="nav-item"><span class="icon"><i data-lucide="book-open"></i></span><span>资源库</span></a>
-            <a href="evaluate.html" class="nav-item active"><span class="icon"><i data-lucide="clipboard-check"></i></span><span>学习评估</span></a>
+                <a href="index.html" class="nav-item"><span class="icon"><i data-lucide="home"></i></span><span>首页</span></a>
+                <a href="chat.html" class="nav-item"><span class="icon"><i data-lucide="message-circle"></i></span><span>智能对话</span></a>
+                <a href="profile.html" class="nav-item"><span class="icon"><i data-lucide="user"></i></span><span>我的画像</span></a>
+                <a href="generate.html" class="nav-item"><span class="icon"><i data-lucide="sparkles"></i></span><span>生成资源</span></a>
+                <a href="pathway.html" class="nav-item"><span class="icon"><i data-lucide="map"></i></span><span>学习路径</span></a>
+                <a href="library.html" class="nav-item"><span class="icon"><i data-lucide="book-open"></i></span><span>资源库</span></a>
+                <a href="evaluate.html" class="nav-item active"><span class="icon"><i data-lucide="clipboard-check"></i></span><span>学习评估</span></a>
         </nav>
 
         <main class="main">
@@ -410,7 +411,7 @@
 
     <script type="module">
         import { isLoggedIn, getUserId, getResources, getQuizItems, submitQuizAnswer, getQuizAttempts, postLearningRecord } from './assets/api.js';
-
+        
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
         }

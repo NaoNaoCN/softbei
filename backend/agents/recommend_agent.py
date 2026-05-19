@@ -9,24 +9,26 @@ import json
 
 from loguru import logger  # noqa: F401
 
+from backend.config import config
 from backend.models.schemas import AgentState
+from backend.agents.utils import parse_json_llm_response
 from backend.services import profile as profile_svc
 from backend.services.llm import chat_completion
 from backend.db.crud import select as db_select
 from langchain_core.runnables import RunnableConfig
 
-SYSTEM_PROMPT = """你是一位智能学习顾问。
-根据学生的当前画像和已学知识点，从知识图谱中推荐 3-5 个下一步应学习的知识点。
+SYSTEM_PROMPT = f"""你是一位智能学习顾问。
+根据学生的当前画像和已学知识点，从知识图谱中推荐 {config.agents.recommend.min_recommendations}-{config.agents.recommend.max_recommendations} 个下一步应学习的知识点。
 
 学生画像：
-{profile}
+{{profile}}
 
-已学知识点（已掌握）：{mastered}
-薄弱知识点：{weak}
-学习目标：{goal}
+已学知识点（已掌握）：{{mastered}}
+薄弱知识点：{{weak}}
+学习目标：{{goal}}
 
 可选知识点（来自知识图谱）：
-{available_kps}
+{{available_kps}}
 
 重要规则：
 - 你必须且只能从上面的"可选知识点"列表中选择推荐项
@@ -78,10 +80,8 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
         try:
             from backend.db.models import KGNode
             from sqlalchemy import select as sa_select, or_
-            import uuid as _uuid
-            user_uuid = _uuid.UUID(state.user_id) if isinstance(state.user_id, str) else state.user_id
             stmt = sa_select(KGNode).where(
-                or_(KGNode.user_id == user_uuid, KGNode.user_id == None)
+                or_(KGNode.user_id == state.user_id, KGNode.user_id == None)
             )
             result = await db.execute(stmt)
             nodes = result.scalars().all()
@@ -109,14 +109,11 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     try:
         raw = await chat_completion(
             [{"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=2000,
+            temperature=config.agents.recommend.temperature,
+            max_tokens=config.agents.recommend.max_tokens,
         )
         # 去除 LLM 可能返回的 markdown 代码块包裹
-        cleaned = raw.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-            cleaned = cleaned.rsplit("```", 1)[0].strip()
+        cleaned = parse_json_llm_response(raw)
         recommendations = json.loads(cleaned)
         logger.info(f"[RecommendAgent] 推荐生成成功，共 {len(recommendations) if isinstance(recommendations, list) else 0} 条")
 

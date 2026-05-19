@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>个性化学习助手</title>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="./assets/styles.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -312,7 +313,7 @@
 
     <script type="module">
         import { isLoggedIn, getUserId, clearAuth, getResourceStats, getProfile, getPathways } from './assets/api.js';
-
+        
         // Auth check
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
@@ -378,7 +379,7 @@
         window.handleLogout = function() {
             clearAuth();
             window.location.href = 'auth.html';
-        };
+        }
 
         loadStats();
         loadProfile();

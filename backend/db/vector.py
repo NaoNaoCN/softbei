@@ -1,13 +1,12 @@
 """
 backend/db/vector.py
-向量存储（PostgreSQL 内嵌，基于 JSON + numpy 矩阵向量化余弦相似度）。
+向量存储（基于 pgvector 扩展，向量检索在数据库内完成）。
 """
 
 from __future__ import annotations
 
 from typing import Optional
 
-import numpy as np
 from loguru import logger
 from sqlalchemy import text
 
@@ -89,11 +88,8 @@ class _CollectionProxy:
 # ----------------------------------------------------------
 
 def init_vector_db() -> None:
-    """
-    初始化向量库。
-    pgvector 方案下表由 Alembic 管理，此处仅验证连通性。
-    """
-    logger.info("[VectorDB] 使用 PostgreSQL 内嵌向量存储 (JSON + numpy vectorized cosine)")
+    """初始化向量库。pgvector 方案下表由 Alembic 管理，此处仅验证连通性。"""
+    logger.info("[VectorDB] 使用 pgvector 向量存储 (cosine distance via <=>) ")
 
 
 _collection_proxy: Optional[_CollectionProxy] = None
@@ -133,8 +129,8 @@ async def upsert_documents(
     metadatas: Optional[list[dict]] = None,
     collection_name: Optional[str] = None,
 ) -> None:
-    """将文档及其向量批量写入向量库（多行 VALUES 一次 INSERT，避免逐行往返）。"""
-    import uuid as _uuid
+    """将文档及其向量批量写入向量库（pgvector，多行 VALUES 一次 INSERT）。"""
+    from backend.utils.snowflake import generate_id
 
     if not ids:
         return
@@ -143,7 +139,6 @@ async def upsert_documents(
     meta_list = metadatas or [{}] * len(ids)
     engine = get_engine()
 
-    # 构建批量多行 VALUES 占位符和参数
     columns = [
         "id", "chunk_id", "doc_id", "collection_name", "text",
         "embedding", "source", "page", "section", "user_id", "created_at",
@@ -156,6 +151,8 @@ async def upsert_documents(
     ):
         cols = _convert_metadata_to_columns(meta)
         doc_id = meta.get("doc_id", "")
+        # pgvector 需要向量以字符串格式传入: '[0.1, 0.2, ...]'
+        emb_str = f"[{','.join(str(v) for v in emb)}]"
         row_placeholders = ", ".join([
             f":id_{i}", f":chunk_id_{i}", f":doc_id_{i}", f":col_{i}",
             f":text_{i}", f":emb_{i}", f":source_{i}", f":page_{i}",
@@ -163,12 +160,12 @@ async def upsert_documents(
         ])
         value_rows.append(f"({row_placeholders})")
         params.update({
-            f"id_{i}": _uuid.uuid4(),
+            f"id_{i}": generate_id(),
             f"chunk_id_{i}": chunk_id,
             f"doc_id_{i}": doc_id,
             f"col_{i}": col,
             f"text_{i}": doc_text,
-            f"emb_{i}": emb,
+            f"emb_{i}": emb_str,
             f"source_{i}": cols["source"],
             f"page_{i}": cols["page"],
             f"section_{i}": cols["section"],
@@ -190,45 +187,6 @@ async def upsert_documents(
 
     async with engine.begin() as conn:
         await conn.execute(text(sql), params)
-
-
-def _compute_cosine_similarity(
-    query_embedding: list[float],
-    candidates: list[tuple[str, str, list, dict]],
-) -> list[tuple[str, str, float, dict]]:
-    """numpy 矩阵向量化计算余弦相似度并排序。"""
-    if not candidates:
-        return []
-
-    # 分离出有效候选项（embedding 非 None）
-    valid: list[tuple[str, str, list, dict]] = [
-        (cid, doc, emb, meta)
-        for cid, doc, emb, meta in candidates
-        if emb is not None
-    ]
-    if not valid:
-        return []
-
-    query_vec = np.asarray(query_embedding, dtype=np.float32)
-    query_norm = np.linalg.norm(query_vec)
-    if query_norm == 0:
-        return [(cid, doc, 0.0, meta) for cid, doc, _, meta in valid]
-
-    # 将所有候选向量堆叠为矩阵 (N, dim)，一次矩阵乘法完成
-    cand_matrix = np.array([emb for _, _, emb, _ in valid], dtype=np.float32)
-    cand_norms = np.linalg.norm(cand_matrix, axis=1)
-    # 避免除零
-    np.maximum(cand_norms, 1e-12, out=cand_norms)
-
-    # scores = (cand_matrix @ query_vec) / (cand_norms * query_norm)
-    scores = np.dot(cand_matrix, query_vec) / (cand_norms * query_norm)
-
-    results = [
-        (valid[i][0], valid[i][1], float(scores[i]), valid[i][3])
-        for i in range(len(valid))
-    ]
-    results.sort(key=lambda x: x[2], reverse=True)
-    return results
 
 
 def _build_where_clause(where: Optional[dict]) -> tuple[str, dict]:
@@ -276,14 +234,15 @@ async def query_documents(
     collection_name: Optional[str] = None,
 ) -> dict:
     """
-    按向量余弦相似度检索文档。
-    返回 QueryResult 字典。
+    pgvector 向量检索。
+    使用 <=> 余弦距离运算符，检索在数据库内完成，仅返回 top-N。
     """
     col = collection_name or COLLECTION_NAME
     engine = get_engine()
 
     conditions = ["collection_name = :cn"]
-    params: dict = {"cn": col}
+    # pgvector 需要向量以字符串格式传入
+    params: dict = {"cn": col, "embedding": f"[{','.join(str(v) for v in query_embedding)}]"}
 
     where_clause, where_params = _build_where_clause(where)
     if where_clause:
@@ -291,36 +250,47 @@ async def query_documents(
         params.update(where_params)
 
     sql = f"""
-        SELECT chunk_id, text, embedding, source, page, section, user_id
+        SELECT
+            chunk_id,
+            text,
+            embedding <=> :embedding AS distance,
+            source,
+            page,
+            section,
+            user_id
         FROM document_chunk
         WHERE {' AND '.join(conditions)}
-        LIMIT 5000
+        ORDER BY embedding <=> :embedding
+        LIMIT :n_results
     """
 
     async with engine.connect() as conn:
-        result = await conn.execute(text(sql), params)
+        result = await conn.execute(text(sql), {**params, "n_results": n_results})
         rows = result.fetchall()
 
-    candidates = []
+    ids_list = []
+    documents_list = []
+    distances_list = []
+    metadatas_list = []
+
     for row in rows:
         chunk_id = row[0]
-        meta = {
+        ids_list.append(chunk_id)
+        documents_list.append(row[1])
+        distances_list.append(float(row[2]) if row[2] is not None else 1.0)
+        metadatas_list.append({
             "doc_id": chunk_id.rsplit("_", 1)[0] if "_" in chunk_id else "",
             "source": row[3] or "",
             "page": str(row[4]) if row[4] else "",
             "section": row[5] or "",
             "user_id": row[6] or "",
-        }
-        candidates.append((chunk_id, row[1], row[2], meta))
-
-    scored = _compute_cosine_similarity(query_embedding, candidates)
-    top = scored[:n_results]
+        })
 
     return {
-        "ids": [[r[0] for r in top]],
-        "documents": [[r[1] for r in top]],
-        "distances": [[1.0 - r[2] for r in top]],
-        "metadatas": [[r[3] for r in top]],
+        "ids": [ids_list],
+        "documents": [documents_list],
+        "distances": [distances_list],
+        "metadatas": [metadatas_list],
     }
 
 

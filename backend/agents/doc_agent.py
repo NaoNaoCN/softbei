@@ -9,9 +9,9 @@ import json
 
 from loguru import logger  # noqa: F401
 
+from backend.config import config
 from backend.models.schemas import AgentState
-from backend.agents.utils import resolve_kp_name
-from backend.rag.retriever import retrieve_by_kp, format_context
+from backend.agents.utils import resolve_kp_name, retrieve_context
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
 
@@ -43,18 +43,7 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     kp_name = await resolve_kp_name(state, config)
     logger.info(f"[DocAgent] kp_name={kp_name}")
     # 检索相关文档
-    try:
-        chunks = await retrieve_by_kp(kp_name, n_results=5, user_id=state.user_id)
-        context = format_context(chunks, max_tokens=3000)
-        retrieved_texts = [c.text for c in chunks]
-        if chunks:
-            logger.info(f"[DocAgent] RAG 检索到 {len(chunks)} 条参考资料，将基于课程文档生成内容。")
-        else:
-            logger.warning(f"[DocAgent] RAG 未检索到参考资料，将仅依赖 LLM 自身知识生成（质量可能下降）。")
-    except Exception as e:
-        logger.warning(f"[DocAgent] RAG 检索异常: {e}，降级为纯 LLM 生成。")
-        context = "（暂无参考资料）"
-        retrieved_texts = []
+    context, retrieved_texts = await retrieve_context(kp_name, state.user_id, "DocAgent")
 
     # 更新 retrieved_docs
     state = state.model_copy(update={"retrieved_docs": retrieved_texts})
@@ -65,8 +54,8 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     try:
         draft = await chat_completion(
             [{"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=4000,
+            temperature=config.agents.doc.temperature,
+            max_tokens=config.agents.doc.max_tokens,
         )
         logger.info("[DocAgent] 文档生成成功，draft_len=%d" % len(draft))
         state = state.model_copy(update={"draft_content": draft})

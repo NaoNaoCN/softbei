@@ -6,10 +6,11 @@ SQLAlchemy 2.x ORM 模型定义（13 张表）。
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     Enum,
@@ -33,6 +34,7 @@ from backend.models.schemas import (
     ResourceType,
     TaskStatus,
 )
+from backend.utils.snowflake import generate_id, string_to_id
 
 
 # ----------------------------------------------------------
@@ -42,7 +44,7 @@ from backend.models.schemas import (
 class User(Base):
     __tablename__ = "user"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(128), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -61,8 +63,8 @@ class User(Base):
 class StudentProfile(Base):
     __tablename__ = "student_profile"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user.id"), unique=True, nullable=False)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), unique=True, nullable=False)
     major: Mapped[str | None] = mapped_column(String(128))
     learning_goal: Mapped[str | None] = mapped_column(Text)
     cognitive_style: Mapped[str | None] = mapped_column(
@@ -85,8 +87,8 @@ class StudentProfile(Base):
 class ProfileHistory(Base):
     __tablename__ = "profile_history"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    profile_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("student_profile.id"), nullable=False)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
+    profile_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("student_profile.id"), nullable=False)
     snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -100,8 +102,8 @@ class ProfileHistory(Base):
 class ChatSession(Base):
     __tablename__ = "chat_session"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
     title: Mapped[str | None] = mapped_column(String(256))
     last_used_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -118,8 +120,9 @@ class ChatSession(Base):
 class ChatMessage(Base):
     __tablename__ = "chat_message"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    session_id: Mapped[uuid.UUID] = mapped_column(
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
+    session_id: Mapped[int] = mapped_column(
+        BigInteger,
         ForeignKey("chat_session.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -141,12 +144,12 @@ class ChatMessage(Base):
 class DocumentChunk(Base):
     __tablename__ = "document_chunk"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
     chunk_id: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
     doc_id: Mapped[str] = mapped_column(String(128), nullable=False)
     collection_name: Mapped[str] = mapped_column(String(64), default="knowledge_base", index=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)
+    embedding = mapped_column(Vector(1024), nullable=True)
     source: Mapped[str | None] = mapped_column(String(512))
     page: Mapped[int | None] = mapped_column(Integer)
     section: Mapped[str | None] = mapped_column(String(256))
@@ -173,7 +176,7 @@ class KGNode(Base):
     )
     description: Mapped[str | None] = mapped_column(Text)
     course_id: Mapped[str | None] = mapped_column(String(64))
-    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
 
     out_edges: Mapped[list["KGEdge"]] = relationship(
         back_populates="source_node", foreign_keys="KGEdge.source_id"
@@ -187,7 +190,7 @@ class KGEdge(Base):
     __tablename__ = "kg_edge"
     __table_args__ = (UniqueConstraint("source_id", "target_id", "relation"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
     source_id: Mapped[str] = mapped_column(ForeignKey("kg_node.id"), nullable=False)
     target_id: Mapped[str] = mapped_column(ForeignKey("kg_node.id"), nullable=False)
     relation: Mapped[str] = mapped_column(
@@ -206,8 +209,8 @@ class KGEdge(Base):
 class ResourceMeta(Base):
     __tablename__ = "resource_meta"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
     kp_id: Mapped[str] = mapped_column(String(256), nullable=False)
     resource_type: Mapped[str] = mapped_column(
         Enum(ResourceType, values_callable=lambda e: [m.value for m in e]),
@@ -228,8 +231,8 @@ class GenerationBatch(Base):
     """批量生成任务批次，关联多个 GenerationTask。"""
     __tablename__ = "generation_batch"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
     kp_id: Mapped[str] = mapped_column(String(256), nullable=False)
     status: Mapped[str] = mapped_column(
         Enum(TaskStatus, values_callable=lambda e: [m.value for m in e]),
@@ -247,9 +250,9 @@ class GenerationBatch(Base):
 class GenerationTask(Base):
     __tablename__ = "generation_task"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    resource_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("resource_meta.id"), unique=True, nullable=False)
-    batch_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("generation_batch.id"), nullable=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
+    resource_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("resource_meta.id"), unique=True, nullable=False)
+    batch_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("generation_batch.id"), nullable=True)
     status: Mapped[str] = mapped_column(
         Enum(TaskStatus, values_callable=lambda e: [m.value for m in e]),
         default=TaskStatus.pending,
@@ -271,9 +274,9 @@ class GenerationTask(Base):
 class KGBuildTask(Base):
     __tablename__ = "kg_build_task"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
     doc_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("user.id"), nullable=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
     status: Mapped[str] = mapped_column(
         Enum(TaskStatus, values_callable=lambda e: [m.value for m in e]),
         default=TaskStatus.pending,
@@ -295,8 +298,8 @@ class KGBuildTask(Base):
 class QuizItem(Base):
     __tablename__ = "quiz_item"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    resource_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("resource_meta.id"), nullable=False)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
+    resource_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("resource_meta.id"), nullable=False)
     kp_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     question_type: Mapped[str] = mapped_column(
         Enum(QuestionType, values_callable=lambda e: [m.value for m in e]),
@@ -315,9 +318,9 @@ class QuizItem(Base):
 class QuizAttempt(Base):
     __tablename__ = "quiz_attempt"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    quiz_item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("quiz_item.id"), nullable=False)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
+    quiz_item_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("quiz_item.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
     user_answer: Mapped[str] = mapped_column(Text, nullable=False)
     is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
     score: Mapped[float | None] = mapped_column(Float)
@@ -334,8 +337,8 @@ class QuizAttempt(Base):
 class LearningPath(Base):
     __tablename__ = "learning_path"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
     title: Mapped[str | None] = mapped_column(String(256))
     description: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -349,8 +352,8 @@ class LearningPath(Base):
 class LearningPathItem(Base):
     __tablename__ = "learning_path_item"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    path_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("learning_path.id"), nullable=False)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
+    path_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("learning_path.id"), nullable=False)
     kp_id: Mapped[str] = mapped_column(ForeignKey("kg_node.id"), nullable=False)
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -366,9 +369,9 @@ class LearningPathItem(Base):
 class LearningRecord(Base):
     __tablename__ = "learning_record"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user.id"), nullable=False)
-    resource_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("resource_meta.id"))
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
+    resource_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("resource_meta.id"))
     kp_id: Mapped[str | None] = mapped_column(ForeignKey("kg_node.id"))
     action: Mapped[str] = mapped_column(String(64), nullable=False)   # "view" | "complete" | "quiz"
     duration_seconds: Mapped[int | None] = mapped_column(Integer)

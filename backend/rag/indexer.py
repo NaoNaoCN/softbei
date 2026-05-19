@@ -10,6 +10,7 @@ from typing import Callable, Optional
 
 from loguru import logger  # noqa: F401
 
+from backend.config import config
 from backend.db.vector import upsert_documents
 from backend.rag.loader import TextChunk
 from backend.services.llm import get_embedding
@@ -22,7 +23,7 @@ from backend.services.llm import get_embedding
 async def index_chunks(
     chunks: list[TextChunk],
     collection_name: Optional[str] = None,
-    batch_size: int = 128,
+    batch_size: int = None,
     progress_callback: Optional[Callable[[int, int], None]] = None,
     user_id: Optional[str] = None,
 ) -> int:
@@ -36,6 +37,8 @@ async def index_chunks(
     :param user_id:            上传用户 ID，写入 metadata 用于账户隔离
     :return:                   成功写入的 chunk 数量
     """
+    if batch_size is None:
+        batch_size = config.embedding.index_batch_size
     total = 0
     logger.info(f"[Indexer] 开始索引 {len(chunks)} 个文本块，batch_size={batch_size}, user_id={user_id}")
     batches = list(range(0, len(chunks), batch_size))
@@ -94,8 +97,8 @@ async def index_directory(
 # ----------------------------------------------------------
 
 async def _embed_batch(texts: list[str]) -> list[list[float]]:
-    """并发嵌入一批文本（最多 8 个并发调用）。"""
-    semaphore = asyncio.Semaphore(8)
+    """并发嵌入一批文本，并发数由 config.embedding.concurrency 控制。"""
+    semaphore = asyncio.Semaphore(config.embedding.concurrency)
 
     async def _embed_one(text: str) -> list[float]:
         async with semaphore:

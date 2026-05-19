@@ -6,17 +6,15 @@ backend/services/profile.py
 from __future__ import annotations
 
 import asyncio
-import logging
-import uuid
 from typing import Optional
 
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.crud import select_one, select, insert, update_by_id
 from backend.db.models import StudentProfile, ProfileHistory
 from backend.models.schemas import CognitiveStyle, StudentProfileIn, StudentProfileOut
-
-_logger = logging.getLogger(__name__)
+from backend.config import config
 
 # 保持后台任务引用，避免被 GC。任务完成后自动移除。
 _BG_TASKS: set[asyncio.Task] = set()
@@ -37,7 +35,6 @@ _GOAL_SUMMARY_PROMPT = """你是一个学习画像分析助手。以下是用户
 9. 直接输出目标文本，不要加前缀（如“学习目标：”），不要加引号。
 仅输出概括结果。"""
 
-_MAX_GOAL_QUESTIONS = 50  # 最多保留最近 N 条提问，避免无限膨胀
 
 
 async def _summarize_learning_goal(questions: list[str]) -> Optional[str]:
@@ -51,12 +48,12 @@ async def _summarize_learning_goal(questions: list[str]) -> Optional[str]:
     prompt = _GOAL_SUMMARY_PROMPT.format(questions=numbered)
     try:
         raw = await chat_completion(
-            [{"role": "user", "content": prompt}], temperature=0.3
+            [{"role": "user", "content": prompt}], temperature=config.agents.profile.goal_summary_temperature
         )
         goal = (raw or "").strip().strip("「」\"'")
         return goal or None
     except Exception as e:
-        _logger.warning(f"学习目标概括失败: {e}")
+        logger.warning(f"学习目标概括失败: {e}")
         return None
 
 
@@ -64,7 +61,7 @@ async def _summarize_learning_goal(questions: list[str]) -> Optional[str]:
 # 公开接口
 # ----------------------------------------------------------
 
-async def get_profile(user_id: uuid.UUID, db: AsyncSession) -> Optional[StudentProfileOut]:
+async def get_profile(user_id: int, db: AsyncSession) -> Optional[StudentProfileOut]:
     """
     查询指定用户的当前画像。
     若用户尚未建立画像，返回 None。
@@ -78,7 +75,7 @@ async def get_profile(user_id: uuid.UUID, db: AsyncSession) -> Optional[StudentP
 
 
 async def create_or_update_profile(
-    user_id: uuid.UUID,
+    user_id: int,
     data: StudentProfileIn,
     db: AsyncSession,
 ) -> StudentProfileOut:
@@ -133,9 +130,9 @@ async def create_or_update_profile(
 
 
 async def get_profile_history(
-    user_id: uuid.UUID,
+    user_id: int,
     db: AsyncSession,
-    limit: int = 10,
+    limit: int = config.agents.profile.history_max_versions,
 ) -> list[StudentProfileOut]:
     """返回用户的画像历史版本列表（倒序）。"""
     profile = await select_one(db, StudentProfile, filters={"user_id": user_id})
@@ -155,7 +152,7 @@ async def get_profile_history(
 
 
 async def merge_chat_updates(
-    user_id: uuid.UUID,
+    user_id: int,
     updates: dict,
     db: AsyncSession,
     user_message: Optional[str] = None,
@@ -183,8 +180,8 @@ async def merge_chat_updates(
     if user_message and user_message.strip():
         new_questions.append(user_message.strip())
         # 只保留最近 N 条，避免无限增长
-        if len(new_questions) > _MAX_GOAL_QUESTIONS:
-            new_questions = new_questions[-_MAX_GOAL_QUESTIONS:]
+        if len(new_questions) > config.agents.profile.max_goal_questions:
+            new_questions = new_questions[-config.agents.profile.max_goal_questions:]
 
     if not existing:
         # 不存在则创建新画像；学习目标暂用 LLM 单轮提取结果占位，后台任务会重新概括写回
@@ -279,7 +276,7 @@ async def merge_chat_updates(
     return StudentProfileOut.model_validate(existing)
 
 
-def _schedule_refresh_learning_goal(user_id: uuid.UUID, questions: Optional[list[str]] = None) -> None:
+def _schedule_refresh_learning_goal(user_id: int, questions: Optional[list[str]] = None) -> None:
     """在当前 event loop 中投递一个后台协程，用独立 session 刷新 learning_goal。失败静默忽略。
 
     若传入 questions，则直接用它做 LLM 概括，避免因调用方 session 尚未 commit
@@ -287,7 +284,7 @@ def _schedule_refresh_learning_goal(user_id: uuid.UUID, questions: Optional[list
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
-        _logger.warning("_schedule_refresh_learning_goal: 当前无 running loop，跳过")
+        logger.warning("_schedule_refresh_learning_goal: 当前无 running loop，跳过")
         return
     task = loop.create_task(refresh_learning_goal(user_id, questions))
     _BG_TASKS.add(task)
@@ -295,7 +292,7 @@ def _schedule_refresh_learning_goal(user_id: uuid.UUID, questions: Optional[list
 
 
 async def refresh_learning_goal(
-    user_id: uuid.UUID,
+    user_id: int,
     questions: Optional[list[str]] = None,
 ) -> None:
     """
@@ -307,12 +304,12 @@ async def refresh_learning_goal(
     try:
         from backend.db import database as db_mod
     except Exception as e:
-        _logger.warning(f"refresh_learning_goal 导入数据库模块失败: {e}")
+        logger.warning(f"refresh_learning_goal 导入数据库模块失败: {e}")
         return
 
     factory = getattr(db_mod, "_session_factory", None)
     if factory is None:
-        _logger.warning("refresh_learning_goal: session factory 未初始化，跳过")
+        logger.warning("refresh_learning_goal: session factory 未初始化，跳过")
         return
 
     try:
@@ -334,12 +331,12 @@ async def refresh_learning_goal(
                 if summarized:
                     await update_by_id(db, StudentProfile, existing.id, {"learning_goal": summarized})
                     await db.commit()
-                    _logger.info(f"[refresh_learning_goal] 学习目标已刷新: {summarized[:60]}")
+                    logger.info(f"[refresh_learning_goal] 学习目标已刷新: {summarized[:60]}")
             except Exception as e:
-                _logger.warning(f"后台学习目标刷新失败: {e}")
+                logger.warning(f"后台学习目标刷新失败: {e}")
                 await db.rollback()
     except Exception as e:
-        _logger.warning(f"后台学习目标刷新 session 创建失败: {e}")
+        logger.warning(f"后台学习目标刷新 session 创建失败: {e}")
 
 
 async def build_profile_context(profile: StudentProfileOut) -> str:

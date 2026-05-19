@@ -5,7 +5,6 @@ Pydantic v2 数据模型，供 FastAPI 路由、Agent 以及前端 API 调用共
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
@@ -73,7 +72,7 @@ class UserCreate(BaseModel):
 
 # 出站数据（API 响应），包含 id/created_at，故意没有 password，且有 from_attributes=True 用于从 ORM 对象直接构造
 class UserOut(BaseModel):
-    id: uuid.UUID
+    id: int
     username: str
     email: Optional[str] = None
     created_at: datetime
@@ -87,7 +86,7 @@ class TokenOut(BaseModel):
     用户提交用户名+密码 → 后端验证通过 → 生成 JWT token → 用 TokenOut 包装后返回。
     前端拿到 access_token 之后，后续每个请求都在 HTTP Header 里带上它
     """
-    user_id: uuid.UUID
+    user_id: int
     access_token: str
     token_type: str = "bearer"
 
@@ -111,8 +110,8 @@ class StudentProfileIn(BaseModel):
 
 
 class StudentProfileOut(StudentProfileIn):
-    id: uuid.UUID
-    user_id: uuid.UUID
+    id: int
+    user_id: int
     version: int
     updated_at: datetime
 
@@ -136,7 +135,7 @@ class ChatMessageOut(BaseModel):
 
 
 class ChatSessionOut(BaseModel):
-    id: uuid.UUID
+    id: int
     title: Optional[str]
     messages_table: Optional[str] = None
     last_used_at: Optional[datetime] = None
@@ -179,7 +178,7 @@ class KGGraphOut(BaseModel):
 # ===========================================================
 
 class LearningPathItemOut(BaseModel):
-    id: uuid.UUID
+    id: int
     order_index: int
     kp_id: str
     kp_name: str
@@ -199,7 +198,7 @@ class LearningPathItemUpdate(BaseModel):
 
 
 class LearningPathOut(BaseModel):
-    id: uuid.UUID
+    id: int
     name: str
     description: Optional[str]
     items: list[LearningPathItemOut] = []
@@ -235,17 +234,17 @@ class GenerateRequest(BaseModel):
 
 
 class GenerateTaskOut(BaseModel):
-    task_id: uuid.UUID
+    task_id: int
     status: TaskStatus
     progress: int = Field(ge=0, le=100)
     error_msg: Optional[str] = None
-    result_id: Optional[uuid.UUID] = None
+    result_id: Optional[int] = None
 
     model_config = {"from_attributes": True}
 
 
 class KGBuildTaskOut(BaseModel):
-    task_id: uuid.UUID
+    task_id: int
     doc_id: str
     status: TaskStatus
     progress: int = Field(ge=0, le=100)
@@ -270,25 +269,25 @@ class BatchGenerateRequest(BaseModel):
 
 class BatchTaskItem(BaseModel):
     """批次中单个子任务的状态"""
-    task_id: uuid.UUID
+    task_id: int
     resource_type: ResourceType
     status: TaskStatus
     progress: int = Field(ge=0, le=100)
-    result_id: Optional[uuid.UUID] = None
+    result_id: Optional[int] = None
     error_message: Optional[str] = None
 
 
 class BatchGenerateOut(BaseModel):
     """批量生成响应"""
-    batch_id: uuid.UUID
+    batch_id: int
     status: TaskStatus
     progress: int = Field(ge=0, le=100)
     tasks: list[BatchTaskItem] = Field(default_factory=list)
 
 
 class ResourceMetaOut(BaseModel):
-    id: uuid.UUID
-    user_id: uuid.UUID
+    id: int
+    user_id: int
     kp_id: Optional[str]
     resource_type: ResourceType
     title: str
@@ -309,7 +308,7 @@ class ResourceListOut(BaseModel):
 # ===========================================================
 
 class QuizItemOut(BaseModel):
-    id: uuid.UUID
+    id: int
     kp_id: Optional[str]
     question_type: QuestionType
     difficulty: Optional[int]
@@ -323,13 +322,13 @@ class QuizItemOut(BaseModel):
 
 class QuizSubmitIn(BaseModel):
     """学生提交答题结果"""
-    quiz_item_id: uuid.UUID
+    quiz_item_id: int
     user_answer: Any
 
 
 class QuizAttemptOut(BaseModel):
-    id: uuid.UUID
-    quiz_item_id: uuid.UUID
+    id: int
+    quiz_item_id: int
     user_answer: Any
     is_correct: bool
     score: float
@@ -352,16 +351,16 @@ class QuizAttemptOut(BaseModel):
 # ===========================================================
 
 class LearningRecordCreate(BaseModel):
-    resource_id: Optional[uuid.UUID] = None
+    resource_id: Optional[int] = None
     kp_id: Optional[str] = None
     action: str = "view"          # "view" | "quiz" | "complete"
     duration_seconds: Optional[int] = None
 
 
 class LearningRecordOut(BaseModel):
-    id: uuid.UUID
-    user_id: uuid.UUID
-    resource_id: Optional[uuid.UUID] = None
+    id: int
+    user_id: int
+    resource_id: Optional[int] = None
     kp_id: Optional[str] = None
     action: str
     duration_seconds: Optional[int] = None
@@ -376,8 +375,8 @@ class LearningRecordOut(BaseModel):
 
 class AgentState(BaseModel):
     """LangGraph 全局状态，在各 Agent 节点间传递"""
-    user_id: str
-    session_id: str
+    user_id: int
+    session_id: int
     user_message: str
     chat_history: list[dict[str, str]] = Field(default_factory=list)  # 多轮对话历史
     intent_type: Optional[str] = None  # "generate" | "clarify"

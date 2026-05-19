@@ -19,23 +19,17 @@ from typing import Optional
 
 from loguru import logger
 
+from backend.config import config
+
 
 # ----------------------------------------------------------
-# 配置常量
+# 配置常量（从 config 读取，模块加载时解析一次）
 # ----------------------------------------------------------
 
-UPLOAD_DIR = Path(__file__).parent.parent.parent / "uploaded_docs"
+UPLOAD_DIR = Path(__file__).parent.parent.parent / config.storage.upload_dir
 
-DEFAULT_RETENTION_DAYS = 30
-DEFAULT_ORPHAN_RETENTION_DAYS = 7
-CLEANUP_INTERVAL_HOURS = 24
-MIN_FILE_AGE_SECONDS = 300  # 5 分钟——避免删除正在处理的文件
-
-# upload 文件名格式：{uuid_hex_12}_{original_name}
-UPLOAD_NAME_PATTERN = re.compile(r"^[a-f0-9]{12}_.+")
-
-SUPPORTED_SUFFIXES = {".pdf", ".docx", ".doc", ".md", ".txt"}
-
+# upload 文件名格式：{uuid_hex_N}_{original_name}
+UPLOAD_NAME_PATTERN = re.compile(rf"^[a-f0-9]{{{config.storage.doc_id_hex_length}}}_.+")
 
 # ----------------------------------------------------------
 # 辅助函数
@@ -64,8 +58,8 @@ def _extract_original_name(filename: str) -> str:
 # ----------------------------------------------------------
 
 async def cleanup_uploaded_docs(
-    retention_days: int = DEFAULT_RETENTION_DAYS,
-    orphan_retention_days: int = DEFAULT_ORPHAN_RETENTION_DAYS,
+    retention_days: int | None = None,
+    orphan_retention_days: int | None = None,
     dry_run: bool = False,
 ) -> dict:
     """
@@ -85,10 +79,13 @@ async def cleanup_uploaded_docs(
     from backend.db.database import _session_factory
     from backend.db.models import ResourceMeta
 
+    _retention_days = retention_days if retention_days is not None else config.storage.cleanup.retention_days
+    _orphan_retention_days = orphan_retention_days if orphan_retention_days is not None else config.storage.cleanup.orphan_retention_days
+
     now = time.time()
-    indexed_cutoff = now - retention_days * 86400
-    orphan_cutoff = now - orphan_retention_days * 86400
-    active_cutoff = now - MIN_FILE_AGE_SECONDS
+    indexed_cutoff = now - _retention_days * 86400
+    orphan_cutoff = now - _orphan_retention_days * 86400
+    active_cutoff = now - config.storage.cleanup.min_file_age_seconds
 
     # ---- 1. 收集已索引文件的信息 ----
     indexed_original_names: set[str] = set()
@@ -114,7 +111,7 @@ async def cleanup_uploaded_docs(
 
     files = sorted(
         [f for f in UPLOAD_DIR.iterdir()
-         if f.is_file() and f.suffix.lower() in SUPPORTED_SUFFIXES],
+         if f.is_file() and f.suffix.lower() in set(config.storage.supported_extensions)],
         key=lambda f: f.stat().st_mtime,
     )
 
@@ -154,7 +151,7 @@ async def cleanup_uploaded_docs(
             if is_indexed:
                 # 规则 1：已索引文件
                 if file_mtime < indexed_cutoff:
-                    reason = f"已索引文件过期 ({round(file_age_days, 1)}d > {retention_days}d)"
+                    reason = f"已索引文件过期 ({round(file_age_days, 1)}d > {_retention_days}d)"
                     if not dry_run:
                         f.unlink()
                         logger.info(f"[Cleanup] 删除过期索引文件: {f.name} (age={file_age_days:.1f}d)")
@@ -165,12 +162,12 @@ async def cleanup_uploaded_docs(
                     skipped_retained.append({
                         "file": f.name,
                         "age_days": round(file_age_days, 1),
-                        "reason": f"已索引，保留期内 ({round(file_age_days, 1)}d < {retention_days}d)",
+                        "reason": f"已索引，保留期内 ({round(file_age_days, 1)}d < {_retention_days}d)",
                     })
             else:
                 # 规则 2：孤儿文件
                 if file_mtime < orphan_cutoff:
-                    reason = f"孤儿文件过期 ({round(file_age_days, 1)}d > {orphan_retention_days}d)"
+                    reason = f"孤儿文件过期 ({round(file_age_days, 1)}d > {_orphan_retention_days}d)"
                     if not dry_run:
                         f.unlink()
                         logger.info(f"[Cleanup] 删除孤儿文件: {f.name} (age={file_age_days:.1f}d)")
@@ -181,7 +178,7 @@ async def cleanup_uploaded_docs(
                     skipped_retained.append({
                         "file": f.name,
                         "age_days": round(file_age_days, 1),
-                        "reason": f"孤儿文件，保留期内 ({round(file_age_days, 1)}d < {orphan_retention_days}d)",
+                        "reason": f"孤儿文件，保留期内 ({round(file_age_days, 1)}d < {_orphan_retention_days}d)",
                     })
 
         except Exception as e:
@@ -234,26 +231,20 @@ def _get_cleanup_config() -> dict:
         return _cleanup_config_cache
 
     try:
-        from backend.config import config
-        sc = getattr(config, "storage", None)
-        if sc and hasattr(sc, "cleanup"):
-            _cleanup_config_cache = {
-                "enabled": sc.cleanup.enabled,
-                "retention_days": sc.cleanup.retention_days,
-                "orphan_retention_days": sc.cleanup.orphan_retention_days,
-            }
-        else:
-            _cleanup_config_cache = {
-                "enabled": True,
-                "retention_days": DEFAULT_RETENTION_DAYS,
-                "orphan_retention_days": DEFAULT_ORPHAN_RETENTION_DAYS,
-            }
+        sc = config.storage.cleanup
+        _cleanup_config_cache = {
+            "enabled": sc.enabled,
+            "retention_days": sc.retention_days,
+            "orphan_retention_days": sc.orphan_retention_days,
+            "interval_hours": sc.interval_hours,
+        }
         return _cleanup_config_cache
     except Exception:
         return {
             "enabled": True,
-            "retention_days": DEFAULT_RETENTION_DAYS,
-            "orphan_retention_days": DEFAULT_ORPHAN_RETENTION_DAYS,
+            "retention_days": 30,
+            "orphan_retention_days": 7,
+            "interval_hours": 24,
         }
 
 
@@ -264,15 +255,16 @@ async def start_cleanup_task() -> None:
         logger.info("[Cleanup] 文档文件自动清理已禁用")
         return
 
+    interval_seconds = cfg["interval_hours"] * 3600
     logger.info(
         f"[Cleanup] 启动文档文件清理后台任务 "
         f"(retention={cfg['retention_days']}d, orphan={cfg['orphan_retention_days']}d, "
-        f"每 {CLEANUP_INTERVAL_HOURS}h 执行一次)"
+        f"每 {cfg['interval_hours']}h 执行一次)"
     )
 
     while True:
         try:
-            await asyncio.sleep(CLEANUP_INTERVAL_HOURS * 3600)
+            await asyncio.sleep(interval_seconds)
             # 每次执行时刷新配置（支持运行时修改配置后重启生效）
             _cleanup_config_cache = None
             cfg = _get_cleanup_config()

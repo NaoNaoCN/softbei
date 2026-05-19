@@ -1,7 +1,7 @@
 // html-test/assets/api.js
 // 统一 API 调用层，所有 HTML 页面通过此模块与后端通信
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = window.location.origin;
 
 // ===========================================================
 // 基础工具

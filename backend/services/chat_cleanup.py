@@ -11,10 +11,8 @@ from datetime import datetime, timedelta
 from loguru import logger
 from sqlalchemy import text
 
+from backend.config import config
 from backend.db.database import get_engine
-
-# 会话表过期时间（天）
-SESSION_EXPIRY_DAYS = 30
 
 
 async def cleanup_expired_sessions() -> None:
@@ -23,7 +21,7 @@ async def cleanup_expired_sessions() -> None:
     ChatMessage 通过外键 CASCADE 自动删除，此处主要清理 ChatSession。
     """
     engine = get_engine()
-    expiry_date = datetime.now() - timedelta(days=SESSION_EXPIRY_DAYS)
+    expiry_date = datetime.now() - timedelta(days=config.chat.session_expiry_days)
 
     async with engine.begin() as conn:
         # 先统计将被删除的消息数
@@ -58,11 +56,12 @@ async def start_cleanup_task() -> None:
     """
     启动后台清理任务，每 24 小时执行一次。
     """
-    logger.info("[ChatCleanup] 启动聊天会话清理后台任务（每24小时执行一次）")
+    interval = config.chat.cleanup_interval_hours * 3600
+    logger.info(f"[ChatCleanup] 启动聊天会话清理后台任务（每{config.chat.cleanup_interval_hours}小时执行一次）")
 
     while True:
         try:
-            await asyncio.sleep(24 * 60 * 60)
+            await asyncio.sleep(interval)
             await cleanup_expired_sessions()
         except asyncio.CancelledError:
             logger.info("[ChatCleanup] 会话清理任务已取消")

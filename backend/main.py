@@ -6,7 +6,8 @@ FastAPI 应用入口：路由注册、生命周期管理、中间件配置。
 from __future__ import annotations
 
 import asyncio
-import uuid
+import json
+from backend.utils.snowflake import generate_id, string_to_id
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Optional, Annotated
@@ -14,8 +15,44 @@ from typing import Optional, Annotated
 import jwt
 from fastapi import BackgroundTasks, Body, Depends, FastAPI, HTTPException, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+
+# -------------------------------------------------------
+# 自定义 JSON 编码器：将超过 JS 安全整数范围的 int 序列化为字符串
+# JavaScript Number 只能精确表示 ±2^53-1，Snowflake ID（64-bit）会丢失精度
+# -------------------------------------------------------
+_JS_MAX_SAFE_INTEGER = 2**53 - 1  # 9007199254740991
+
+
+class _SafeIntEncoder(json.JSONEncoder):
+    """JSON 编码器：大于 2^53-1 的整数自动转为字符串。"""
+
+    def encode(self, o):
+        return super().encode(self._convert(o))
+
+    def _convert(self, obj):
+        if isinstance(obj, dict):
+            return {k: self._convert(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [self._convert(item) for item in obj]
+        if isinstance(obj, int) and abs(obj) > _JS_MAX_SAFE_INTEGER:
+            return str(obj)
+        return obj
+
+
+class BigIntJSONResponse(JSONResponse):
+    """使用 SafeIntEncoder 的自定义 JSON 响应。"""
+
+    def render(self, content) -> bytes:
+        return json.dumps(
+            content,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=None,
+            separators=(",", ":"),
+            cls=_SafeIntEncoder,
+        ).encode("utf-8")
 
 from backend.auth.hash_utils import hash_password, verify_password
 from backend.auth.deps import get_current_user_id
@@ -96,11 +133,11 @@ async def lifespan(app: FastAPI):
     from backend.services.cleanup import start_cleanup_task as start_doc_cleanup_task
     doc_cleanup_task = asyncio.create_task(start_doc_cleanup_task())
 
-    # 知识库为空时，自动从 knowledge_base/ai_intro 索引
+    # 知识库为空时，自动从配置的知识库目录索引
     from backend.db.vector import get_collection
     from backend.rag.indexer import index_directory
     import os
-    KB_DIR = "knowledge_base/ai_intro"
+    KB_DIR = app_config.storage.knowledge_base_dir
     col = get_collection()
     doc_count = await col.count()
     if doc_count == 0 and os.path.isdir(KB_DIR):
@@ -130,13 +167,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="A3 个性化学习多智能体系统",
-    version="0.1.0",
+    version=app_config.server.version,
     lifespan=lifespan,
+    default_response_class=BigIntJSONResponse,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # 生产环境应限制为 Streamlit 域名
+    allow_origins=app_config.server.cors_origins,   # 生产环境应限制为 Streamlit 域名
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -203,21 +241,18 @@ async def login(body: UserCreate, db: AsyncSession = Depends(get_session)):
 # 学生画像
 # ===========================================================
 
-@app.get("/profile", response_model=StudentProfileOut, tags=["profile"])
+@app.get("/profile", response_model=Optional[StudentProfileOut], tags=["profile"])
 async def get_profile(
-    user_id: uuid.UUID,
+    user_id: int,
     db: AsyncSession = Depends(get_session),
 ):
-    """获取当前用户画像。"""
-    result = await profile_svc.get_profile(user_id, db)
-    if not result:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    return result
+    """获取当前用户画像，若尚未建立则返回 null。"""
+    return await profile_svc.get_profile(user_id, db)
 
 
 @app.put("/profile", response_model=StudentProfileOut, tags=["profile"])
 async def update_profile(
-    user_id: uuid.UUID,
+    user_id: int,
     body: StudentProfileIn,
     db: AsyncSession = Depends(get_session),
 ):
@@ -227,7 +262,7 @@ async def update_profile(
 
 @app.get("/profile/history", response_model=list[StudentProfileOut], tags=["profile"])
 async def get_profile_history(
-    user_id: uuid.UUID,
+    user_id: int,
     db: AsyncSession = Depends(get_session),
 ):
     """获取画像历史版本。"""
@@ -239,7 +274,7 @@ async def get_profile_history(
 # ===========================================================
 
 @app.get("/chat/sessions", response_model=list[ChatSessionOut], tags=["chat"])
-async def list_sessions(user_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
+async def list_sessions(user_id: int, db: AsyncSession = Depends(get_session)):
     """列举用户的所有对话会话。"""
     from backend.db.crud import select as db_select
     sessions = await db_select(db, ChatSession, filters={"user_id": user_id})
@@ -247,7 +282,7 @@ async def list_sessions(user_id: uuid.UUID, db: AsyncSession = Depends(get_sessi
 
 
 @app.post("/chat/sessions", response_model=ChatSessionOut, tags=["chat"])
-async def create_chat_session(user_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
+async def create_chat_session(user_id: int, db: AsyncSession = Depends(get_session)):
     """创建新的对话会话。"""
     from backend.db.crud import insert
 
@@ -255,7 +290,7 @@ async def create_chat_session(user_id: uuid.UUID, db: AsyncSession = Depends(get
     return ChatSessionOut.model_validate(session)
 
 
-async def _auto_title_session(session_id: uuid.UUID, user_msg: str, ai_msg: str | None):
+async def _auto_title_session(session_id: int, user_msg: str, ai_msg: str | None):
     """后台任务：用 LLM 为新会话生成简短标题。"""
     try:
         from backend.services.llm import chat_completion
@@ -263,13 +298,13 @@ async def _auto_title_session(session_id: uuid.UUID, user_msg: str, ai_msg: str 
         from backend.db.crud import update_by_id
 
         prompt = (
-            "根据以下对话的第一轮内容，生成一个简短的会话标题（不超过15个字，不要引号和标点）。\n"
-            f"用户：{user_msg[:200]}\n"
-            f"助手：{(ai_msg or '')[:200]}\n"
+            f"根据以下对话的第一轮内容，生成一个简短的会话标题（不超过{app_config.chat.auto_title_max_chars}个字，不要引号和标点）。\n"
+            f"用户：{user_msg[:app_config.chat.auto_title_message_truncate]}\n"
+            f"助手：{(ai_msg or '')[:app_config.chat.auto_title_message_truncate]}\n"
             "标题："
         )
-        title = await chat_completion([{"role": "user", "content": prompt}], max_tokens=30)
-        title = title.strip().strip('"\'""「」').strip()[:20]
+        title = await chat_completion([{"role": "user", "content": prompt}], max_tokens=app_config.chat.auto_title_max_tokens)
+        title = title.strip().strip('"\'""「」').strip()[:app_config.chat.auto_title_final_length]
         if title and _session_factory:
             async with _session_factory() as db:
                 await update_by_id(db, ChatSession, session_id, data={"title": title})
@@ -280,8 +315,8 @@ async def _auto_title_session(session_id: uuid.UUID, user_msg: str, ai_msg: str 
 
 @app.post("/chat/{session_id}", tags=["chat"])
 async def chat(
-    session_id: uuid.UUID,
-    user_id: uuid.UUID,
+    session_id: int,
+    user_id: int,
     body: ChatMessageIn,
     stream: bool = False,
     db: AsyncSession = Depends(get_session),
@@ -292,10 +327,10 @@ async def chat(
     """
     if stream:
         async def event_generator():
-            async for event in stream_invoke(str(user_id), str(session_id), body.content, db):
+            async for event in stream_invoke(user_id, session_id, body.content, db):
                 yield f"data: {event}\n\n"
         return StreamingResponse(event_generator(), media_type="text/event-stream")
-    result = await invoke(str(user_id), str(session_id), body.content, db)
+    result = await invoke(user_id, session_id, body.content, db)
 
     # 刷新 last_used_at，并持久化本轮对话消息
     try:
@@ -375,8 +410,8 @@ async def chat(
             import asyncio
             asyncio.create_task(run_batch_generation(
                 batch_id=batch_out.batch_id,
-                user_id=str(user_id),
-                session_id=str(session_id),
+                user_id=user_id,
+                session_id=session_id,
                 task_configs=task_configs,
             ))
             logger.info(f"[chat] 触发批量生成 batch_id={batch_id}, extra_types={extra_types}")
@@ -411,13 +446,13 @@ from pydantic import BaseModel
 
 class TitleIn(BaseModel):
     title: str
-    user_id: Optional[uuid.UUID] = None
+    user_id: Optional[int] = None
 
 
 @app.get("/chat/{session_id}/messages", tags=["chat"])
 async def get_session_messages(
-    session_id: uuid.UUID,
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    session_id: int,
+    user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """读取指定会话的历史消息列表。"""
@@ -470,8 +505,8 @@ async def get_document_file(filename: str):
 
 @app.delete("/chat/sessions/{session_id}", tags=["chat"])
 async def delete_chat_session(
-    session_id: uuid.UUID,
-    user_id: uuid.UUID,
+    session_id: int,
+    user_id: int,
     db: AsyncSession = Depends(get_session),
 ):
     """删除会话及其关联消息（ChatMessage 通过外键 CASCADE 自动删除）。"""
@@ -486,7 +521,7 @@ async def delete_chat_session(
 
 @app.patch("/chat/sessions/{session_id}/title", tags=["chat"])
 async def update_session_title(
-    session_id: uuid.UUID,
+    session_id: int,
     body: TitleIn,
     db: AsyncSession = Depends(get_session),
 ):
@@ -509,7 +544,7 @@ async def update_session_title(
 async def get_kg_graph(
     root_id: Optional[str] = None,
     doc_id: Optional[str] = None,
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    user_id: int = Depends(get_current_user_id),
     depth: int = 3,
     db: AsyncSession = Depends(get_session),
 ):
@@ -615,7 +650,7 @@ async def get_kg_graph(
 async def build_kg_endpoint(
     background_tasks: BackgroundTasks,
     body: dict = Body(...),
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """异步构建知识图谱，立即返回任务 ID 供轮询。"""
@@ -647,8 +682,8 @@ async def build_kg_endpoint(
 
 @app.get("/kg/build/{task_id}/status", tags=["knowledge-graph"])
 async def get_kg_build_status(
-    task_id: uuid.UUID,
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    task_id: int,
+    user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """轮询知识图谱构建任务状态。"""
@@ -676,7 +711,7 @@ async def get_kg_build_status(
 @app.get("/kg/build/by-doc/{doc_id}/status", tags=["knowledge-graph"])
 async def get_kg_build_status_by_doc(
     doc_id: str,
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """按 doc_id 查询最新的构建任务状态（刷新浏览器后恢复跟踪）。"""
@@ -714,7 +749,7 @@ async def get_kg_build_status_by_doc(
 
 @app.post("/generate", response_model=GenerateTaskOut, tags=["generate"])
 async def start_generation(
-    user_id: uuid.UUID,
+    user_id: int,
     body: GenerateRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_session),
@@ -728,7 +763,7 @@ async def start_generation(
     task = await resource_svc.create_generation_task(user_id, body, db)
 
     # 获取或创建会话 ID
-    session_id = str(uuid.uuid4())
+    session_id = str(generate_id())
 
     # 将 body 转为可序列化的 dict，避免 Pydantic 模型在 background task 中反序列化失败
     body_dict = body.model_dump()
@@ -737,7 +772,7 @@ async def start_generation(
     asyncio.create_task(
         run_generation(
             task.task_id,
-            str(user_id),
+            user_id,
             session_id,
             body_dict,
         )
@@ -747,8 +782,8 @@ async def start_generation(
 
 @app.get("/generate/{task_id}/status", response_model=GenerateTaskOut, tags=["generate"])
 async def get_generation_status(
-    task_id: uuid.UUID,
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    task_id: int,
+    user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """轮询生成任务状态与进度。"""
@@ -760,7 +795,7 @@ async def get_generation_status(
 
 @app.post("/generate/batch", response_model=BatchGenerateOut, tags=["generate"])
 async def start_batch_generation(
-    user_id: uuid.UUID,
+    user_id: int,
     body: BatchGenerateRequest,
     db: AsyncSession = Depends(get_session),
 ):
@@ -784,9 +819,9 @@ async def start_batch_generation(
         }
         task_configs.append({"task_id": task_item.task_id, "request": req_dict})
 
-    session_id = str(uuid.uuid4())
+    session_id = generate_id()
     asyncio.create_task(
-        run_batch_generation(batch_out.batch_id, str(user_id), session_id, task_configs)
+        run_batch_generation(batch_out.batch_id, user_id, session_id, task_configs)
     )
 
     return batch_out
@@ -794,8 +829,8 @@ async def start_batch_generation(
 
 @app.get("/generate/batch/{batch_id}/status", response_model=BatchGenerateOut, tags=["generate"])
 async def get_batch_generation_status(
-    batch_id: uuid.UUID,
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    batch_id: int,
+    user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """轮询批量生成任务状态与进度。"""
@@ -807,7 +842,7 @@ async def get_batch_generation_status(
 
 @app.post("/generate/smart", tags=["generate"])
 async def smart_plan_resources(
-    user_id: uuid.UUID,
+    user_id: int,
     kp_id: str = Body(..., embed=True),
     db: AsyncSession = Depends(get_session),
 ):
@@ -817,7 +852,7 @@ async def smart_plan_resources(
     """
     from backend.agents.planner_agent import plan_resource_types
 
-    types = await plan_resource_types(str(user_id), kp_id, db)
+    types = await plan_resource_types(user_id, kp_id, db)
     return {"resource_types": [rt.value for rt in types]}
 
 
@@ -827,11 +862,11 @@ async def smart_plan_resources(
 
 @app.get("/resources", response_model=ResourceListOut, tags=["resources"])
 async def list_resources(
-    user_id: uuid.UUID,
+    user_id: int,
     resource_type: Optional[str] = None,
     kp_id: Optional[str] = None,
     skip: int = 0,
-    limit: int = 20,
+    limit: int = app_config.pagination.default_limit,
     db: AsyncSession = Depends(get_session),
 ):
     """分页列举用户的学习资源。"""
@@ -839,7 +874,7 @@ async def list_resources(
 
 
 @app.get("/resources/stats", tags=["resources"])
-async def get_resource_stats(user_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
+async def get_resource_stats(user_id: int, db: AsyncSession = Depends(get_session)):
     """返回用户的资源统计：按类型计数的字典。一次 GROUP BY 替代 5 次 COUNT 查询。"""
     from sqlalchemy import func, select
 
@@ -857,8 +892,8 @@ async def get_resource_stats(user_id: uuid.UUID, db: AsyncSession = Depends(get_
 
 @app.get("/resources/{resource_id}", response_model=ResourceMetaOut, tags=["resources"])
 async def get_resource(
-    resource_id: uuid.UUID,
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    resource_id: int,
+    user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """获取单个资源详情。"""
@@ -872,8 +907,8 @@ async def get_resource(
 
 @app.delete("/resources/{resource_id}", tags=["resources"])
 async def delete_resource(
-    resource_id: uuid.UUID,
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    resource_id: int,
+    user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """删除资源。"""
@@ -892,8 +927,8 @@ async def delete_resource(
 
 @app.get("/resources/{resource_id}/quiz", response_model=list[QuizItemOut], tags=["quiz"])
 async def get_quiz_items(
-    resource_id: uuid.UUID,
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    resource_id: int,
+    user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """获取某资源下的所有题目。"""
@@ -910,7 +945,7 @@ async def get_quiz_items(
         items = res.content_json["items"]
         return [
             QuizItemOut(
-                id=uuid.uuid5(uuid.NAMESPACE_DNS, f"{resource_id}-{idx}"),
+                id=string_to_id(f"{resource_id}-{idx}"),
                 kp_id=res.kp_id,
                 question_type=QuestionType(item["question_type"]) if item.get("question_type") else QuestionType.single,
                 difficulty=item.get("difficulty"),
@@ -941,7 +976,7 @@ async def get_quiz_items(
 
 @app.post("/quiz/submit", response_model=QuizAttemptOut, tags=["quiz"])
 async def submit_quiz(
-    user_id: uuid.UUID,
+    user_id: int,
     body: QuizSubmitIn,
     db: AsyncSession = Depends(get_session),
 ):
@@ -963,7 +998,7 @@ async def submit_quiz(
         for res in resources:
             if res.content_json and res.content_json.get("items"):
                 for idx, item in enumerate(res.content_json["items"]):
-                    expected_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{res.id}-{idx}"))
+                    expected_id = str(string_to_id(f"{res.id}-{idx}"))
                     if expected_id == str(body.quiz_item_id):
                         found_answer = item.get("answer")
                         found_qtype = item.get("question_type")
@@ -1033,9 +1068,9 @@ async def submit_quiz(
 
 @app.get("/quiz/attempts", response_model=list[QuizAttemptOut], tags=["quiz"])
 async def get_quiz_attempts(
-    user_id: uuid.UUID,
+    user_id: int,
     skip: int = 0,
-    limit: int = 50,
+    limit: int = app_config.pagination.quiz_attempts_limit,
     db: AsyncSession = Depends(get_session),
 ):
     """获取用户的答题历史。"""
@@ -1057,13 +1092,13 @@ async def get_quiz_attempts(
     resource_cache = {}  # kp_key -> flat list of all items for that kp
                           # "_res_{res_id}" -> list of items for specific resource (for UUID matching)
 
-    def find_item_content(quiz_item_id: uuid.UUID) -> dict | None:
+    def find_item_content(quiz_item_id: int) -> dict | None:
         """从 resource_cache 中查找题目内容（quiz_item_id 为虚拟 UUID，格式为 {resource_id}-{idx}）"""
         quiz_id_str = str(quiz_item_id)
         for res_id, items in resource_cache.items():
             if res_id.startswith("_res_"):
                 for idx, item in enumerate(items):
-                    expected = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{res_id[5:]}-{idx}"))
+                    expected = str(string_to_id(f"{res_id[5:]}-{idx}"))
                     if expected == quiz_id_str:
                         return item
         return None
@@ -1146,14 +1181,14 @@ from backend.services import pathway as pathway_svc
 
 
 @app.get("/pathways", response_model=list[LearningPathOut], tags=["pathway"])
-async def list_pathways(user_id: uuid.UUID, db: AsyncSession = Depends(get_session)):
+async def list_pathways(user_id: int, db: AsyncSession = Depends(get_session)):
     """列举用户的学习路径。"""
     return await pathway_svc.list_pathways(user_id, db)
 
 
 @app.post("/pathways", response_model=LearningPathOut, tags=["pathway"])
 async def create_pathway(
-    user_id: uuid.UUID,
+    user_id: int,
     body: LearningPathCreate,
     db: AsyncSession = Depends(get_session),
 ):
@@ -1163,8 +1198,8 @@ async def create_pathway(
 
 @app.get("/pathways/{path_id}", response_model=LearningPathOut, tags=["pathway"])
 async def get_pathway(
-    path_id: uuid.UUID,
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    path_id: int,
+    user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """获取单条学习路径详情。"""
@@ -1183,8 +1218,8 @@ async def get_pathway(
 
 @app.put("/pathways/{path_id}", response_model=LearningPathOut, tags=["pathway"])
 async def update_pathway(
-    path_id: uuid.UUID,
-    user_id: uuid.UUID,
+    path_id: int,
+    user_id: int,
     body: LearningPathUpdate,
     db: AsyncSession = Depends(get_session),
 ):
@@ -1197,8 +1232,8 @@ async def update_pathway(
 
 @app.delete("/pathways/{path_id}", tags=["pathway"])
 async def delete_pathway(
-    path_id: uuid.UUID,
-    user_id: uuid.UUID,
+    path_id: int,
+    user_id: int,
     db: AsyncSession = Depends(get_session),
 ):
     """删除学习路径（级联删除路径项）。"""
@@ -1210,8 +1245,8 @@ async def delete_pathway(
 
 @app.post("/pathways/{path_id}/items", response_model=LearningPathItemOut, tags=["pathway"])
 async def add_pathway_item(
-    path_id: uuid.UUID,
-    user_id: uuid.UUID,
+    path_id: int,
+    user_id: int,
     body: LearningPathItemCreate,
     db: AsyncSession = Depends(get_session),
 ):
@@ -1224,9 +1259,9 @@ async def add_pathway_item(
 
 @app.put("/pathways/{path_id}/items/{item_id}", response_model=LearningPathItemOut, tags=["pathway"])
 async def update_pathway_item(
-    path_id: uuid.UUID,
-    item_id: uuid.UUID,
-    user_id: uuid.UUID,
+    path_id: int,
+    item_id: int,
+    user_id: int,
     body: LearningPathItemUpdate,
     db: AsyncSession = Depends(get_session),
 ):
@@ -1239,9 +1274,9 @@ async def update_pathway_item(
 
 @app.delete("/pathways/{path_id}/items/{item_id}", tags=["pathway"])
 async def remove_pathway_item(
-    path_id: uuid.UUID,
-    item_id: uuid.UUID,
-    user_id: uuid.UUID,
+    path_id: int,
+    item_id: int,
+    user_id: int,
     db: AsyncSession = Depends(get_session),
 ):
     """从学习路径移除知识点项。"""
@@ -1257,7 +1292,7 @@ async def remove_pathway_item(
 
 @app.post("/documents/import", tags=["documents"])
 async def import_document(
-    user_id: uuid.UUID,
+    user_id: int,
     file: UploadFile = File(...),
     title: Optional[str] = None,
     db: AsyncSession = Depends(get_session),
@@ -1281,7 +1316,7 @@ async def import_document(
     try:
         content = await file.read()
         saved_path = document_svc.save_uploaded_file(content, file_name)
-        logger.warning(f"[import_document] 文件 {file_name} 已保存到 {saved_path}，开始处理...")
+        logger.info(f"[import_document] 文件 {file_name} 已保存到 {saved_path}，开始处理...")
         result = await document_svc.import_document(
             file_path=saved_path,
             user_id=user_id,
@@ -1306,7 +1341,7 @@ async def import_document(
 
 @app.post("/documents/import/async", tags=["documents"])
 async def import_document_async(
-    user_id: uuid.UUID,
+    user_id: int,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     title: Annotated[Optional[str], Form()] = None,
@@ -1330,7 +1365,7 @@ async def import_document_async(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    task_id = str(uuid.uuid4())
+    task_id = str(generate_id())
     _doc_import_tasks[task_id] = {
         "status": "running",
         "progress": 5,
@@ -1417,9 +1452,9 @@ async def manual_cleanup(
 
 @app.get("/documents", tags=["documents"])
 async def list_documents(
-    user_id: uuid.UUID,
+    user_id: int,
     skip: int = 0,
-    limit: int = 20,
+    limit: int = app_config.pagination.default_limit,
     db: AsyncSession = Depends(get_session),
 ):
     """列举用户导入的文档列表（排除系统生成的资源文档）。"""
@@ -1452,7 +1487,7 @@ async def list_documents(
 @app.delete("/documents/{doc_id}", tags=["documents"])
 async def delete_document(
     doc_id: str,
-    user_id: uuid.UUID = Depends(get_current_user_id),
+    user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """删除文档（同时从向量库移除）。"""
@@ -1480,7 +1515,7 @@ async def delete_document(
 
 @app.post("/records", response_model=LearningRecordOut, tags=["records"])
 async def add_record(
-    user_id: uuid.UUID,
+    user_id: int,
     body: LearningRecordCreate,
     db: AsyncSession = Depends(get_session),
 ):
@@ -1490,10 +1525,10 @@ async def add_record(
 
 @app.get("/records", response_model=list[LearningRecordOut], tags=["records"])
 async def list_records(
-    user_id: uuid.UUID,
+    user_id: int,
     kp_id: Optional[str] = None,
     skip: int = 0,
-    limit: int = 20,
+    limit: int = app_config.pagination.default_limit,
     db: AsyncSession = Depends(get_session),
 ):
     """获取用户的学习记录列表，可按 kp_id 过滤。"""

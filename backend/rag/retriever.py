@@ -35,8 +35,8 @@ class RetrievedChunk:
 
 async def retrieve(
     query: str,
-    n_results: int = 5,
-    score_threshold: float = 0.5,
+    n_results: int | None = None,
+    score_threshold: float | None = None,
     where: Optional[dict] = None,
     collection_name: Optional[str] = None,
     user_id: Optional[str] = None,
@@ -56,6 +56,10 @@ async def retrieve(
     except Exception as e:
         logger.warning(f"[RAG] 向量库未初始化或不可用: {e}，RAG 降级为纯 LLM 生成。")
         return []
+
+    from backend.config import config as _cfg
+    _n_results = n_results if n_results is not None else _cfg.rag.n_results
+    _score_threshold = score_threshold if score_threshold is not None else _cfg.rag.score_threshold
 
     embedding = await get_embedding(query)
     if not embedding:
@@ -79,13 +83,13 @@ async def retrieve(
 
     raw = await query_documents(
         query_embedding=embedding,
-        n_results=n_results,
+        n_results=_n_results,
         where=effective_where,
         collection_name=collection_name,
     )
-    chunks = _parse_results(raw, score_threshold)
+    chunks = _parse_results(raw, _score_threshold)
     if not chunks:
-        logger.info(f"[RAG] 检索无结果（threshold={score_threshold}），query={query[:60]!r}，将由 LLM 纯生成")
+        logger.info(f"[RAG] 检索无结果（threshold={_score_threshold}），query={query[:60]!r}，将由 LLM 纯生成")
     else:
         logger.info(f"[RAG] 检索到 {len(chunks)} 条相关文档，最高分={chunks[0].score:.3f}，最低分={chunks[-1].score:.3f}")
     return chunks
@@ -93,7 +97,7 @@ async def retrieve(
 
 async def retrieve_by_kp(
     kp_name: str,
-    n_results: int = 8,
+    n_results: int | None = None,
     collection_name: Optional[str] = None,
     user_id: Optional[str] = None,
 ) -> list[RetrievedChunk]:
@@ -109,7 +113,7 @@ async def retrieve_by_kp(
     )
 
 
-def format_context(chunks: list[RetrievedChunk], max_tokens: int = 3000) -> str:
+def format_context(chunks: list[RetrievedChunk], max_tokens: int | None = None) -> str:
     """
     将检索结果格式化为 LLM prompt 上下文字符串，附带来源引用编号。
     超过 max_tokens 估算时截断。
@@ -121,6 +125,9 @@ def format_context(chunks: list[RetrievedChunk], max_tokens: int = 3000) -> str:
     [2] （来源：notes.md, 第一章）
     反向传播算法...
     """
+    from backend.config import config as _cfg
+    _max_tokens = max_tokens if max_tokens is not None else _cfg.rag.context_max_tokens
+
     if not chunks:
         logger.warning("[RAG] format_context 收到空 chunks，LLM 将在无参考资料的情况下生成内容。")
         return "（暂无参考资料）"
@@ -133,7 +140,7 @@ def format_context(chunks: list[RetrievedChunk], max_tokens: int = 3000) -> str:
         if chunk.section:
             source_info += f"，{chunk.section}"
         entry = f"[{i}] （{source_info}）\n{chunk.text}"
-        if total_chars + len(entry) > max_tokens * 2:  # 粗略字符估算
+        if total_chars + len(entry) > _max_tokens * 2:  # 粗略字符估算
             break
         parts.append(entry)
         total_chars += len(entry)

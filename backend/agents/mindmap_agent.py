@@ -9,9 +9,9 @@ import json
 
 from loguru import logger  # noqa: F401
 
+from backend.config import config
 from backend.models.schemas import AgentState
-from backend.agents.utils import resolve_kp_name
-from backend.rag.retriever import retrieve_by_kp, format_context
+from backend.agents.utils import resolve_kp_name, retrieve_context
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
 
@@ -33,7 +33,7 @@ SYSTEM_PROMPT = """你是一位思维导图设计专家。
 {context}
 
 知识点：{kp_name}
-层级深度：不超过 4 层，每节点子项不超过 6 个。
+层级深度：不超过 {max_depth} 层，每节点子项不超过 {max_children} 个。
 """
 
 
@@ -50,30 +50,23 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     logger.info("[MindmapAgent] kp_name=%s", kp_name)
 
     # 检索相关文档
-    try:
-        chunks = await retrieve_by_kp(kp_name, n_results=5, user_id=state.user_id)
-        context = format_context(chunks, max_tokens=3000)
-        retrieved_texts = [c.text for c in chunks]
-        if chunks:
-            logger.info("[MindmapAgent] RAG 检索到 %d 条参考资料", len(chunks))
-        else:
-            logger.warning("[MindmapAgent] RAG 未检索到参考资料，降级为纯 LLM 生成")
-    except Exception as e:
-        logger.warning("[MindmapAgent] RAG 检索异常: %s，降级为纯 LLM 生成", e)
-        context = "（暂无参考资料）"
-        retrieved_texts = []
+    context, retrieved_texts = await retrieve_context(kp_name, state.user_id, "MindmapAgent")
 
     # 更新 retrieved_docs
     state = state.model_copy(update={"retrieved_docs": retrieved_texts})
 
     # 构造 prompt
-    prompt = SYSTEM_PROMPT.format(context=context, kp_name=kp_name)
+    prompt = SYSTEM_PROMPT.format(
+        context=context, kp_name=kp_name,
+        max_depth=config.generation.mindmap_max_depth,
+        max_children=config.generation.mindmap_max_children,
+    )
 
     try:
         raw = await chat_completion(
             [{"role": "user", "content": prompt}],
-            temperature=0.5,
-            max_tokens=2000,
+            temperature=config.agents.mindmap.temperature,
+            max_tokens=config.agents.mindmap.max_tokens,
         )
 
         # 验证 JSON 合法性

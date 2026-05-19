@@ -6,6 +6,7 @@ ClarifyAgent：针对用户追问/澄清请求，基于对话历史给出简短�
 
 from __future__ import annotations
 
+from backend.config import config
 from backend.models.schemas import AgentState
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
@@ -50,7 +51,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     messages.append({"role": "user", "content": state.user_message})
 
     try:
-        response = await chat_completion(messages, temperature=0.7)
+        response = await chat_completion(messages, temperature=config.agents.clarify.temperature)
         state = state.model_copy(update={"final_content": response})
     except Exception as e:
         import logging

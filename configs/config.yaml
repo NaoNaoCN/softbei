@@ -10,8 +10,9 @@ database:
   max_overflow: 20
   pool_timeout: 30
   pool_recycle: 3600
+  command_timeout: 60           # SQL 语句超时（秒）
 
-# 向量库配置（PostgreSQL + pgvector/numpy）
+# 向量库配置（PostgreSQL + pgvector）
 vector_db:
   collection: "knowledge_base"
 
@@ -21,26 +22,198 @@ llm:
   base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
   model: "qwen3.5-plus-2026-02-15"
   provider: "qwen"
+  default_max_tokens: 2048       # 默认最大输出 token 数
+
+  # 重试策略
+  retry:
+    max_attempts: 5              # 最大重试次数
+    backoff_multiplier: 2        # 退避乘数
+    backoff_min_seconds: 3       # 最小退避间隔
+    backoff_max_seconds: 30      # 最大退避间隔
+
+  # HTTP 超时（秒）
+  timeout:
+    connect: 10
+    read: 120
+    write: 30
+    pool: 10
+
+  # 各 Provider 独立配置
+  providers:
+    spark:
+      base_url: "https://spark-api-open.xf-yun.com/v1"
+      default_model: "generalv3.5"
+    deepseek:
+      base_url: "https://api.deepseek.com/v1"
+      default_model: "deepseek-chat"
+    qwen:
+      base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+      default_model: "qwen3.5-plus-2026-02-15"
+    openai:
+      base_url: "https://api.openai.com/v1"
+      default_model: "gpt-4o-mini"
 
 # Embedding 配置
 embedding:
   model: "BAAI/bge-m3"
   use_spark: true
+  concurrency: 8                # 嵌入并发数（同时调用的 API 上限）
+  api_model: "text-embedding-v4"  # API embedding 模型名
+  api_base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  timeout_read: 60              # API embedding 读取超时（秒）
+  timeout_connect: 10           # API embedding 连接超时（秒）
+  timeout_write: 30             # API embedding 写入超时（秒）
+  timeout_pool: 10              # API embedding 连接池超时（秒）
+  hf_mirror: "https://hf-mirror.com"  # HuggingFace 镜像（国内必填）
+  index_batch_size: 128         # 嵌入索引批处理大小
+  vector_dimension: 1024        # 向量维度（BGE-M3 输出维度）
 
 # RAG 配置
 rag:
   chunk_size: 500
   chunk_overlap: 50
+  n_results: 5                  # 默认检索返回条数
+  score_threshold: 0.5          # 最低相似度阈值
+  context_max_tokens: 3000      # RAG 上下文 token 预算
+  max_sections_before_coarse_split: 50  # 超过此节数时切换为粗粒度切分
+
+# 对话配置
+chat:
+  max_turns: 10                 # 多轮对话最大保留轮数
+  history_max_tokens: 4000      # 对话历史 token 预算
+  message_max_length: 4096      # 单条消息最大字符数
+  session_expiry_days: 30       # 对话会话过期天数
+  cleanup_interval_hours: 24    # 对话会话清理间隔（小时）
+
+  # 自动标题生成
+  auto_title_max_chars: 15      # 标题最长字数（给 LLM 的指令）
+  auto_title_message_truncate: 200  # 标题生成时消息截断长度
+  auto_title_max_tokens: 30     # 标题生成 max_tokens
+  auto_title_final_length: 20   # 标题最终裁剪长度
+
+  # Token 估算系数
+  token_estimation:
+    cn_chars_per_token: 1.5     # 中文字符 / token
+    en_chars_per_token: 4.0     # 英文字符 / token
+
+# 知识图谱构建配置
+knowledge_graph:
+  llm_concurrency: 10           # 构建时 LLM 并发上限
+  max_batches: 30               # 送入 LLM 的最大文本批数
+  toc_max_items: 100            # TOC 条目数上限（超出后裁剪）
+  batch_chars_limit: 12000      # 每批最大字符数
+  text_truncate_chars: 6000     # 送入 LLM 的文本截断长度
+  node_extraction_max_tokens: 4000  # 节点提取 max_tokens
+  edge_batch_size: 40           # 边推理批量大小
+  edge_overlap: 10              # 边推理批间重叠数
+  section_merge_min_chars: 200  # 短于该字符数的节会被合并
+
+# 资源生成配置
+generation:
+  default_num_questions: 4      # 默认题目数量
+  max_questions: 20             # 单次生成题目上限
+  mindmap_max_depth: 4          # 思维导图最大层级深度
+  mindmap_max_children: 6       # 思维导图每节点最大子项数
+
+  # 题目生成 — 弱项阈值与配比
+  quiz:
+    weak_threshold_high: 5      # 高弱项阈值（弱项数 > 此值时用 counts_high）
+    weak_threshold_mid: 2       # 中弱项阈值（弱项数 > 此值时用 counts_mid）
+    counts_high: [3, 2, 2]     # 高弱项配比 [基础, 进阶, 综合]
+    counts_mid: [2, 1, 1]      # 中弱项配比
+    counts_default: [2, 1, 1]  # 默认配比
 
 # 文档存储配置
 storage:
+  upload_dir: "uploaded_docs"   # 上传文件存储目录
+  knowledge_base_dir: "knowledge_base/ai_intro"  # 启动时自动索引目录
+  supported_extensions: [".pdf", ".docx", ".doc", ".md", ".txt"]  # 支持的文件扩展名
+  doc_id_hex_length: 12         # 文档 ID 十六进制长度
   cleanup:
     enabled: true               # 是否启用自动清理
     retention_days: 30          # 已索引文件保留天数
     orphan_retention_days: 7    # 孤儿文件（导入失败/中断）的保留天数
+    interval_hours: 24          # 清理任务间隔（小时）
+    min_file_age_seconds: 300   # 文件最小存在时间（秒），避免清理刚上传的文件
+
+# 日志配置
+logging:
+  dir: "logs"                   # 日志文件目录
+  retention_days: 30            # 普通日志保留天数
+  error_retention_days: 90      # 错误日志保留天数
+  trace_id_length: 8            # 追踪 ID 长度（UUID 前 N 字符）
 
 # JWT 配置
 jwt:
   secret: "${JWT_SECRET}"
   algorithm: "HS256"
   expire_hours: 24
+
+# Agent 配置 — 各 Agent 的 LLM 参数及业务常量
+agents:
+  clarify:
+    temperature: 0.7
+
+  code:
+    temperature: 0.7
+    max_tokens: 5000
+
+  doc:
+    temperature: 0.7
+    max_tokens: 4000
+
+  mindmap:
+    temperature: 0.5
+    max_tokens: 2000
+
+  planner:
+    intent_temperature: 0.0
+    classify_temperature: 0.1
+    smart_plan_temperature: 0.3
+    history_lookback_messages: 6     # 对话历史回顾消息数
+    fallback_kp_id_length: 50        # 兜底知识点 ID 截断长度
+    smart_plan_default_types: ["doc", "quiz"]  # 智能规划默认资源类型
+
+  profile:
+    extract_temperature: 0.1
+    intent_temperature: 0.0
+    clarify_temperature: 0.7
+    goal_summary_temperature: 0.3
+    max_goal_questions: 50           # 目标摸底最大题数
+    history_max_versions: 10         # 用户画像历史版本上限
+
+  quiz:
+    temperature: 0.6
+    max_tokens: 3000
+
+  recommend:
+    temperature: 0.7
+    max_tokens: 2000
+    min_recommendations: 3           # 最少推荐知识点数
+    max_recommendations: 5           # 最多推荐知识点数
+
+  safety:
+    temperature: 0.1
+    max_tokens: 300
+    max_ref_docs: 3                  # 安全审计引用的最大文档数
+    draft_preview_chars: 500         # 安全审计提交的草稿预览字符数
+
+  summary:
+    temperature: 0.7
+    max_tokens: 1200
+    target_words_min: 300            # 摘要最低字数
+    target_words_max: 500            # 摘要最高字数
+
+# 分页配置
+pagination:
+  default_limit: 20
+  quiz_attempts_limit: 50
+
+# 服务配置
+server:
+  version: "0.1.0"
+  cors_origins: ["*"]
+
+# 认证配置
+auth:
+  bcrypt_rounds: 12

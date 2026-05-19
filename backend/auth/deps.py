@@ -5,8 +5,6 @@ FastAPI 依赖：从 JWT token 提取当前用户 ID，过渡期兼容 query par
 
 from __future__ import annotations
 
-import uuid
-
 import jwt
 from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -16,8 +14,8 @@ _bearer = HTTPBearer(auto_error=False)
 
 async def get_current_user_id(
     cred: HTTPAuthorizationCredentials | None = Depends(_bearer),
-    user_id: uuid.UUID | None = Query(None, description="过渡期兼容：query param 回退"),
-) -> uuid.UUID:
+    user_id: int | None = Query(None, description="过渡期兼容：query param 回退"),
+) -> int:
     """优先从 JWT 提取 user_id，回退到 query param（过渡期）。"""
     if cred:
         try:
@@ -28,7 +26,7 @@ async def get_current_user_id(
                 app_config.jwt.secret,
                 algorithms=[app_config.jwt.algorithm],
             )
-            return uuid.UUID(payload["sub"])
+            return int(payload["sub"])
         except Exception:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 import re
 import traceback
-import uuid
 from typing import Any
 
 import asyncio
@@ -29,9 +28,9 @@ from backend.models.schemas import (
 
 
 async def run_generation(
-    task_id: uuid.UUID,
-    user_id: str,
-    session_id: str,
+    task_id: int,
+    user_id: int,
+    session_id: int,
     request: dict,
 ) -> None:
     """
@@ -45,7 +44,7 @@ async def run_generation(
     from backend.services import pathway as pathway_svc
 
     req = GenerateRequest(**request)
-    print(f"[run_generation] started task_id={task_id} kp_id={req.kp_id} type={req.resource_type}")
+    logger.info(f"[run_generation] started task_id={task_id} kp_id={req.kp_id} type={req.resource_type}")
 
     try:
         async with _session_factory() as db:
@@ -137,18 +136,18 @@ async def run_generation(
                             valid_recs.append(rec)
 
                     if valid_recs:
-                        existing = await pathway_svc.list_pathways(uuid.UUID(user_id), db)
+                        existing = await pathway_svc.list_pathways(int(user_id), db)
                         if not existing:
                             new_path = await pathway_svc.create_pathway(
-                                uuid.UUID(user_id),
+                                int(user_id),
                                 LearningPathCreate(name=f"{kp_name} 学习路径"),
                                 db,
                             )
                             if new_path:
                                 for i, rec in enumerate(valid_recs):
                                     await pathway_svc.add_pathway_item(
-                                        uuid.UUID(new_path.id),
-                                        uuid.UUID(user_id),
+                                        int(new_path.id),
+                                        int(user_id),
                                         LearningPathItemCreate(kp_id=rec["kp_id"], order_index=i),
                                         db,
                                     )
@@ -187,7 +186,7 @@ def _parse_code_block(draft: str) -> tuple[str, str]:
 
 
 async def _persist_content(
-    task_id: uuid.UUID,
+    task_id: int,
     resource_type: ResourceType,
     draft: str,
     db: AsyncSession,
@@ -219,7 +218,7 @@ async def _persist_content(
 
 
 async def _persist_quiz(
-    task_id: uuid.UUID,
+    task_id: int,
     kp_id: str,
     draft: str,
     db: AsyncSession,
@@ -258,14 +257,14 @@ async def _persist_quiz(
 
 
 async def run_batch_generation(
-    batch_id: uuid.UUID,
-    user_id: str,
-    session_id: str,
+    batch_id: int,
+    user_id: int,
+    session_id: int,
     task_configs: list[dict[str, Any]],
 ) -> None:
     """
     并行执行多个资源生成任务。
-    task_configs: [{"task_id": uuid, "request": dict}, ...]
+    task_configs: [{"task_id": int, "request": dict}, ...]
     """
     from backend.db.database import _session_factory
     from backend.db.models import GenerationBatch

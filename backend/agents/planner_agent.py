@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import json
 
+from backend.config import config
 from backend.models.schemas import AgentState, ResourceType
+from backend.agents.utils import parse_json_llm_response
 from backend.services import profile as profile_svc
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
@@ -77,23 +79,21 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     logger.info(f"[PlannerAgent] profile_ctx={profile_ctx}")  # 调试输出
 
     # -- 1.5 意图分类：generate vs clarify --
+    lookback = config.agents.planner.history_lookback_messages
     if state.chat_history:
         # 只有有历史时才需要判断是否为追问
         history_summary = "\n".join(
-            f"{m['role']}: {m['content'][:100]}" for m in state.chat_history[-6:]
+            f"{m['role']}: {m['content'][:100]}" for m in state.chat_history[-lookback:]
         )
         classify_prompt = _INTENT_CLASSIFY_PROMPT
         classify_messages = [
             {"role": "system", "content": classify_prompt},
         ]
-        classify_messages.extend(state.chat_history[-6:])
+        classify_messages.extend(state.chat_history[-lookback:])
         classify_messages.append({"role": "user", "content": state.user_message})
         try:
-            classify_raw = await chat_completion(classify_messages, temperature=0.0)
-            cleaned_classify = classify_raw.strip()
-            if cleaned_classify.startswith("```"):
-                cleaned_classify = cleaned_classify.split("\n", 1)[1] if "\n" in cleaned_classify else cleaned_classify[3:]
-                cleaned_classify = cleaned_classify.rsplit("```", 1)[0].strip()
+            classify_raw = await chat_completion(classify_messages, temperature=config.agents.planner.intent_temperature)
+            cleaned_classify = parse_json_llm_response(classify_raw)
             classify_result = json.loads(cleaned_classify)
             intent = classify_result.get("intent", "generate")
             if intent == "clarify":
@@ -132,12 +132,9 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     )
 
     try:
-        raw = await chat_completion(messages, temperature=0.1)
+        raw = await chat_completion(messages, temperature=config.agents.planner.classify_temperature)
         # 处理 markdown 代码块包裹的 JSON
-        cleaned = raw.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-            cleaned = cleaned.rsplit("```", 1)[0].strip()
+        cleaned = parse_json_llm_response(raw)
         result = json.loads(cleaned)
         resource_type_str = result.get("resource_type")
         kp_id = result.get("kp_id")
@@ -179,7 +176,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
 
     # 确保 kp_id 有值（从用户消息中截取）
     if not state.kp_id:
-        state = state.model_copy(update={"kp_id": state.user_message[:50]})
+        state = state.model_copy(update={"kp_id": state.user_message[:config.agents.planner.fallback_kp_id_length]})
 
     logger.info(f"[PlannerAgent] resource_type={state.resource_type}, kp_id={state.kp_id}")
 
@@ -229,7 +226,7 @@ SMART_PLAN_PROMPT = """你是一个学习资源规划助手。根据学生画像
 
 
 async def plan_resource_types(
-    user_id: str,
+    user_id: int,
     kp_id: str,
     db=None,
 ) -> list[ResourceType]:
@@ -241,8 +238,7 @@ async def plan_resource_types(
     profile_ctx = ""
     if db:
         try:
-            import uuid as _uuid
-            profile = await profile_svc.get_profile(_uuid.UUID(user_id), db)
+            profile = await profile_svc.get_profile(int(user_id), db)
             if profile:
                 profile_ctx = f"专业: {profile.major or '未知'}, 目标: {profile.learning_goal or '未知'}, 认知风格: {profile.cognitive_style or '未知'}, 薄弱点: {profile.knowledge_weak or []}"
         except Exception:
@@ -266,11 +262,8 @@ async def plan_resource_types(
     ]
 
     try:
-        raw = await chat_completion(messages, temperature=0.3)
-        cleaned = raw.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-            cleaned = cleaned.rsplit("```", 1)[0].strip()
+        raw = await chat_completion(messages, temperature=config.agents.planner.smart_plan_temperature)
+        cleaned = parse_json_llm_response(raw)
         result = json.loads(cleaned)
         if isinstance(result, list):
             types = []
@@ -285,4 +278,10 @@ async def plan_resource_types(
         logger.warning(f"[plan_resource_types] LLM 解析失败: {e}")
 
     # 默认推荐
-    return [ResourceType.doc, ResourceType.quiz]
+    default_types = []
+    for rt_str in config.agents.planner.smart_plan_default_types:
+        try:
+            default_types.append(ResourceType(rt_str))
+        except ValueError:
+            pass
+    return default_types or [ResourceType.doc, ResourceType.quiz]

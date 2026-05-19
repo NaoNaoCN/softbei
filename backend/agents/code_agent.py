@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from loguru import logger  # noqa: F401
 
+from backend.config import config
 from backend.models.schemas import AgentState
-from backend.agents.utils import resolve_kp_name
-from backend.rag.retriever import retrieve_by_kp, format_context
+from backend.agents.utils import resolve_kp_name, retrieve_context
 from backend.services import profile as profile_svc
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
@@ -51,13 +51,7 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     kp_name = await resolve_kp_name(state, config)
 
     # 检索相关文档
-    try:
-        chunks = await retrieve_by_kp(kp_name, n_results=5, user_id=state.user_id)
-        context = format_context(chunks, max_tokens=3000)
-        retrieved_texts = [c.text for c in chunks]
-    except Exception:
-        context = "（暂无参考资料）"
-        retrieved_texts = []
+    context, retrieved_texts = await retrieve_context(kp_name, state.user_id, "CodeAgent")
 
     # 更新 retrieved_docs
     state = state.model_copy(update={"retrieved_docs": retrieved_texts})
@@ -82,8 +76,8 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     try:
         draft = await chat_completion(
             [{"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=5000,
+            temperature=config.agents.code.temperature,
+            max_tokens=config.agents.code.max_tokens,
         )
         logger.info(
             "[code_agent] draft_len=%d has_fence=%s preview=%.200s",

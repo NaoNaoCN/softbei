@@ -138,18 +138,17 @@ def get_graph() -> StateGraph:
     return _compiled_graph
 
 
-async def invoke(user_id: str, session_id: str, message: str, db: AsyncSession) -> AgentState:
+async def invoke(user_id: int, session_id: int, message: str, db: AsyncSession) -> AgentState:
     """
     执行一次完整的图推理，返回最终状态。
 
-    :param user_id:   用户 UUID 字符串
-    :param session_id: 会话 UUID 字符串
+    :param user_id:   用户 ID（Snowflake BIGINT）
+    :param session_id: 会话 ID（Snowflake BIGINT）
     :param message:   用户输入
     :param db:        数据库会话
     :return:           最终 AgentState
     """
-    import uuid
-    existing_profile = await get_profile(uuid.UUID(user_id), db)
+    existing_profile = await get_profile(user_id, db)
 
     # 加载多轮对话历史
     chat_history = await load_chat_history(session_id, db)
@@ -169,13 +168,12 @@ async def invoke(user_id: str, session_id: str, message: str, db: AsyncSession) 
     return AgentState(**result)
 
 
-async def stream_invoke(user_id: str, session_id: str, message: str, db: AsyncSession):
+async def stream_invoke(user_id: int, session_id: int, message: str, db: AsyncSession):
     """
     流式执行图推理，逐步 yield AgentState 快照。
     供 FastAPI StreamingResponse 或 Streamlit 实时显示使用。
     """
-    import uuid
-    existing_profile = await get_profile(uuid.UUID(user_id), db)
+    existing_profile = await get_profile(user_id, db)
 
     # 加载多轮对话历史
     chat_history = await load_chat_history(session_id, db)

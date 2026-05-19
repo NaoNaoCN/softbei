@@ -18,8 +18,6 @@ import mammoth               # DOCX → Markdown
 
 from langchain_community.document_loaders import (
     PyPDFLoader,           # PDF 加载（保留用于 load_directory 等场景）
-    UnstructuredWordDocumentLoader,  # DOCX/DOC 加载（保留）
-    TextLoader,            # TXT 加载（保留）
 )
 from langchain_core.documents import Document
 
@@ -146,6 +144,7 @@ def convert_to_markdown(file_path: str | Path) -> str:
 
     :param file_path: 文件路径
     :return:          Markdown 文本
+    :raises RuntimeError:  无法转换时抛出
     """
     path = Path(file_path)
     if not path.exists():
@@ -154,10 +153,7 @@ def convert_to_markdown(file_path: str | Path) -> str:
     suffix = path.suffix.lower()
 
     if suffix == ".pdf":
-        try:
-            return pymupdf4llm.to_markdown(str(path))
-        except Exception as e:
-            raise RuntimeError(f"Failed to convert PDF to Markdown: {path}: {e}") from e
+        return pymupdf4llm.to_markdown(str(path))
 
     elif suffix in (".docx", ".doc"):
         try:
@@ -184,6 +180,9 @@ def load_file(file_path: str | Path, doc_id: Optional[str] = None) -> list[TextC
     """
     加载单个文件：先转换为 Markdown，再按章节切分为文本块。
 
+    对于 PDF，优先使用 pymupdf4llm 转换为结构化 Markdown；
+    若失败则自动回退到 PyPDFLoader 逐页解析。
+
     支持格式：.pdf / .docx / .doc / .md / .txt
     :param file_path: 文件路径
     :param doc_id:    文档 ID，默认使用文件名（无扩展名）
@@ -194,7 +193,28 @@ def load_file(file_path: str | Path, doc_id: Optional[str] = None) -> list[TextC
 
     _doc_id = doc_id or path.stem
 
-    # 统一流程：转为 Markdown → 按标题切分 → 字符级切分
+    # PDF: 优先 pymupdf4llm → 回退 PyPDFLoader
+    if path.suffix.lower() == ".pdf":
+        try:
+            md_text = pymupdf4llm.to_markdown(str(path))
+        except Exception as e:
+            logger.warning(
+                f"[loader] pymupdf4llm 转换失败，回退到 PyPDFLoader: {path.name}: {e}"
+            )
+            try:
+                chunks = _load_pdf(path, _doc_id)
+                chunks = _backfill_page_numbers(chunks, str(path))
+                return chunks
+            except Exception as e2:
+                raise RuntimeError(
+                    f"Failed to load PDF with both pymupdf4llm and PyPDFLoader: {path}: "
+                    f"primary={e}, fallback={e2}"
+                ) from e2
+        chunks = _parse_markdown_to_chunks(md_text, _doc_id, str(path))
+        chunks = _backfill_page_numbers(chunks, str(path))
+        return chunks
+
+    # 其他格式：统一转为 Markdown → 按标题切分 → 字符级切分
     md_text = convert_to_markdown(path)
     return _parse_markdown_to_chunks(md_text, _doc_id, str(path))
 
@@ -311,85 +331,66 @@ def _load_pdf(path: Path, doc_id: str) -> list[TextChunk]:
         raise RuntimeError(f"Failed to load PDF {path}: {e}") from e
 
 
-def _load_docx(path: Path, doc_id: str) -> list[TextChunk]:
+# ----------------------------------------------------------
+# 页码回填
+# ----------------------------------------------------------
+
+def _backfill_page_numbers(
+    chunks: list[TextChunk],
+    source_path: str,
+) -> list[TextChunk]:
     """
-    使用 UnstructuredWordDocumentLoader 解析 Word 文档，
-    按段落聚合后切分。
+    利用 PDF 目录（outline）将页码回填到 TextChunk.page。
 
-    :param path:   DOCX/DOC 文件路径
-    :param doc_id: 文档 ID
-    :return:       TextChunk 列表
+    匹配策略：
+    1. 若 chunk 已有 page（来自 PyPDFLoader 等），跳过
+    2. 用 chunk.section 与 TOC entry.title 做包含匹配
+    3. 未匹配的 chunk 继承最近已知页码
+
+    :param chunks:      分块列表
+    :param source_path: 原始 PDF 文件路径
+    :return:            回填页码后的 chunks（原地修改）
     """
-    try:
-        loader = UnstructuredWordDocumentLoader(str(path), mode="elements")
-        docs = loader.load()
-        return docs_to_chunks(docs, doc_id)
-    except Exception as e:
-        raise RuntimeError(f"Failed to load DOCX {path}: {e}") from e
-
-
-def _load_markdown(path: Path, doc_id: str) -> list[TextChunk]:
-    """
-    解析 Markdown 文件，按标题（##）切分章节，
-    对每节再进行文本切分。
-
-    :param path:   Markdown 文件路径
-    :param doc_id: 文档 ID
-    :return:       TextChunk 列表
-    """
-    try:
-        # 使用 TextLoader 读取原始内容
-        loader = TextLoader(str(path), encoding="utf-8")
-        docs = loader.load()
-
-        if not docs:
-            return []
-
-        full_text = docs[0].page_content
-        sections = _split_markdown_by_headers(full_text)
-
-        chunks: list[TextChunk] = []
-        chunk_index = 0
-
-        for section_title, section_text in sections:
-            # 更新文档元数据中的 section
-            doc = docs[0]
-            doc.metadata["section"] = section_title
-
-            # 对每节进行切分
-            sub_chunks = split_text(section_text)
-            for sub_chunk in sub_chunks:
-                chunk = TextChunk(
-                    chunk_id=f"{doc_id}_{chunk_index}",
-                    text=sub_chunk,
-                    doc_id=doc_id,
-                    source_path=str(path),
-                    section=section_title,
-                    metadata={},
-                )
-                chunks.append(chunk)
-                chunk_index += 1
-
+    toc = extract_toc(source_path)
+    if not toc:
         return chunks
 
-    except Exception as e:
-        raise RuntimeError(f"Failed to load Markdown {path}: {e}") from e
+    # 构建 section → page 映射（相同标题取第一个出现的页码）
+    toc_map: dict[str, int] = {}
+    for entry in toc:
+        title = entry["title"]
+        if title not in toc_map:
+            toc_map[title] = entry["page"]
 
+    last_page: int | None = None
+    for chunk in chunks:
+        if chunk.page is not None:
+            last_page = chunk.page
+            continue
 
-def _load_txt(path: Path, doc_id: str) -> list[TextChunk]:
-    """
-    读取纯文本，按段落或 split_text 切分。
+        # 尝试精确匹配 section 标题
+        section = (chunk.section or "").strip()
+        if section and section in toc_map:
+            chunk.page = toc_map[section]
+            last_page = chunk.page
+            continue
 
-    :param path:   TXT 文件路径
-    :param doc_id: 文档 ID
-    :return:       TextChunk 列表
-    """
-    try:
-        loader = TextLoader(str(path), encoding="utf-8")
-        docs = loader.load()
-        return docs_to_chunks(docs, doc_id)
-    except Exception as e:
-        raise RuntimeError(f"Failed to load TXT {path}: {e}") from e
+        # 尝试包含匹配：chunk.section 包含 TOC title 或反之
+        matched_page = None
+        if section:
+            for toc_title, page in toc_map.items():
+                if toc_title in section or section in toc_title:
+                    matched_page = page
+                    break
+
+        if matched_page is not None:
+            chunk.page = matched_page
+            last_page = matched_page
+        elif last_page is not None:
+            # 继承最近已知页码（连续章节假设）
+            chunk.page = last_page
+
+    return chunks
 
 
 # ----------------------------------------------------------
@@ -402,7 +403,7 @@ def _parse_markdown_to_chunks(
     source_path: str,
 ) -> list[TextChunk]:
     """
-    将 Markdown 文本按 ## 标题切分章节，每节再做字符级切分。
+    将 Markdown 文本按标题（# / ## / ###）切分章节，每节再做字符级切分。
 
     :param md_text:     Markdown 文本
     :param doc_id:      文档 ID
@@ -433,33 +434,51 @@ def _parse_markdown_to_chunks(
 
 def _split_markdown_by_headers(text: str) -> list[tuple[str, str]]:
     """
-    按 Markdown 标题（## ）切分章节。
+    按 Markdown 标题（# / ## / ###）切分章节。
+
+    - 优先按一级标题 # 分割；无 # 则按 ##；再按 ###
+    - 标题层级越高（# 最少），划分出的章节粒度越粗
+    - 代码块内的 # 不会被识别为标题
 
     :param text: 原始 Markdown 文本
     :return:     [(章节标题, 章节内容), ...] 列表
     """
-    # 匹配 ## 标题（不含代码块内的标题）
-    # 先去除代码块
+    # 先去除代码块，避免代码中的 # 被误解析为标题
     code_block_pattern = re.compile(r'```[\s\S]*?```')
     text_without_code = code_block_pattern.sub('[CODE_BLOCK]', text)
 
-    # 匹配 ## 标题行
-    header_pattern = re.compile(r'^##\s+(.+)$', re.MULTILINE)
+    # 匹配 #、##、### 三级标题行
+    header_pattern = re.compile(r'^(#{1,3})\s+(.+)$', re.MULTILINE)
     headers = list(header_pattern.finditer(text_without_code))
 
     if not headers:
         # 没有标题，返回整篇作为"无标题"章节
-        # 还原代码块
-        text = text_without_code.replace('[CODE_BLOCK]', '```\n...\n```')
-        return [("无标题", text.strip())]
+        text_restored = text_without_code.replace('[CODE_BLOCK]', '```\n...\n```')
+        return [("无标题", text_restored.strip())]
+
+    # 选择实际出现的最小标题级别作为分割基准
+    min_level = min(len(m.group(1)) for m in headers)
+    effective_headers = [m for m in headers if len(m.group(1)) == min_level]
+
+    # 检查是否分割过细：若按 min_level 切出超过 50 个 section，
+    # 则回退到下一级标题（更粗粒度）
+    if len(effective_headers) > config.rag.max_sections_before_coarse_split and min_level < 3:
+        next_level = min_level + 1
+        effective_headers = [m for m in headers if len(m.group(1)) == next_level]
+        if not effective_headers:
+            effective_headers = [m for m in headers if len(m.group(1)) == min_level]
 
     sections: list[tuple[str, str]] = []
 
-    for i, match in enumerate(headers):
-        title = match.group(1).strip()
+    for i, match in enumerate(effective_headers):
+        title = match.group(2).strip()
         start = match.end()
-        # 下一个标题之前，或文件末尾
-        end = headers[i + 1].start() if i + 1 < len(headers) else len(text_without_code)
+        # 下一个同级标题之前，或文件末尾
+        end = (
+            effective_headers[i + 1].start()
+            if i + 1 < len(effective_headers)
+            else len(text_without_code)
+        )
 
         section_text = text_without_code[start:end].strip()
         # 还原代码块

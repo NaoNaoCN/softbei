@@ -11,8 +11,10 @@ from pathlib import Path
 
 from loguru import logger
 
+from backend.config import config
+
 # 日志目录
-LOG_DIR = Path(__file__).parent.parent / "logs"
+LOG_DIR = Path(__file__).parent.parent / config.logging.dir
 LOG_DIR.mkdir(exist_ok=True)
 
 # 移除默认 handler
@@ -35,18 +37,18 @@ logger.add(
 logger.add(
     LOG_DIR / "app_{time:YYYY-MM-DD}.log",
     rotation="00:00",
-    retention="30 days",
+    retention=f"{config.logging.retention_days} days",
     compression="zip",
     format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
     level="DEBUG",
     enqueue=True,
 )
 
-# 错误日志单独记录（保留 90 天）
+# 错误日志单独记录
 logger.add(
     LOG_DIR / "error_{time:YYYY-MM-DD}.log",
     rotation="00:00",
-    retention="90 days",
+    retention=f"{config.logging.error_retention_days} days",
     format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} - {message}",
     level="ERROR",
     enqueue=True,

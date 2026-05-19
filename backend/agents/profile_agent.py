@@ -6,13 +6,16 @@ ProfileAgent：从对话中提取并更新学生画像，判断字段完整性�
 from __future__ import annotations
 
 import json
-import uuid
 
 from langgraph.graph import END
 from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.config import config
 from backend.models.schemas import AgentState, StudentProfileIn, StudentProfileOut
+from backend.agents.utils import parse_json_llm_response
+from loguru import logger
+
 from backend.services import profile as profile_svc
 from backend.services.llm import chat_completion
 
@@ -92,13 +95,13 @@ def _profile_to_known_fields(profile) -> dict:
     return {k: v for k, v in data.items() if v not in ([], "", None)}
 
 
-async def _check_user_has_documents(user_id: str) -> bool:
+async def _check_user_has_documents(user_id: int) -> bool:
     """检查用户是否在向量库中有已上传的文档。"""
     try:
         from backend.db.vector import get_collection
         col = get_collection()
         # 查询该用户是否有任何文档（只需 1 条即可判断）
-        results = await col.get(where={"user_id": user_id}, limit=1)
+        results = await col.get(where={"user_id": str(user_id)}, limit=1)
         return bool(results and results.get("ids"))
     except Exception:
         # 向量库不可用时，保守返回 True（不阻断流程）
@@ -160,31 +163,25 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     extract_messages.extend(state.chat_history)
     extract_messages.append({"role": "user", "content": state.user_message})
     try:
-        raw = await chat_completion(extract_messages, temperature=0.1)
+        raw = await chat_completion(extract_messages, temperature=config.agents.profile.extract_temperature)
         # 处理 markdown 代码块包裹的 JSON
-        cleaned = raw.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-            cleaned = cleaned.rsplit("```", 1)[0].strip()
+        cleaned = parse_json_llm_response(raw)
         updates = json.loads(cleaned)
         # LLM 可能返回 null / 列表 / 字符串，统一归一为 dict
         if not isinstance(updates, dict):
             updates = {}
     except (json.JSONDecodeError, Exception) as e:
-        import logging
-        logging.getLogger(__name__).error(f"画像提取失败: {e}, raw={raw if 'raw' in dir() else 'N/A'}")
+        logger.error(f"画像提取失败: {e}, raw={raw if 'raw' in dir() else 'N/A'}")
         updates = {}
 
     # -- 2. 合并到数据库 --
-    user_uuid = uuid.UUID(state.user_id)
-    import logging
-    _logger = logging.getLogger(__name__)
-    _logger.warning(f"[ProfileAgent] db={db}, config_keys={list(config.keys()) if config else 'None'}")
+    user_id_int = state.user_id
+    logger.warning(f"[ProfileAgent] db={db}, config_keys={list(config.keys()) if config else 'None'}")
     if db is not None:
         try:
-            state = state.model_copy(update={"profile": await profile_svc.merge_chat_updates(user_uuid, updates, db, user_message=state.user_message)})
+            state = state.model_copy(update={"profile": await profile_svc.merge_chat_updates(user_id_int, updates, db, user_message=state.user_message)})
         except Exception as e:
-            _logger.error(f"DB 合并画像失败: {e}")
+            logger.error(f"DB 合并画像失败: {e}")
             # 数据库更新失败时，回退到内存级别合并
             state = _merge_profile_in_memory(state, updates)
     else:
@@ -199,7 +196,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     intent_messages.extend(state.chat_history)
     intent_messages.append({"role": "user", "content": state.user_message})
     try:
-        intent_raw = await chat_completion(intent_messages, temperature=0.0)
+        intent_raw = await chat_completion(intent_messages, temperature=config.agents.profile.intent_temperature)
         is_resource_request = intent_raw.strip().lower().startswith("yes")
     except Exception:
         is_resource_request = False
@@ -208,11 +205,9 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     complete = _check_profile_complete(state)
     state = state.model_copy(update={"profile_complete": complete})
 
-    import logging
-    _log = logging.getLogger(__name__)
-    _log.warning(f"[ProfileAgent] updates={updates}")
-    _log.warning(f"[ProfileAgent] profile={state.profile}")
-    _log.warning(f"[ProfileAgent] complete={complete}, is_resource_request={is_resource_request}")
+    logger.warning(f"[ProfileAgent] updates={updates}")
+    logger.warning(f"[ProfileAgent] profile={state.profile}")
+    logger.warning(f"[ProfileAgent] complete={complete}, is_resource_request={is_resource_request}")
 
     # -- 5. 画像完整且有资源请求意图时，检查用户是否有已上传文档 --
     has_user_docs = False
@@ -223,7 +218,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
         is_first_profile = (profile_version is not None and profile_version == 1)
         if not has_user_docs and is_first_profile:
             # 用户没有上传过教材，确认画像并引导上传
-            _log.info(f"[ProfileAgent] 画像完整但用户无已上传文档，引导上传教材")
+            logger.info(f"[ProfileAgent] 画像完整但用户无已上传文档，引导上传教材")
             known = _profile_to_known_fields(state.profile)
             guide_prompt = _NO_DOCS_GUIDE_PROMPT.format(
                 known_fields=json.dumps(known, ensure_ascii=False),
@@ -231,7 +226,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
             )
             try:
                 guide_msg = await chat_completion(
-                    [{"role": "user", "content": guide_prompt}], temperature=0.7
+                    [{"role": "user", "content": guide_prompt}], temperature=config.agents.profile.clarify_temperature
                 )
             except Exception:
                 guide_msg = (
@@ -262,7 +257,7 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
             )
         try:
             confirm_msg = await chat_completion(
-                [{"role": "user", "content": confirm_prompt}], temperature=0.7
+                [{"role": "user", "content": confirm_prompt}], temperature=config.agents.profile.clarify_temperature
             )
         except Exception:
             if not has_user_docs_for_confirm:
@@ -313,10 +308,9 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
             # 注入历史让追问更自然连贯
             clarify_messages.extend(state.chat_history)
             clarify_messages.append({"role": "user", "content": state.user_message})
-            clarify_msg = await chat_completion(clarify_messages, temperature=0.7)
+            clarify_msg = await chat_completion(clarify_messages, temperature=config.agents.profile.clarify_temperature)
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(f"LLM 调用失败: {e}")
+            logger.error(f"LLM 调用失败: {e}")
             clarify_msg = "能告诉我你的学习目标和目前的知识基础吗？"
 
         state = state.model_copy(update={

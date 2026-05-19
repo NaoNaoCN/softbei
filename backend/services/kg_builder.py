@@ -21,6 +21,7 @@ from backend.db.models import KGEdge, KGNode
 from backend.db.vector import get_documents_by_doc_id
 from backend.models.schemas import KGNodeType, KGRelation
 from backend.services.llm import chat_completion
+from backend.config import config
 
 # ----------------------------------------------------------
 # Prompts
@@ -168,25 +169,22 @@ def _group_by_page(documents: list[str], metadatas: list[dict]) -> list[str]:
         page_text = "\n".join(page_groups[page])
         batch.append(page_text)
         batch_len += len(page_text)
-        if batch_len > 12000:  # ~12000 字符一批（约 8-10 页）
+        if batch_len > config.knowledge_graph.batch_chars_limit:
             grouped.append("\n\n".join(batch))
             batch = []
             batch_len = 0
     if batch:
         grouped.append("\n\n".join(batch))
 
-    # 如果批次仍然过多，均匀采样控制在 30 批以内
-    MAX_BATCHES = 30
-    if len(grouped) > MAX_BATCHES:
-        step = len(grouped) / MAX_BATCHES
-        sampled = [grouped[int(i * step)] for i in range(MAX_BATCHES)]
+    # 如果批次仍然过多，均匀采样控制在 max_batches 批以内
+    max_batches = config.knowledge_graph.max_batches
+    if len(grouped) > max_batches:
+        step = len(grouped) / max_batches
+        sampled = [grouped[int(i * step)] for i in range(max_batches)]
         logger.info(f"[KG] 批次过多({len(grouped)})，采样为 {len(sampled)} 批")
         grouped = sampled
 
     return grouped
-
-
-_TOC_MAX_ITEMS = 100  # 目录项数量阈值，超过则裁剪深层级
 
 
 def _trim_toc_by_level(toc: list[dict]) -> list[dict]:
@@ -194,17 +192,18 @@ def _trim_toc_by_level(toc: list[dict]) -> list[dict]:
     逐级审查目录项数量，找到不超过阈值的最大 level 截止。
     例如 level<=3 有 90 项，level<=4 有 800+ 项，则截止到 level 3。
     """
-    if len(toc) <= _TOC_MAX_ITEMS:
+    max_items = config.knowledge_graph.toc_max_items
+    if len(toc) <= max_items:
         return toc
 
     max_level = max(item["level"] for item in toc)
     for cutoff in range(1, max_level + 1):
         count = sum(1 for item in toc if item["level"] <= cutoff)
-        if count > _TOC_MAX_ITEMS:
+        if count > max_items:
             # 回退到上一级
             final_level = max(cutoff - 1, 1)
             trimmed = [item for item in toc if item["level"] <= final_level]
-            logger.info(f"[KG-TOC] 目录项 {len(toc)} 个超过阈值 {_TOC_MAX_ITEMS}，截止到 level {final_level}（{len(trimmed)} 项）")
+            logger.info(f"[KG-TOC] 目录项 {len(toc)} 个超过阈值 {max_items}，截止到 level {final_level}（{len(trimmed)} 项）")
             return trimmed
 
     return toc
@@ -281,10 +280,10 @@ def _group_by_toc(
             combined = "\n".join(texts)
             sections.append({"section": name, "text": combined, "type": node_type})
 
-    # 合并过短的 section（< 200 字符）到前一个
+    # 合并过短的 section（< N 字符）到前一个
     merged: list[dict] = []
     for sec in sections:
-        if merged and len(sec["text"]) < 200:
+        if merged and len(sec["text"]) < config.knowledge_graph.section_merge_min_chars:
             merged[-1]["text"] += "\n" + sec["text"]
         else:
             merged.append(sec)
@@ -313,20 +312,20 @@ def _attach_details_to_sections(
 # 核心提取逻辑
 # ----------------------------------------------------------
 
-# 并发控制：最多同时 3 个 LLM 请求（避免触发 DashScope 并发限流）
-_LLM_SEMAPHORE = asyncio.Semaphore(10)
+# 并发控制：避免触发 LLM API 并发限流
+_LLM_SEMAPHORE = asyncio.Semaphore(config.knowledge_graph.llm_concurrency)
 
 
 async def _extract_single_batch(i: int, text: str, total: int) -> list[dict]:
     """单个 batch 的节点提取（供并发调用）。"""
-    prompt = NODE_EXTRACT_PROMPT.format(text=text[:6000])
+    prompt = NODE_EXTRACT_PROMPT.format(text=text[:config.knowledge_graph.text_truncate_chars])
     async with _LLM_SEMAPHORE:
         logger.info(f"[KG] 提取节点 batch {i+1}/{total} (开始)")
         try:
             raw = await chat_completion(
                 [{"role": "user", "content": prompt}],
                 temperature=0.1,
-                max_tokens=4000,
+                max_tokens=config.knowledge_graph.node_extraction_max_tokens,
             )
             nodes = _parse_json_response(raw)
             valid_nodes = []
@@ -392,7 +391,7 @@ async def _extract_edges_batch(
             raw = await chat_completion(
                 [{"role": "user", "content": prompt}],
                 temperature=0.1,
-                max_tokens=4000,
+                max_tokens=config.knowledge_graph.node_extraction_max_tokens,
             )
             edges = _parse_json_response(raw)
             valid_relations = {e.value for e in KGRelation}
@@ -417,9 +416,9 @@ async def _extract_edges(all_nodes: list[dict]) -> list[dict]:
 
     all_node_names = {n["name"] for n in all_nodes}
 
-    # 每批 ~40 个节点，相邻 batch 重叠 10 个，捕获边界处的关系
-    BATCH_SIZE = 40
-    OVERLAP = 10
+    # 相邻 batch 重叠，捕获边界处的关系
+    BATCH_SIZE = config.knowledge_graph.edge_batch_size
+    OVERLAP = config.knowledge_graph.edge_overlap
     batches = []
     i = 0
     while i < len(all_nodes):
@@ -458,7 +457,7 @@ async def _extract_toc_batch(
     """单个章节的细粒度节点提取，返回 (nodes, section_name)。"""
     prompt = _build_toc_node_prompt(
         section_name=section["section"],
-        text=section["text"][:6000],
+        text=section["text"][:config.knowledge_graph.text_truncate_chars],
         llm_types=llm_types,
     )
     allowed = set(llm_types)
@@ -468,7 +467,7 @@ async def _extract_toc_batch(
             raw = await chat_completion(
                 [{"role": "user", "content": prompt}],
                 temperature=0.1,
-                max_tokens=4000,
+                max_tokens=config.knowledge_graph.node_extraction_max_tokens,
             )
             nodes = _parse_json_response(raw)
             valid = []
@@ -516,8 +515,8 @@ async def _extract_cross_edges(all_nodes: list[dict]) -> list[dict]:
         return []
 
     all_node_names = {n["name"] for n in all_nodes}
-    BATCH_SIZE = 40
-    OVERLAP = 10
+    BATCH_SIZE = config.knowledge_graph.edge_batch_size
+    OVERLAP = config.knowledge_graph.edge_overlap
     batches = []
     i = 0
     while i < len(all_nodes):
@@ -538,7 +537,7 @@ async def _extract_cross_edges(all_nodes: list[dict]) -> list[dict]:
                 raw = await chat_completion(
                     [{"role": "user", "content": prompt}],
                     temperature=0.1,
-                    max_tokens=4000,
+                    max_tokens=config.knowledge_graph.node_extraction_max_tokens,
                 )
                 edges = _parse_json_response(raw)
                 valid = []

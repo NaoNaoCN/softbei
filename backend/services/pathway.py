@@ -5,7 +5,6 @@ backend/services/pathway.py
 
 from __future__ import annotations
 
-import uuid
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +33,7 @@ from backend.models.schemas import (
 # ----------------------------------------------------------
 
 async def get_pathway(
-    path_id: uuid.UUID,
+    path_id: int,
     db: AsyncSession,
 ) -> Optional[LearningPathOut]:
     """按 ID 获取单条学习路径。"""
@@ -49,7 +48,7 @@ async def get_pathway(
 
 
 async def list_pathways(
-    user_id: uuid.UUID,
+    user_id: int,
     db: AsyncSession,
 ) -> list[LearningPathOut]:
     """列举用户的所有学习路径。"""
@@ -62,7 +61,7 @@ async def list_pathways(
 
 
 async def create_pathway(
-    user_id: uuid.UUID,
+    user_id: int,
     data: LearningPathCreate,
     db: AsyncSession,
 ) -> LearningPathOut:
@@ -81,8 +80,8 @@ async def create_pathway(
 
 
 async def update_pathway(
-    path_id: uuid.UUID,
-    user_id: uuid.UUID,
+    path_id: int,
+    user_id: int,
     data: LearningPathUpdate,
     db: AsyncSession,
 ) -> Optional[LearningPathOut]:
@@ -106,8 +105,8 @@ async def update_pathway(
 
 
 async def delete_pathway(
-    path_id: uuid.UUID,
-    user_id: uuid.UUID,
+    path_id: int,
+    user_id: int,
     db: AsyncSession,
 ) -> bool:
     """
@@ -128,8 +127,8 @@ async def delete_pathway(
 # ----------------------------------------------------------
 
 async def add_pathway_item(
-    path_id: uuid.UUID,
-    user_id: uuid.UUID,
+    path_id: int,
+    user_id: int,
     data: LearningPathItemCreate,
     db: AsyncSession,
 ) -> Optional[LearningPathItemOut]:
@@ -143,7 +142,7 @@ async def add_pathway_item(
     kp_node = await select_one(db, KGNode, filters={"id": data.kp_id})
     resolved_kp_id = data.kp_id
 
-    if kp_node and kp_node.user_id and str(kp_node.user_id) != str(user_id):
+    if kp_node and kp_node.user_id and kp_node.user_id != user_id:
         # 节点属于其他用户，尝试按名称查找当前用户的同名节点
         own_node = await select_one(db, KGNode, filters={"name": kp_node.name, "user_id": user_id})
         if own_node:
@@ -171,8 +170,8 @@ async def add_pathway_item(
 
 
 async def update_pathway_item(
-    item_id: uuid.UUID,
-    user_id: uuid.UUID,
+    item_id: int,
+    user_id: int,
     data: LearningPathItemUpdate,
     db: AsyncSession,
 ) -> Optional[LearningPathItemOut]:
@@ -209,8 +208,8 @@ async def update_pathway_item(
 
 
 async def remove_pathway_item(
-    item_id: uuid.UUID,
-    user_id: uuid.UUID,
+    item_id: int,
+    user_id: int,
     db: AsyncSession,
 ) -> bool:
     """从学习路径移除一个知识点项。"""
