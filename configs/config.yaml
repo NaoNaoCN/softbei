@@ -55,18 +55,16 @@ llm:
 
 # Embedding 配置
 embedding:
-  model: "BAAI/bge-m3"
-  use_spark: true
+  use_spark: true               # true=使用远程 Embedding API
   concurrency: 8                # 嵌入并发数（同时调用的 API 上限）
-  api_model: "text-embedding-v4"  # API embedding 模型名
+  api_model: "text-embedding-v4"  # Embedding API 模型名（DashScope）
   api_base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
   timeout_read: 60              # API embedding 读取超时（秒）
   timeout_connect: 10           # API embedding 连接超时（秒）
   timeout_write: 30             # API embedding 写入超时（秒）
   timeout_pool: 10              # API embedding 连接池超时（秒）
-  hf_mirror: "https://hf-mirror.com"  # HuggingFace 镜像（国内必填）
   index_batch_size: 128         # 嵌入索引批处理大小
-  vector_dimension: 1024        # 向量维度（BGE-M3 输出维度）
+  vector_dimension: 1024        # 向量维度（text-embedding-v4 输出维度）
 
 # RAG 配置
 rag:

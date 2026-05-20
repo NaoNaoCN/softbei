@@ -256,6 +256,7 @@ def split_text(
 ) -> list[str]:
     """
     将长文本按 chunk_size（字符数）切分，相邻块保留 overlap 字符的上下文。
+    尽量在句子边界处切分，避免在词/句中间截断。
 
     :param text:        原始文本
     :param chunk_size:  每块字符数，默认使用配置值
@@ -271,12 +272,28 @@ def split_text(
     # overlap 不能超过 chunk_size，否则会导致无限循环
     overlap = min(overlap, chunk_size - 1)
 
+    # 句子边界正则：。！？.!?\n
+    sentence_endings = re.compile(r'[。！？.!?\n]')
+
     chunks: list[str] = []
     start = 0
     while start < len(text):
         end = min(start + chunk_size, len(text))
-        chunks.append(text[start:end])
-        start += chunk_size - overlap
+        # 在 chunk_size 附近找最近的句子边界
+        if end < len(text):
+            # 从 end 往前找最近的分隔点（不超过 chunk_size 的 20%）
+            lookback = min(int(chunk_size * 0.2), end - start)
+            match = None
+            for m in sentence_endings.finditer(text, end - lookback, end):
+                match = m
+            if match is not None and match.end() > start:
+                end = match.end()
+        chunks.append(text[start:end].strip())
+        # 确保 forward progress：start 必须严格递增
+        next_start = end - overlap
+        if next_start <= start:
+            next_start = start + chunk_size - overlap
+        start = max(start + 1, next_start)
 
     return chunks
 
@@ -443,9 +460,23 @@ def _split_markdown_by_headers(text: str) -> list[tuple[str, str]]:
     :param text: 原始 Markdown 文本
     :return:     [(章节标题, 章节内容), ...] 列表
     """
-    # 先去除代码块，避免代码中的 # 被误解析为标题
+    # 先提取并保存代码块，避免代码中的 # 被误解析为标题
     code_block_pattern = re.compile(r'```[\s\S]*?```')
-    text_without_code = code_block_pattern.sub('[CODE_BLOCK]', text)
+    code_blocks: dict[str, str] = {}
+    counter = [0]
+
+    def _save_code(match: re.Match) -> str:
+        key = f"__CODE_BLOCK_{counter[0]}__"
+        code_blocks[key] = match.group(0)
+        counter[0] += 1
+        return key
+
+    text_without_code = code_block_pattern.sub(_save_code, text)
+
+    def _restore_code(text_section: str) -> str:
+        for key, original in code_blocks.items():
+            text_section = text_section.replace(key, original)
+        return text_section
 
     # 匹配 #、##、### 三级标题行
     header_pattern = re.compile(r'^(#{1,3})\s+(.+)$', re.MULTILINE)
@@ -453,8 +484,7 @@ def _split_markdown_by_headers(text: str) -> list[tuple[str, str]]:
 
     if not headers:
         # 没有标题，返回整篇作为"无标题"章节
-        text_restored = text_without_code.replace('[CODE_BLOCK]', '```\n...\n```')
-        return [("无标题", text_restored.strip())]
+        return [("无标题", _restore_code(text_without_code).strip())]
 
     # 选择实际出现的最小标题级别作为分割基准
     min_level = min(len(m.group(1)) for m in headers)
@@ -481,8 +511,8 @@ def _split_markdown_by_headers(text: str) -> list[tuple[str, str]]:
         )
 
         section_text = text_without_code[start:end].strip()
-        # 还原代码块
-        section_text = section_text.replace('[CODE_BLOCK]', '```\n...\n```')
+        # 还原代码块（恢复原始内容）
+        section_text = _restore_code(section_text)
 
         if section_text:
             sections.append((title, section_text))

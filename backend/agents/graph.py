@@ -148,6 +148,10 @@ async def invoke(user_id: int, session_id: int, message: str, db: AsyncSession) 
     :param db:        数据库会话
     :return:           最终 AgentState
     """
+    # 每次图推理开始前清除 RAG 检索缓存
+    from backend.agents.utils import clear_retrieval_cache
+    clear_retrieval_cache()
+
     existing_profile = await get_profile(user_id, db)
 
     # 加载多轮对话历史
@@ -165,7 +169,15 @@ async def invoke(user_id: int, session_id: int, message: str, db: AsyncSession) 
         initial_state,
         config={"configurable": {"db": db}},
     )
-    return AgentState(**result)
+    final_state = AgentState(**result)
+
+    # -- RAG 评估采集：记录生成结果 --
+    _collect_generation_eval(final_state, session_id)
+
+    # -- 异步 LLM-as-Judge 评估（采样触发）--
+    _maybe_trigger_async_judge(final_state, session_id)
+
+    return final_state
 
 
 async def stream_invoke(user_id: int, session_id: int, message: str, db: AsyncSession):
@@ -173,6 +185,10 @@ async def stream_invoke(user_id: int, session_id: int, message: str, db: AsyncSe
     流式执行图推理，逐步 yield AgentState 快照。
     供 FastAPI StreamingResponse 或 Streamlit 实时显示使用。
     """
+    # 每次图推理开始前清除 RAG 检索缓存
+    from backend.agents.utils import clear_retrieval_cache
+    clear_retrieval_cache()
+
     existing_profile = await get_profile(user_id, db)
 
     # 加载多轮对话历史
@@ -190,3 +206,104 @@ async def stream_invoke(user_id: int, session_id: int, message: str, db: AsyncSe
         config={"configurable": {"db": db}},
     ):
         yield event
+
+
+# ----------------------------------------------------------
+# RAG 评估辅助
+# ----------------------------------------------------------
+
+def _collect_generation_eval(state: AgentState, session_id: int) -> None:
+    """从 AgentState 中采集生成评估数据。"""
+    try:
+        from backend.evaluation.collector import collector
+
+        agent_type = state.resource_type.value if state.resource_type else ""
+        draft_content = state.draft_content or ""
+        safety_issues = state.metadata.get("safety_issues", []) if state.metadata else []
+
+        collector.record_generation(
+            agent_type=agent_type,
+            draft_length=len(draft_content),
+            generation_latency_ms=0.0,  # 需要各 Agent 自行计时后写入 state
+            safety_passed=state.safety_passed,
+            safety_issues_count=len(safety_issues),
+        )
+    except Exception:
+        pass  # 评估采集失败不应影响主流程
+
+
+def _maybe_trigger_async_judge(state: AgentState, session_id: int) -> None:
+    """按采样率决定是否触发异步 LLM-as-Judge 评估。"""
+    import asyncio
+    import re
+
+    try:
+        from backend.evaluation.collector import collector
+        from backend.evaluation.judge import get_judge
+        from backend.rag.retriever import RetrievedChunk
+
+        session_id_str = str(session_id)
+
+        # 采样决策
+        if not collector.decide_sample(session_id_str):
+            return
+
+        # 检查是否有足够的评估素材
+        draft = state.draft_content or ""
+        retrieved = state.retrieved_docs or []
+        kp_name = state.kp_id or ""
+        query = state.user_message or ""
+
+        if not draft or not retrieved:
+            return
+
+        # 构建 RetrievedChunk 列表（从缓存中获取 chunk 元数据）
+        retrieval_record = collector._current_retrieval
+        if retrieval_record is None:
+            return
+
+        chunks = []
+        for i, text in enumerate(retrieved):
+            chunk = RetrievedChunk(
+                chunk_id=retrieval_record.chunk_ids[i] if i < len(retrieval_record.chunk_ids) else f"chunk_{i}",
+                text=text,
+                score=retrieval_record.scores[i] if i < len(retrieval_record.scores) else 0.0,
+                doc_id=retrieval_record.doc_ids[i] if i < len(retrieval_record.doc_ids) else "",
+                source="",
+            )
+            chunks.append(chunk)
+
+        async def _run_judge():
+            try:
+                judge = get_judge()
+                result = await judge.evaluate_full(
+                    query=query,
+                    kp_name=kp_name,
+                    retrieved_chunks=chunks,
+                    generated_content=draft,
+                )
+                # 将评估结果写回 collector 的当前生成记录
+                gen_record = collector._current_generation
+                if gen_record:
+                    gen_record.faithfulness_score = result.get("faithfulness_score", 0.0)
+                    gen_record.hallucination_rate_val = result.get("hallucination_rate", 0.0)
+                    gen_record.completeness_score = result.get("completeness_score", 0.0)
+                    gen_record.concept_coverage = result.get("completeness_score", 0.0)
+                    gen_record.relevance_labels = result.get("relevance_labels", [])
+                    gen_record.faithfulness_statements = result.get("faithfulness_statements", [])
+                    gen_record.completeness_aspects = result.get("completeness_aspects", [])
+                collector.flush()
+
+                from loguru import logger
+                logger.info(
+                    f"[Eval] async judge complete: faithfulness={result.get('faithfulness_score', 0):.2f}, "
+                    f"completeness={result.get('completeness_score', 0):.2f}"
+                )
+            except Exception as e:
+                from loguru import logger
+                logger.warning(f"[Eval] async judge failed: {e}")
+
+        asyncio.create_task(_run_judge())
+
+    except Exception:
+        pass  # Judge 触发失败不应影响主流程

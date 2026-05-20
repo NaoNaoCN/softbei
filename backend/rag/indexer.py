@@ -11,9 +11,13 @@ from typing import Callable, Optional
 from loguru import logger  # noqa: F401
 
 from backend.config import config
-from backend.db.vector import upsert_documents
+from backend.db.vector import upsert_documents, delete_by_doc_id
 from backend.rag.loader import TextChunk
-from backend.services.llm import get_embedding
+from backend.services.llm import get_embeddings_batch
+
+
+# DashScope text-embedding-v4 单次 API 最多 25 条
+_API_MAX_BATCH = 25
 
 
 # ----------------------------------------------------------
@@ -32,20 +36,40 @@ async def index_chunks(
 
     :param chunks:             TextChunk 列表（来自 loader）
     :param collection_name:    目标集合名，None 使用默认集合
-    :param batch_size:         每批嵌入请求的大小
+    :param batch_size:         每批嵌入请求的大小（上限受 API 限制）
     :param progress_callback:  可选回调 (batch_num, total_batches)，每批完成后调用
     :param user_id:            上传用户 ID，写入 metadata 用于账户隔离
     :return:                   成功写入的 chunk 数量
     """
+    if not chunks:
+        return 0
+
     if batch_size is None:
         batch_size = config.embedding.index_batch_size
+    # 不超过 API 单次最大 batch 数
+    effective_batch_size = min(batch_size, _API_MAX_BATCH)
+
     total = 0
-    logger.info(f"[Indexer] 开始索引 {len(chunks)} 个文本块，batch_size={batch_size}, user_id={user_id}")
-    batches = list(range(0, len(chunks), batch_size))
+    logger.info(
+        f"[Indexer] 开始索引 {len(chunks)} 个文本块，"
+        f"batch_size={effective_batch_size}（API上限={_API_MAX_BATCH}）, user_id={user_id}"
+    )
+
+    # 预清理：按 doc_id 去重后删除旧 chunk，防止增量索引产生 orphan
+    affected_doc_ids = set(c.doc_id for c in chunks if c.doc_id)
+    for doc_id in affected_doc_ids:
+        try:
+            await delete_by_doc_id(doc_id, collection_name=collection_name)
+        except Exception as e:
+            logger.warning(f"[Indexer] 清理旧 chunk 失败 doc_id={doc_id}: {e}")
+
+    batches = list(range(0, len(chunks), effective_batch_size))
     total_batches = len(batches)
     for batch_num, i in enumerate(batches, start=1):
-        batch = chunks[i : i + batch_size]
-        logger.info(f"[Indexer] 正在 embedding 第 {i+1}-{i+len(batch)}/{len(chunks)} 块...")
+        batch = chunks[i : i + effective_batch_size]
+        logger.info(
+            f"[Indexer] 正在 embedding 第 {i+1}-{i+len(batch)}/{len(chunks)} 块..."
+        )
         embeddings = await _embed_batch([c.text for c in batch])
         await upsert_documents(
             ids=[c.chunk_id for c in batch],
@@ -97,11 +121,7 @@ async def index_directory(
 # ----------------------------------------------------------
 
 async def _embed_batch(texts: list[str]) -> list[list[float]]:
-    """并发嵌入一批文本，并发数由 config.embedding.concurrency 控制。"""
-    semaphore = asyncio.Semaphore(config.embedding.concurrency)
-
-    async def _embed_one(text: str) -> list[float]:
-        async with semaphore:
-            return await get_embedding(text)
-
-    return await asyncio.gather(*[_embed_one(t) for t in texts])
+    """批量嵌入文本，使用 API 批量接口一次发送多条。"""
+    if not texts:
+        return []
+    return await get_embeddings_batch(texts)

@@ -69,28 +69,6 @@ def _make_client(provider: str) -> tuple[AsyncOpenAI, str]:
 
 
 # ===========================================================
-# Embedding 模型缓存
-# ===========================================================
-
-_embedding_model = None
-
-
-def _get_embedding_model():
-    """单例加载 sentence-transformers BGE-M3 模型（避免每次重新加载）。"""
-    global _embedding_model
-    if _embedding_model is None:
-        import os
-        if config.embedding.hf_mirror:
-            os.environ["HF_ENDPOINT"] = config.embedding.hf_mirror
-            logger.info(f"[Embedding] 使用 HF 镜像: {config.embedding.hf_mirror}")
-        logger.info("[Embedding] 开始加载模型...")
-        from sentence_transformers import SentenceTransformer
-        _embedding_model = SentenceTransformer(config.embedding.model)
-        logger.info("[Embedding] 模型加载完成")
-    return _embedding_model
-
-
-# ===========================================================
 # 核心调用接口
 # ===========================================================
 
@@ -187,41 +165,83 @@ async def stream_chat_completion(
             raise
 
 
+# Embedding API 客户端（单例复用连接池）
+_embedding_client: AsyncOpenAI | None = None
+
+
+def _get_embedding_client() -> AsyncOpenAI:
+    """获取 Embedding API 客户端单例。"""
+    global _embedding_client
+    if _embedding_client is None:
+        _embedding_client = AsyncOpenAI(
+            api_key=config.llm.api_key,
+            base_url=config.embedding.api_base_url,
+            timeout=Timeout(
+                connect=config.embedding.timeout_connect,
+                read=config.embedding.timeout_read,
+                write=config.embedding.timeout_write,
+                pool=config.embedding.timeout_pool,
+            ),
+        )
+    return _embedding_client
+
+
 async def get_embedding(text: str) -> list[float]:
     """
     获取文本的向量表示。
-    根据 config.embedding.use_spark 决定使用 API 还是本地模型。
+    调用远程 Embedding API（DashScope text-embedding-v4）。
+    失败时返回空向量，由 RAG 层降级为纯 LLM 生成。
     """
-    if config.embedding.use_spark:
-        return await _api_embedding(text)
-    return await _local_embedding(text)
-
-
-async def _local_embedding(text: str) -> list[float]:
-    """使用 sentence-transformers BGE-M3 本地嵌入。"""
     try:
-        model = _get_embedding_model()
-        result = model.encode(text).tolist()
-        logger.info(f"[Embedding] 本地 BGE-M3 成功，维度={len(result)}")
-        return result
-    except Exception as e:
-        logger.warning(f"[Embedding] 本地 BGE-M3 失败: {e}，返回空向量，RAG 将降级。")
-        return []
-
-
-async def _api_embedding(text: str) -> list[float]:
-    """调用远程 Embedding API。失败时自动降级到本地 BGE-M3。"""
-    try:
-        client = AsyncOpenAI(
-            api_key=config.llm.api_key,
-            base_url=config.embedding.api_base_url,
-            timeout=Timeout(connect=config.embedding.timeout_connect, read=config.embedding.timeout_read, write=config.embedding.timeout_write, pool=config.embedding.timeout_pool),
-        )
+        client = _get_embedding_client()
         response = await client.embeddings.create(
             model=config.embedding.api_model,
             input=text,
         )
         return response.data[0].embedding
     except Exception as e:
-        logger.warning(f"[Embedding] API embedding 失败: {e}，降级到本地 BGE-M3")
-        return await _local_embedding(text)
+        logger.warning(f"[Embedding] API embedding 失败: {e}，返回空向量，RAG 将降级为纯 LLM 生成")
+        return []
+
+
+async def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
+    """
+    批量获取文本向量表示。
+    单次 API 调用发送多条文本，大幅减少 HTTP 往返次数。
+    DashScope text-embedding-v4 单次最多支持 25 条。
+    """
+    if not texts:
+        return []
+    try:
+        client = _get_embedding_client()
+        response = await client.embeddings.create(
+            model=config.embedding.api_model,
+            input=texts,
+        )
+        return [d.embedding for d in response.data]
+    except Exception as e:
+        logger.warning(f"[Embedding] 批量 embedding 失败: {e}，返回空向量")
+        return [[] for _ in texts]
+
+
+async def check_embedding_health() -> bool:
+    """
+    检查 Embedding API 连通性。
+    发送一条极短文本，使用独立短超时客户端，避免阻塞。
+    返回 True 表示 API 可达，False 表示不可达。
+    """
+    try:
+        client = AsyncOpenAI(
+            api_key=config.llm.api_key,
+            base_url=config.embedding.api_base_url,
+            timeout=Timeout(connect=5, read=5, write=5, pool=5),
+        )
+        await client.embeddings.create(
+            model=config.embedding.api_model,
+            input="ping",
+        )
+        logger.info("[Embedding] 连通性检查通过")
+        return True
+    except Exception as e:
+        logger.warning(f"[Embedding] 连通性检查失败: {e}")
+        return False

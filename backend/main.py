@@ -1533,3 +1533,139 @@ async def list_records(
 ):
     """获取用户的学习记录列表，可按 kp_id 过滤。"""
     return await resource_svc.list_learning_records(user_id, db, skip, limit, kp_id)
+
+
+# ===========================================================
+# RAG 评估端点
+# ===========================================================
+
+@app.post("/eval/rag/query", tags=["evaluation"])
+async def evaluate_rag_query(
+    kp_name: str = Body(..., embed=True),
+    query: str = Body(default="", embed=True),
+    generated_content: str = Body(default="", embed=True),
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_session),
+):
+    """
+    对单个知识点执行完整的 RAG 四维度 LLM-as-Judge 评估。
+
+    流程：
+    1. 用当前 RAG 管线检索 kp_name 相关文档
+    2. 若未提供 generated_content，用 doc_agent 实时生成
+    3. 执行 Judge 1-4 评估并返回完整结果
+    """
+    from backend.evaluation.judge import RAGJudge
+    from backend.rag.retriever import retrieve_by_kp
+
+    # 1. 检索
+    chunks = await retrieve_by_kp(
+        kp_name,
+        n_results=app_config.rag.n_results,
+        user_id=str(user_id),
+    )
+
+    if not chunks:
+        return {
+            "error": "未检索到相关文档，请先导入知识库",
+            "kp_name": kp_name,
+            "chunks": [],
+        }
+
+    # 2. 若无提供 content，用简单 prompt 生成
+    content = generated_content
+    if not content:
+        from backend.services.llm import chat_completion
+        retrieved_text = "\n\n".join(c.text[:800] for c in chunks[:5])
+        prompt = f"""请根据以下参考资料，为知识点"{kp_name}"生成一份学习文档。
+要求使用 Markdown 格式，在引用处标注 [n]。
+
+参考资料：
+{retrieved_text}
+
+知识点：{kp_name}"""
+        try:
+            content = await chat_completion(
+                [{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=2000,
+            )
+        except Exception as e:
+            return {"error": f"生成内容失败: {e}", "kp_name": kp_name}
+
+    # 3. LLM-as-Judge 评估
+    judge = RAGJudge()
+    _query = query or f"知识点：{kp_name}"
+    result = await judge.evaluate_full(
+        query=_query,
+        kp_name=kp_name,
+        retrieved_chunks=chunks,
+        generated_content=content,
+    )
+
+    # 附加 chunk 信息供前端展示
+    result["chunks"] = [
+        {
+            "chunk_id": c.chunk_id,
+            "score": c.score,
+            "doc_id": c.doc_id,
+            "source": c.source,
+            "text_preview": c.text[:200],
+        }
+        for c in chunks
+    ]
+    result["generated_content"] = content
+
+    return result
+
+
+@app.get("/eval/rag/report", tags=["evaluation"])
+async def get_rag_eval_report(
+    period: str = "daily",
+):
+    """
+    获取 RAG 评估报告。
+
+    :param period: "daily"（日报）或 "weekly"（周报）
+    """
+    from backend.evaluation.collector import collector
+    from backend.evaluation.reporter import RAGReporter
+
+    reporter = RAGReporter()
+    records = collector.get_recent_records(n=500)
+
+    if period == "weekly":
+        report = reporter.generate_weekly_report(records)
+    else:
+        report = reporter.generate_daily_report(records)
+
+    return {
+        "markdown": reporter.to_markdown(report),
+        "summary": reporter.to_summary(report),
+        "report": report.model_dump(),
+    }
+
+
+@app.get("/eval/rag/records", tags=["evaluation"])
+async def list_eval_records(
+    n: int = 20,
+):
+    """获取最近 N 条 RAG 评估记录。"""
+    from backend.evaluation.collector import collector
+
+    records = collector.get_recent_records(n)
+    return [
+        {
+            "agent_type": r.agent_type,
+            "kp_name": r.kp_name,
+            "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+            "n_retrieved": r.n_retrieved,
+            "draft_length": r.draft_length,
+            "safety_passed": r.safety_passed,
+            "faithfulness": r.faithfulness_score,
+            "hallucination_rate": r.hallucination_rate_val,
+            "completeness": r.completeness_score,
+            "scores": r.retrieval_record.scores if r.retrieval_record else [],
+        }
+        for r in records
+    ]

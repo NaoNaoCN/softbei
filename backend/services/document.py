@@ -19,6 +19,7 @@ from backend.config import config
 from backend.db.crud import insert
 from backend.db.models import ResourceMeta
 from backend.rag import loader, indexer as rag_indexer
+from backend.services.llm import check_embedding_health
 from backend.utils.snowflake import generate_id
 
 
@@ -56,6 +57,12 @@ async def import_document(
     doc_id = f"doc_{hex(generate_id())[2:2 + config.storage.doc_id_hex_length]}"
     doc_title = title or path.stem
     file_size_bytes = path.stat().st_size
+
+    # 0. 预检 Embedding API 连通性，避免解析后才发现 API 不可用
+    if not await check_embedding_health():
+        raise RuntimeError(
+            "Embedding API 连接失败，无法索引文档。请检查网络连接和 LLM_API_KEY 配置。"
+        )
 
     # 1. 转换为 Markdown 并解析
     t_parse = time.perf_counter()
@@ -147,6 +154,12 @@ async def import_document_with_progress(
     logger.info(f"[import_document_with_progress] received title={title!r}, final doc_title={doc_title!r}")
 
     _cb("saving", 5)
+
+    # 0. 预检 Embedding API 连通性，避免解析后才发现 API 不可用
+    if not await check_embedding_health():
+        raise RuntimeError(
+            "Embedding API 连接失败，无法索引文档。请检查网络连接和 LLM_API_KEY 配置。"
+        )
 
     # 1. 转换为 Markdown 并解析
     t_parse = time.perf_counter()

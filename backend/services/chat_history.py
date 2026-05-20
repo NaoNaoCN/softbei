@@ -83,15 +83,21 @@ async def load_chat_history(
     from backend.db.models import ChatMessage
 
     try:
+        _max_turns = max_turns if max_turns is not None else config.chat.max_turns
+        # DB 层取最近 N×4 条消息作为截断缓冲，避免加载全量历史
+        db_limit = _max_turns * 4
+
         messages = await db_select(
             db, ChatMessage,
             filters={"session_id": session_id},
-            order_by=ChatMessage.created_at.asc(),
+            order_by=ChatMessage.created_at.desc(),
+            limit=db_limit,
         )
         if not messages:
             return []
 
-        history = [{"role": m.role, "content": m.content} for m in messages]
+        # 恢复时间正序供 truncate_history 处理
+        history = [{"role": m.role, "content": m.content} for m in reversed(messages)]
         return truncate_history(history, max_turns, max_tokens)
 
     except Exception as e:

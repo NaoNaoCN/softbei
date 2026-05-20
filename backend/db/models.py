@@ -88,7 +88,9 @@ class ProfileHistory(Base):
     __tablename__ = "profile_history"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
-    profile_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("student_profile.id"), nullable=False)
+    profile_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("student_profile.id"), nullable=False, index=True,
+    )
     snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -103,7 +105,9 @@ class ChatSession(Base):
     __tablename__ = "chat_session"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
-    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("user.id"), nullable=False, index=True,
+    )
     title: Mapped[str | None] = mapped_column(String(256))
     last_used_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -158,6 +162,7 @@ class DocumentChunk(Base):
 
     __table_args__ = (
         Index("ix_document_chunk_doc_id", "doc_id"),
+        Index("ix_document_chunk_user_id", "user_id"),
     )
 
 
@@ -167,6 +172,10 @@ class DocumentChunk(Base):
 
 class KGNode(Base):
     __tablename__ = "kg_node"
+    __table_args__ = (
+        Index("ix_kg_node_user_id", "user_id"),
+        Index("ix_kg_node_user_type", "user_id", "node_type"),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)   # e.g. "kp_03_01"
     name: Mapped[str] = mapped_column(String(256), nullable=False)
@@ -176,7 +185,9 @@ class KGNode(Base):
     )
     description: Mapped[str | None] = mapped_column(Text)
     course_id: Mapped[str | None] = mapped_column(String(64))
-    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id"), nullable=True,
+    )
 
     out_edges: Mapped[list["KGEdge"]] = relationship(
         back_populates="source_node", foreign_keys="KGEdge.source_id"
@@ -208,6 +219,12 @@ class KGEdge(Base):
 
 class ResourceMeta(Base):
     __tablename__ = "resource_meta"
+    __table_args__ = (
+        Index("ix_resource_meta_user_id", "user_id"),
+        Index("ix_resource_meta_kp_id", "kp_id"),
+        Index("ix_resource_meta_user_type", "user_id", "resource_type"),
+        Index("ix_resource_meta_user_kp", "user_id", "kp_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
@@ -232,7 +249,9 @@ class GenerationBatch(Base):
     __tablename__ = "generation_batch"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
-    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("user.id"), nullable=False, index=True,
+    )
     kp_id: Mapped[str] = mapped_column(String(256), nullable=False)
     status: Mapped[str] = mapped_column(
         Enum(TaskStatus, values_callable=lambda e: [m.value for m in e]),
@@ -252,7 +271,9 @@ class GenerationTask(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
     resource_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("resource_meta.id"), unique=True, nullable=False)
-    batch_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("generation_batch.id"), nullable=True)
+    batch_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("generation_batch.id"), nullable=True, index=True,
+    )
     status: Mapped[str] = mapped_column(
         Enum(TaskStatus, values_callable=lambda e: [m.value for m in e]),
         default=TaskStatus.pending,
@@ -273,6 +294,10 @@ class GenerationTask(Base):
 
 class KGBuildTask(Base):
     __tablename__ = "kg_build_task"
+    __table_args__ = (
+        Index("ix_kg_build_task_user_id", "user_id"),
+        Index("ix_kg_build_task_doc_id", "doc_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
     doc_id: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -299,7 +324,9 @@ class QuizItem(Base):
     __tablename__ = "quiz_item"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
-    resource_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("resource_meta.id"), nullable=False)
+    resource_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("resource_meta.id"), nullable=False, index=True,
+    )
     kp_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     question_type: Mapped[str] = mapped_column(
         Enum(QuestionType, values_callable=lambda e: [m.value for m in e]),
@@ -317,6 +344,11 @@ class QuizItem(Base):
 
 class QuizAttempt(Base):
     __tablename__ = "quiz_attempt"
+    __table_args__ = (
+        Index("ix_quiz_attempt_quiz_item_id", "quiz_item_id"),
+        Index("ix_quiz_attempt_user_id", "user_id"),
+        Index("ix_quiz_attempt_user_time", "user_id", "submitted_at"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
     quiz_item_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("quiz_item.id"), nullable=False)
@@ -338,7 +370,9 @@ class LearningPath(Base):
     __tablename__ = "learning_path"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
-    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("user.id"), nullable=False, index=True,
+    )
     title: Mapped[str | None] = mapped_column(String(256))
     description: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -353,7 +387,9 @@ class LearningPathItem(Base):
     __tablename__ = "learning_path_item"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
-    path_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("learning_path.id"), nullable=False)
+    path_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("learning_path.id"), nullable=False, index=True,
+    )
     kp_id: Mapped[str] = mapped_column(ForeignKey("kg_node.id"), nullable=False)
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -368,6 +404,11 @@ class LearningPathItem(Base):
 
 class LearningRecord(Base):
     __tablename__ = "learning_record"
+    __table_args__ = (
+        Index("ix_learning_record_user_id", "user_id"),
+        Index("ix_learning_record_kp_id", "kp_id"),
+        Index("ix_learning_record_user_kp", "user_id", "kp_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)

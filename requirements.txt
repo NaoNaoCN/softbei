@@ -20,7 +20,6 @@ openai>=1.25.0          # 讯飞星火 API 兼容 OpenAI SDK
 
 # ---- RAG / 向量检索 ----
 numpy>=1.26.0
-sentence-transformers>=3.0.0  # BGE-M3 embedding
 pgvector>=0.4.0               # PostgreSQL pgvector 扩展 Python 客户端
 
 # ---- 数据库 ----

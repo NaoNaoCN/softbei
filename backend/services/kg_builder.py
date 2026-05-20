@@ -687,15 +687,16 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
         )
     await db.flush()
 
-    # 6. 写入节点（去重：同名节点只保留第一个）
+    # 6. 收集所有节点实例（去重：同名节点只保留第一个）
     name_to_id: dict[str, str] = {}
     edge_count = 0
+    node_instances: list[KGNode] = []
     for node in nodes:
         if node["name"] in name_to_id:
             continue  # 跳过重复名称的节点
         node_id = _make_node_id(node["name"], doc_id)
         name_to_id[node["name"]] = node_id
-        db.add(KGNode(
+        node_instances.append(KGNode(
             id=node_id,
             name=node["name"],
             node_type=node["type"],
@@ -703,15 +704,14 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
             course_id=doc_id,
             user_id=user_id,
         ))
-    await db.flush()
 
-    # 7. 自动创建 Course 根节点 + Chapter → Course 边
+    # 7. 自动创建 Course 根节点
     from backend.db.crud import select_one
     from backend.db.models import ResourceMeta
     doc_resource = await select_one(db, ResourceMeta, filters={"kp_id": doc_id})
     course_title = doc_resource.title if doc_resource else doc_id
     course_node_id = f"kp_course_{hashlib.md5(doc_id.encode()).hexdigest()[:8]}"
-    db.add(KGNode(
+    node_instances.append(KGNode(
         id=course_node_id,
         name=course_title,
         node_type="Course",
@@ -720,10 +720,10 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
         user_id=user_id,
     ))
     name_to_id[course_title] = course_node_id
-    await db.flush()
 
-    # 边去重集合：(source_id, target_id, relation)
+    # 8. 收集所有边实例
     seen_edges: set[tuple[str, str, str]] = set()
+    edge_instances: list[KGEdge] = []
 
     # 所有 Chapter 节点 → IS_PART_OF → Course
     for node in nodes:
@@ -732,14 +732,14 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
             edge_key = (node_id, course_node_id, "IS_PART_OF")
             if edge_key not in seen_edges:
                 seen_edges.add(edge_key)
-                db.add(KGEdge(
+                edge_instances.append(KGEdge(
                     source_id=node_id,
                     target_id=course_node_id,
                     relation="IS_PART_OF",
                 ))
                 edge_count += 1
 
-    # 8. 写入 LLM 推断的边（去重）
+    # LLM 推断的边（去重）
     for edge in edges:
         src_id = name_to_id.get(edge["source"])
         tgt_id = name_to_id.get(edge["target"])
@@ -747,12 +747,16 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
             edge_key = (src_id, tgt_id, edge["relation"])
             if edge_key not in seen_edges:
                 seen_edges.add(edge_key)
-                db.add(KGEdge(
+                edge_instances.append(KGEdge(
                     source_id=src_id,
                     target_id=tgt_id,
                     relation=edge["relation"],
                 ))
                 edge_count += 1
+
+    # 9. 批量写入
+    db.add_all(node_instances)
+    db.add_all(edge_instances)
     await db.commit()
 
     logger.info(f"[KG] 构建完成: {len(nodes)} 节点, {edge_count} 边")

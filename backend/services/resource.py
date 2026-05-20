@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.config import config
 from backend.db.crud import select_one, select, insert, update_by_id, delete_by_id
 from backend.db.models import ResourceMeta, GenerationTask, GenerationBatch, LearningRecord
+from backend.utils.snowflake import generate_id
 from backend.models.schemas import (
     BatchGenerateOut,
     BatchGenerateRequest,
@@ -251,58 +252,63 @@ async def create_batch(
         if node:
             kp_title = node.name
 
-    # 创建 batch 记录
-    batch = await insert(
-        db, GenerationBatch,
-        data={
-            "user_id": user_id,
-            "kp_id": request.kp_id,
-            "status": TaskStatus.pending.value,
-            "progress": 0,
-            "resource_types": [rt.value for rt in request.resource_types],
-        },
-        commit=False,
+    # 预生成所有 ID，避免中间 flush 等待数据库分配
+    num_types = len(request.resource_types)
+    batch_id = generate_id()
+    resource_ids = [generate_id() for _ in range(num_types)]
+    task_ids = [generate_id() for _ in range(num_types)]
+
+    # 批量创建 GenerationBatch
+    batch = GenerationBatch(
+        id=batch_id,
+        user_id=user_id,
+        kp_id=request.kp_id,
+        status=TaskStatus.pending.value,
+        progress=0,
+        resource_types=[rt.value for rt in request.resource_types],
     )
-    await db.flush()
+    db.add(batch)
 
-    # 为每个 resource_type 创建子任务
-    task_items: list[BatchTaskItem] = []
-    for rt in request.resource_types:
-        resource = await insert(
-            db, ResourceMeta,
-            data={
-                "user_id": user_id,
-                "kp_id": request.kp_id,
-                "resource_type": rt.value,
-                "title": f"{kp_title} — {rt.value}",
-            },
-            commit=False,
+    # 批量创建 ResourceMeta
+    resource_instances = [
+        ResourceMeta(
+            id=resource_ids[i],
+            user_id=user_id,
+            kp_id=request.kp_id,
+            resource_type=rt.value,
+            title=f"{kp_title} — {rt.value}",
         )
-        await db.flush()
+        for i, rt in enumerate(request.resource_types)
+    ]
+    db.add_all(resource_instances)
 
-        task = await insert(
-            db, GenerationTask,
-            data={
-                "resource_id": resource.id,
-                "batch_id": batch.id,
-                "status": TaskStatus.pending.value,
-                "progress": 0,
-            },
-            commit=False,
-        )
-        await db.flush()
-
-        task_items.append(BatchTaskItem(
-            task_id=task.id,
-            resource_type=rt,
-            status=TaskStatus.pending,
+    # 批量创建 GenerationTask
+    task_instances = [
+        GenerationTask(
+            id=task_ids[i],
+            resource_id=resource_ids[i],
+            batch_id=batch_id,
+            status=TaskStatus.pending.value,
             progress=0,
-        ))
+        )
+        for i in range(num_types)
+    ]
+    db.add_all(task_instances)
 
     await db.commit()
 
+    task_items: list[BatchTaskItem] = [
+        BatchTaskItem(
+            task_id=task_ids[i],
+            resource_type=request.resource_types[i],
+            status=TaskStatus.pending,
+            progress=0,
+        )
+        for i in range(num_types)
+    ]
+
     return BatchGenerateOut(
-        batch_id=batch.id,
+        batch_id=batch_id,
         status=TaskStatus.pending,
         progress=0,
         tasks=task_items,
@@ -315,7 +321,11 @@ async def get_batch_status(batch_id: int, db: AsyncSession) -> Optional[BatchGen
     if not batch:
         return None
 
-    tasks = await select(db, GenerationTask, filters={"batch_id": batch_id})
+    tasks = await select(
+        db, GenerationTask,
+        filters={"batch_id": batch_id},
+        loadRelations=["resource"],
+    )
 
     task_items = []
     total_progress = 0
@@ -323,9 +333,7 @@ async def get_batch_status(batch_id: int, db: AsyncSession) -> Optional[BatchGen
     any_failed = False
 
     for t in tasks:
-        # 获取 resource_type
-        resource = await select_one(db, ResourceMeta, filters={"id": t.resource_id})
-        rt = ResourceType(resource.resource_type) if resource else ResourceType.doc
+        rt = ResourceType(t.resource.resource_type) if t.resource else ResourceType.doc
 
         task_items.append(BatchTaskItem(
             task_id=t.id,

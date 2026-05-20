@@ -28,11 +28,6 @@ class Base(DeclarativeBase):
     pass
 
 
-# 导入所有模型，确保 Base.metadata 在 Alembic / 运行时已注册全部表
-def _import_models() -> None:
-    from backend.db import models  # noqa: F401
-
-
 # ----------------------------------------------------------
 # Engine & Session factory（模块级单例，应用启动时初始化）
 # ----------------------------------------------------------

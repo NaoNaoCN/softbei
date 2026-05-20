@@ -105,13 +105,24 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
 
     state = state.model_copy(update={"intent_type": "generate"})
 
-    # -- 2. 获取可用知识点列表 --
+    # -- 2. 获取可用知识点列表（按用户过滤 + 上限保护）--
     kp_list = ""
     if db:
         try:
-            from backend.db.crud import select as db_select
+            from sqlalchemy import or_, select as sa_select
             from backend.db.models import KGNode
-            nodes = await db_select(db, KGNode)
+            # 只查当前用户的知识点 + 公共知识点，上限 500 条防止无界增长
+            result = await db.execute(
+                sa_select(KGNode)
+                .where(
+                    or_(
+                        KGNode.user_id == state.user_id,
+                        KGNode.user_id.is_(None),
+                    )
+                )
+                .limit(500)
+            )
+            nodes = result.scalars().all()
             kp_list = "\n".join([f"- {n.id}: {n.name}" for n in nodes])
         except Exception:
             kp_list = "（知识点列表获取失败）"

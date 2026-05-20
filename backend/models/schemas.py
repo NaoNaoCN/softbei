@@ -68,13 +68,11 @@ class CognitiveStyle(str, Enum):
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=2, max_length=64)
     password: str = Field(..., min_length=6)
-    email: Optional[str] = None
 
 # 出站数据（API 响应），包含 id/created_at，故意没有 password，且有 from_attributes=True 用于从 ORM 对象直接构造
 class UserOut(BaseModel):
     id: int
     username: str
-    email: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -137,7 +135,6 @@ class ChatMessageOut(BaseModel):
 class ChatSessionOut(BaseModel):
     id: int
     title: Optional[str]
-    messages_table: Optional[str] = None
     last_used_at: Optional[datetime] = None
     created_at: datetime
 

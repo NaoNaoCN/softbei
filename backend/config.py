@@ -90,8 +90,7 @@ class VectorDBConfig:
 @dataclass
 class EmbeddingConfig:
     """Embedding 配置"""
-    model: str = "BAAI/bge-m3"
-    use_spark: bool = False
+    use_spark: bool = True
     concurrency: int = 8
     api_model: str = "text-embedding-v4"
     api_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -101,7 +100,6 @@ class EmbeddingConfig:
     timeout_pool: int = 10
     index_batch_size: int = 128
     vector_dimension: int = 1024
-    hf_mirror: str = ""  # HuggingFace 镜像地址，国内用户可设为 https://hf-mirror.com
 
 
 @dataclass
@@ -539,8 +537,7 @@ def _build_config() -> Config:
             max_sections_before_coarse_split=_get("rag.max_sections_before_coarse_split", 50),
         ),
         embedding=EmbeddingConfig(
-            model=_get("embedding.model", "BAAI/bge-m3"),
-            use_spark=_get("embedding.use_spark", False),
+            use_spark=_get("embedding.use_spark", True),
             concurrency=_get("embedding.concurrency", 8),
             api_model=_get("embedding.api_model", "text-embedding-v4"),
             api_base_url=_get("embedding.api_base_url", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
@@ -550,7 +547,6 @@ def _build_config() -> Config:
             timeout_pool=_get("embedding.timeout_pool", 10),
             index_batch_size=_get("embedding.index_batch_size", 128),
             vector_dimension=_get("embedding.vector_dimension", 1024),
-            hf_mirror=_get("embedding.hf_mirror", ""),
         ),
         chat=ChatConfig(
             max_turns=_get("chat.max_turns", 10),

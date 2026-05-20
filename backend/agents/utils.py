@@ -64,6 +64,11 @@ def parse_json_llm_response(raw: str) -> str:
     return cleaned
 
 
+# 请求级 RAG 检索缓存：同一请求内多个 Agent 检索相同知识点时复用结果
+# key: (kp_name, user_id), value: (context, retrieved_texts)
+_retrieval_cache: dict[tuple[str, str], tuple[str, list[str]]] = {}
+
+
 async def retrieve_context(
     kp_name: str,
     user_id: int,
@@ -71,14 +76,33 @@ async def retrieve_context(
 ) -> tuple[str, list[str]]:
     """
     RAG 检索并格式化上下文，供各生成 Agent 复用。
+    同一请求内相同 (kp_name, user_id) 只检索一次，后续命中缓存。
 
     :param kp_name:      知识点名称
     :param user_id:      用户 ID（用于账户隔离）
     :param agent_label:  Agent 名称标签（用于日志输出，如 "DocAgent"）
     :return:             (context_str, retrieved_texts)
     """
+    import time
+    from backend.evaluation.collector import collector
+
+    cache_key = (kp_name, str(user_id))
+    if cache_key in _retrieval_cache:
+        logger.info("[%s] RAG 命中缓存，跳过检索", agent_label)
+        return _retrieval_cache[cache_key]
+
     from backend.rag.retriever import retrieve_by_kp, format_context
 
+    # 评估采集：开始检索
+    collector.start_query(
+        query=kp_name,
+        kp_name=kp_name,
+        user_id=str(user_id),
+        session_id="",  # 由调用方在图层设置
+    )
+
+    t_start = time.perf_counter()
+    chunks = []
     try:
         chunks = await retrieve_by_kp(kp_name, n_results=config.rag.n_results, user_id=str(user_id))
         context = format_context(chunks, max_tokens=config.rag.context_max_tokens)
@@ -92,4 +116,22 @@ async def retrieve_context(
         context = "（暂无参考资料）"
         retrieved_texts = []
 
+    # 评估采集：记录检索结果
+    retrieval_ms = (time.perf_counter() - t_start) * 1000
+    collector.record_retrieval(
+        scores=[c.score for c in chunks],
+        chunk_ids=[c.chunk_id for c in chunks],
+        chunk_texts=[c.text for c in chunks],
+        doc_ids=[c.doc_id for c in chunks],
+        embedding_latency_ms=retrieval_ms * 0.6,   # 估算: embedding 约占 60%
+        db_query_latency_ms=retrieval_ms * 0.4,     # 估算: DB 查询约占 40%
+    )
+
+    _retrieval_cache[cache_key] = (context, retrieved_texts)
     return context, retrieved_texts
+
+
+def clear_retrieval_cache() -> None:
+    """清除 RAG 检索缓存（每次生成请求开始时调用）。"""
+    _retrieval_cache.clear()
+

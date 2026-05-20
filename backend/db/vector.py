@@ -19,6 +19,9 @@ from backend.db.database import get_engine
 
 COLLECTION_NAME: str = config.vector_db.collection
 
+# IVFFlat probes：控制检索精度与速度的平衡，10 是精度/速度的合理折中
+_IVFFLAT_PROBES: int = 10
+
 # ----------------------------------------------------------
 # 集合代理
 # ----------------------------------------------------------
@@ -52,7 +55,7 @@ class _CollectionProxy:
                 conditions.append(where_clause)
                 params.update(where_params)
 
-        sql = f"SELECT chunk_id, text, embedding, source, page, section, user_id FROM document_chunk WHERE {' AND '.join(conditions)}"
+        sql = f"SELECT chunk_id, text, doc_id, embedding, source, page, section, user_id FROM document_chunk WHERE {' AND '.join(conditions)}"
         if limit is not None:
             limit_val = int(limit)
             sql += f" LIMIT {limit_val}"
@@ -65,15 +68,14 @@ class _CollectionProxy:
         documents_list = []
         metadatas_list = []
         for row in rows:
-            chunk_id = row[0]
-            ids_list.append(chunk_id)
+            ids_list.append(row[0])
             documents_list.append(row[1])
             metadatas_list.append({
-                "doc_id": chunk_id.rsplit("_", 1)[0] if "_" in chunk_id else "",
-                "source": row[3] or "",
-                "page": str(row[4]) if row[4] else "",
-                "section": row[5] or "",
-                "user_id": row[6] or "",
+                "doc_id": row[2] or "",
+                "source": row[4] or "",
+                "page": int(row[5]) if row[5] is not None else None,
+                "section": row[6] or "",
+                "user_id": row[7] or "",
             })
 
         return {
@@ -101,11 +103,6 @@ def get_collection() -> _CollectionProxy:
     if _collection_proxy is None:
         _collection_proxy = _CollectionProxy(COLLECTION_NAME)
     return _collection_proxy
-
-
-def get_or_create_collection(name: str) -> _CollectionProxy:
-    """按名称获取集合代理。"""
-    return _CollectionProxy(name)
 
 
 # ----------------------------------------------------------
@@ -151,8 +148,7 @@ async def upsert_documents(
     ):
         cols = _convert_metadata_to_columns(meta)
         doc_id = meta.get("doc_id", "")
-        # pgvector 需要向量以字符串格式传入: '[0.1, 0.2, ...]'
-        emb_str = f"[{','.join(str(v) for v in emb)}]"
+        # pgvector 的 asyncpg codec 自动将 list[float] 转为向量格式，无需手动拼字符串
         row_placeholders = ", ".join([
             f":id_{i}", f":chunk_id_{i}", f":doc_id_{i}", f":col_{i}",
             f":text_{i}", f":emb_{i}", f":source_{i}", f":page_{i}",
@@ -165,7 +161,7 @@ async def upsert_documents(
             f"doc_id_{i}": doc_id,
             f"col_{i}": col,
             f"text_{i}": doc_text,
-            f"emb_{i}": emb_str,
+            f"emb_{i}": emb,          # list[float] — pgvector asyncpg codec 自动转换
             f"source_{i}": cols["source"],
             f"page_{i}": cols["page"],
             f"section_{i}": cols["section"],
@@ -181,8 +177,7 @@ async def upsert_documents(
             source = EXCLUDED.source,
             page = EXCLUDED.page,
             section = EXCLUDED.section,
-            user_id = EXCLUDED.user_id,
-            created_at = NOW()
+            user_id = EXCLUDED.user_id
     """
 
     async with engine.begin() as conn:
@@ -241,8 +236,8 @@ async def query_documents(
     engine = get_engine()
 
     conditions = ["collection_name = :cn"]
-    # pgvector 需要向量以字符串格式传入
-    params: dict = {"cn": col, "embedding": f"[{','.join(str(v) for v in query_embedding)}]"}
+    # pgvector 的 asyncpg codec 自动将 list[float] 转为向量格式
+    params: dict = {"cn": col, "embedding": query_embedding}
 
     where_clause, where_params = _build_where_clause(where)
     if where_clause:
@@ -253,6 +248,7 @@ async def query_documents(
         SELECT
             chunk_id,
             text,
+            doc_id,
             embedding <=> :embedding AS distance,
             source,
             page,
@@ -265,6 +261,8 @@ async def query_documents(
     """
 
     async with engine.connect() as conn:
+        # 设置 IVFFlat probes 控制检索精度/速度平衡
+        await conn.execute(text(f"SET LOCAL ivfflat.probes = {_IVFFLAT_PROBES}"))
         result = await conn.execute(text(sql), {**params, "n_results": n_results})
         rows = result.fetchall()
 
@@ -277,13 +275,13 @@ async def query_documents(
         chunk_id = row[0]
         ids_list.append(chunk_id)
         documents_list.append(row[1])
-        distances_list.append(float(row[2]) if row[2] is not None else 1.0)
+        distances_list.append(float(row[3]) if row[3] is not None else 1.0)
         metadatas_list.append({
-            "doc_id": chunk_id.rsplit("_", 1)[0] if "_" in chunk_id else "",
-            "source": row[3] or "",
-            "page": str(row[4]) if row[4] else "",
-            "section": row[5] or "",
-            "user_id": row[6] or "",
+            "doc_id": row[2] or "",
+            "source": row[4] or "",
+            "page": int(row[5]) if row[5] is not None else None,
+            "section": row[6] or "",
+            "user_id": row[7] or "",
         })
 
     return {

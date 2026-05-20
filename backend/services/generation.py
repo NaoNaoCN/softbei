@@ -15,8 +15,10 @@ from loguru import logger  # noqa: F401
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agents.graph import get_graph
+from sqlalchemy import select as sa_select
+
 from backend.db.crud import insert_many, select_one, update_by_id
-from backend.db.models import GenerationTask, KGNode, QuizItem, ResourceMeta
+from backend.db.models import GenerationTask, KGNode, LearningPathItem, QuizItem, ResourceMeta
 from backend.models.schemas import (
     AgentState,
     GenerateRequest,
@@ -129,11 +131,16 @@ async def run_generation(
             try:
                 recommendations = (state.metadata or {}).get("recommendations", [])
                 if recommendations:
-                    valid_recs = []
-                    for rec in recommendations:
-                        rec_kp_id = rec.get("kp_id")
-                        if rec_kp_id and await select_one(db, KGNode, filters={"id": rec_kp_id}):
-                            valid_recs.append(rec)
+                    # 批量验证 KGNode 存在性（单次 IN 查询替代逐条 select_one）
+                    kp_ids = [rec.get("kp_id") for rec in recommendations if rec.get("kp_id")]
+                    existing_kp_ids: set[str] = set()
+                    if kp_ids:
+                        result = await db.execute(
+                            sa_select(KGNode.id).where(KGNode.id.in_(kp_ids))
+                        )
+                        existing_kp_ids = {row[0] for row in result.fetchall()}
+
+                    valid_recs = [rec for rec in recommendations if rec.get("kp_id") in existing_kp_ids]
 
                     if valid_recs:
                         existing = await pathway_svc.list_pathways(int(user_id), db)
@@ -144,13 +151,16 @@ async def run_generation(
                                 db,
                             )
                             if new_path:
-                                for i, rec in enumerate(valid_recs):
-                                    await pathway_svc.add_pathway_item(
-                                        int(new_path.id),
-                                        int(user_id),
-                                        LearningPathItemCreate(kp_id=rec["kp_id"], order_index=i),
-                                        db,
-                                    )
+                                # 批量插入 LearningPathItem（单次 insert_many 替代逐条 add_pathway_item）
+                                items_data = [
+                                    {
+                                        "path_id": new_path.id,
+                                        "kp_id": rec["kp_id"],
+                                        "order_index": i,
+                                    }
+                                    for i, rec in enumerate(valid_recs)
+                                ]
+                                await insert_many(db, LearningPathItem, data_list=items_data)
             except Exception as e:
                 logger.warning("[auto_pathway] failed to auto-create pathway: %s", e)
 

@@ -67,9 +67,6 @@ async def retrieve(
         return []
 
     # 构建用户隔离过滤条件
-    # 策略：用户可以检索自己上传的文档 + 公共文档（user_id 为空字符串）
-    # 注意：对于尚未迁移的旧数据（无 user_id 字段），过滤可能返回空结果，
-    # 此时回退到无过滤检索并记录警告。
     effective_where = where
     if user_id:
         user_filter = {"$or": [
@@ -81,13 +78,21 @@ async def retrieve(
         else:
             effective_where = user_filter
 
+    # 预取更多候选（3x），用于后续 re-rank 精排
+    prefetch_count = max(_n_results * 3, 15)
     raw = await query_documents(
         query_embedding=embedding,
-        n_results=_n_results,
+        n_results=prefetch_count,
         where=effective_where,
         collection_name=collection_name,
     )
     chunks = _parse_results(raw, _score_threshold)
+
+    # Re-rank: 对 cosine 结果做关键词重叠加权重排
+    if chunks:
+        chunks = _rerank_by_keyword_overlap(query, chunks)
+        chunks = chunks[:_n_results]
+
     if not chunks:
         logger.info(f"[RAG] 检索无结果（threshold={_score_threshold}），query={query[:60]!r}，将由 LLM 纯生成")
     else:
@@ -103,10 +108,11 @@ async def retrieve_by_kp(
 ) -> list[RetrievedChunk]:
     """
     按知识点名称检索相关文档片段。
-    在 query 中加入 "知识点：" 前缀以提升检索精度。
+    使用多角度查询扩展以提升检索覆盖率和精度。
     """
+    query = f"知识点：{kp_name}；定义：{kp_name}；{kp_name}的核心概念与原理"
     return await retrieve(
-        query=f"知识点：{kp_name}",
+        query=query,
         n_results=n_results,
         collection_name=collection_name,
         user_id=user_id,
@@ -132,7 +138,7 @@ def format_context(chunks: list[RetrievedChunk], max_tokens: int | None = None) 
         logger.warning("[RAG] format_context 收到空 chunks，LLM 将在无参考资料的情况下生成内容。")
         return "（暂无参考资料）"
     parts: list[str] = []
-    total_chars = 0
+    estimated_tokens = 0
     for i, chunk in enumerate(chunks, 1):
         source_info = f"来源：{chunk.source}"
         if chunk.page:
@@ -140,16 +146,48 @@ def format_context(chunks: list[RetrievedChunk], max_tokens: int | None = None) 
         if chunk.section:
             source_info += f"，{chunk.section}"
         entry = f"[{i}] （{source_info}）\n{chunk.text}"
-        if total_chars + len(entry) > _max_tokens * 2:  # 粗略字符估算
+        entry_tokens = _estimate_tokens(entry)
+        if estimated_tokens + entry_tokens > _max_tokens:
             break
         parts.append(entry)
-        total_chars += len(entry)
+        estimated_tokens += entry_tokens
     return "\n\n".join(parts)
 
 
 # ----------------------------------------------------------
 # 内部辅助
 # ----------------------------------------------------------
+
+def _estimate_tokens(text: str) -> int:
+    """按语言比例估算 token 数。中文 ~1.5 chars/token，英文 ~4 chars/token。"""
+    import re
+    cn_chars = len(re.findall(r'[\u4e00-\u9fff]', text))
+    en_chars = len(text) - cn_chars
+    return int(cn_chars / 1.5 + en_chars / 4.0)
+
+
+def _rerank_by_keyword_overlap(query: str, chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+    """
+    轻量级 re-rank：基于查询关键词与文档文本的重叠度对 cosine 分加权。
+    不引入额外模型依赖，计算成本极低。
+    """
+    # 提取查询关键词（2字及以上中文字 + 3字及以上英文词）
+    import re
+    keywords = set(re.findall(r'[\u4e00-\u9fff]{2,}', query))
+    keywords |= set(w.lower() for w in re.findall(r'[a-zA-Z]{3,}', query))
+
+    if not keywords:
+        return sorted(chunks, key=lambda c: c.score, reverse=True)
+
+    for chunk in chunks:
+        text_lower = chunk.text.lower()
+        overlap = sum(1 for kw in keywords if kw in text_lower)
+        # 关键词重叠加分：最高 +0.15
+        boost = min(overlap / max(len(keywords), 1), 1.0) * 0.15
+        chunk.score = round(chunk.score + boost, 4)
+
+    return sorted(chunks, key=lambda c: c.score, reverse=True)
+
 
 def _parse_results(raw: dict, score_threshold: float) -> list[RetrievedChunk]:
     """将 QueryResult 转换为 RetrievedChunk 列表并过滤。"""
