@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Context
 
-第十五届中国软件杯 A3 赛题 — 个性化资源生成与学习多智能体系统。面向高等教育场景，通过 9 个 LangGraph Agent 协同为学生自动生成个性化学习资源。
+第十五届中国软件杯 A3 赛题 — 个性化资源生成与学习多智能体系统。面向高等教育场景，通过 11 个 LangGraph Agent 协同为学生自动生成个性化学习资源。
+
+题目链接：https://www.cnsoftbei.com/content-3-1286-1.html
 
 ## Commands
 
