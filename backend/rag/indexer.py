@@ -86,6 +86,7 @@ async def index_chunks(
                     "page": str(c.page or ""),
                     "section": c.section or "",
                     "user_id": user_id or "",
+                    **c.metadata,
                 }
                 for c in batch
             ],

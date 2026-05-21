@@ -55,7 +55,7 @@ class _CollectionProxy:
                 conditions.append(where_clause)
                 params.update(where_params)
 
-        sql = f"SELECT chunk_id, text, doc_id, embedding, source, page, section, user_id FROM document_chunk WHERE {' AND '.join(conditions)}"
+        sql = f"SELECT chunk_id, text, doc_id, embedding, source, page, section, user_id, metadata FROM document_chunk WHERE {' AND '.join(conditions)}"
         if limit is not None:
             limit_val = int(limit)
             sql += f" LIMIT {limit_val}"
@@ -70,13 +70,18 @@ class _CollectionProxy:
         for row in rows:
             ids_list.append(row[0])
             documents_list.append(row[1])
-            metadatas_list.append({
+            meta = {
                 "doc_id": row[2] or "",
                 "source": row[4] or "",
                 "page": int(row[5]) if row[5] is not None else None,
                 "section": row[6] or "",
                 "user_id": row[7] or "",
-            })
+            }
+            # 合并 JSONB metadata 到结果中
+            raw_metadata = row[8] if len(row) > 8 else None
+            if raw_metadata and isinstance(raw_metadata, dict):
+                meta.update(raw_metadata)
+            metadatas_list.append(meta)
 
         return {
             "ids": ids_list,
@@ -111,11 +116,19 @@ def get_collection() -> _CollectionProxy:
 
 def _convert_metadata_to_columns(meta: dict) -> dict:
     """将 metadata dict 转换为列值。"""
+    import json
+
+    # 提取 extra metadata（排除固定列字段）
+    extra_meta = {
+        k: v for k, v in meta.items()
+        if k not in ("source", "page", "section", "user_id", "doc_id", "chunk_id")
+    }
     return {
         "source": meta.get("source", ""),
         "page": int(meta["page"]) if meta.get("page") and str(meta["page"]).isdigit() else None,
         "section": meta.get("section", ""),
         "user_id": meta.get("user_id", ""),
+        "metadata_": json.dumps(extra_meta, ensure_ascii=False) if extra_meta else None,
     }
 
 
@@ -138,7 +151,7 @@ async def upsert_documents(
 
     columns = [
         "id", "chunk_id", "doc_id", "collection_name", "text",
-        "embedding", "source", "page", "section", "user_id", "created_at",
+        "embedding", "source", "page", "section", "user_id", "metadata", "created_at",
     ]
     value_rows: list[str] = []
     params: dict = {}
@@ -152,7 +165,7 @@ async def upsert_documents(
         row_placeholders = ", ".join([
             f":id_{i}", f":chunk_id_{i}", f":doc_id_{i}", f":col_{i}",
             f":text_{i}", f":emb_{i}", f":source_{i}", f":page_{i}",
-            f":section_{i}", f":user_id_{i}", "NOW()",
+            f":section_{i}", f":user_id_{i}", f":metadata__{i}", "NOW()",
         ])
         value_rows.append(f"({row_placeholders})")
         params.update({
@@ -166,6 +179,7 @@ async def upsert_documents(
             f"page_{i}": cols["page"],
             f"section_{i}": cols["section"],
             f"user_id_{i}": cols["user_id"],
+            f"metadata__{i}": cols["metadata_"],
         })
 
     sql = f"""
@@ -177,7 +191,8 @@ async def upsert_documents(
             source = EXCLUDED.source,
             page = EXCLUDED.page,
             section = EXCLUDED.section,
-            user_id = EXCLUDED.user_id
+            user_id = EXCLUDED.user_id,
+            metadata = EXCLUDED.metadata
     """
 
     async with engine.begin() as conn:
@@ -253,7 +268,8 @@ async def query_documents(
             source,
             page,
             section,
-            user_id
+            user_id,
+            metadata
         FROM document_chunk
         WHERE {' AND '.join(conditions)}
         ORDER BY embedding <=> :embedding
@@ -276,13 +292,18 @@ async def query_documents(
         ids_list.append(chunk_id)
         documents_list.append(row[1])
         distances_list.append(float(row[3]) if row[3] is not None else 1.0)
-        metadatas_list.append({
+        meta = {
             "doc_id": row[2] or "",
             "source": row[4] or "",
             "page": int(row[5]) if row[5] is not None else None,
             "section": row[6] or "",
             "user_id": row[7] or "",
-        })
+        }
+        # 合并 JSONB metadata 到结果中
+        raw_metadata = row[8] if len(row) > 8 else None
+        if raw_metadata and isinstance(raw_metadata, dict):
+            meta.update(raw_metadata)
+        metadatas_list.append(meta)
 
     return {
         "ids": [ids_list],
@@ -319,7 +340,7 @@ async def get_documents_by_doc_id(doc_id: str, collection_name: Optional[str] = 
     engine = get_engine()
     async with engine.connect() as conn:
         result = await conn.execute(
-            text("SELECT text, source, page, section, user_id FROM document_chunk WHERE doc_id = :doc_id ORDER BY created_at"),
+            text("SELECT text, source, page, section, user_id, metadata FROM document_chunk WHERE doc_id = :doc_id ORDER BY created_at"),
             {"doc_id": doc_id},
         )
         rows = result.fetchall()
@@ -328,12 +349,17 @@ async def get_documents_by_doc_id(doc_id: str, collection_name: Optional[str] = 
     metadatas = []
     for row in rows:
         documents.append(row[0])
-        metadatas.append({
+        meta = {
             "source": row[1] or "",
             "page": str(row[2]) if row[2] else "",
             "section": row[3] or "",
             "user_id": row[4] or "",
-        })
+        }
+        # 合并 JSONB metadata 到结果中
+        raw_metadata = row[5] if len(row) > 5 else None
+        if raw_metadata and isinstance(raw_metadata, dict):
+            meta.update(raw_metadata)
+        metadatas.append(meta)
 
     return {"documents": documents, "metadatas": metadatas}
 

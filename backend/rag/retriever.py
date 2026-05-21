@@ -5,7 +5,7 @@ RAG 检索器：给定用户问题，返回相关文本块及其来源引用。
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from loguru import logger  # noqa: F401
@@ -27,6 +27,7 @@ class RetrievedChunk:
     source: str         # 原始文件路径
     page: Optional[int] = None
     section: Optional[str] = None
+    metadata: dict = field(default_factory=dict)  # 扩展元数据（JSONB，如 language、chunk_type 等）
 
 
 # ----------------------------------------------------------
@@ -145,6 +146,23 @@ def format_context(chunks: list[RetrievedChunk], max_tokens: int | None = None) 
             source_info += f"，第 {chunk.page} 页"
         if chunk.section:
             source_info += f"，{chunk.section}"
+        # 附加扩展元数据（若有）
+        extra_info_parts = []
+        if chunk.metadata.get("chunk_type"):
+            type_labels = {"definition": "定义", "theorem": "定理", "example": "示例",
+                          "exercise": "习题", "summary": "总结"}
+            ct = chunk.metadata["chunk_type"]
+            extra_info_parts.append(type_labels.get(ct, ct))
+        if chunk.metadata.get("language"):
+            lang_labels = {"zh": "中文", "en": "英文", "mixed": "中英混合"}
+            lang = chunk.metadata["language"]
+            extra_info_parts.append(lang_labels.get(lang, lang))
+        if chunk.metadata.get("difficulty"):
+            diff_labels = {"beginner": "入门", "intermediate": "进阶", "advanced": "高级"}
+            diff = chunk.metadata["difficulty"]
+            extra_info_parts.append(diff_labels.get(diff, diff))
+        if extra_info_parts:
+            source_info += " [" + ", ".join(extra_info_parts) + "]"
         entry = f"[{i}] （{source_info}）\n{chunk.text}"
         entry_tokens = _estimate_tokens(entry)
         if estimated_tokens + entry_tokens > _max_tokens:
@@ -201,6 +219,9 @@ def _parse_results(raw: dict, score_threshold: float) -> list[RetrievedChunk]:
         score = 1.0 - float(dist)
         if score < score_threshold:
             continue
+        # 提取固定字段以外的扩展元数据
+        fixed_keys = {"doc_id", "source", "page", "section", "user_id"}
+        extra_meta = {k: v for k, v in meta.items() if k not in fixed_keys}
         chunks.append(
             RetrievedChunk(
                 chunk_id=cid,
@@ -210,6 +231,7 @@ def _parse_results(raw: dict, score_threshold: float) -> list[RetrievedChunk]:
                 source=meta.get("source", ""),
                 page=int(meta["page"]) if meta.get("page") else None,
                 section=meta.get("section") or None,
+                metadata=extra_meta,
             )
         )
     return sorted(chunks, key=lambda c: c.score, reverse=True)

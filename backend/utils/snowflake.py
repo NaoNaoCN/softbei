@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import random
 import threading
 import time
 
@@ -18,7 +17,7 @@ _worker_id = int(os.environ.get("SNOWFLAKE_WORKER_ID", str(random.randint(0, 31)
 # 数据中心 ID（0-31），从环境变量或随机生成
 _datacenter_id = int(os.environ.get("SNOWFLAKE_DATACENTER_ID", str(random.randint(0, 31))))
 
-_sequence = random.randint(0, 4095)
+_sequence = 0
 _last_timestamp = 0
 _lock = threading.Lock()
 
@@ -31,7 +30,7 @@ def generate_id() -> int:
     - 41 bits: 毫秒时间戳 (相对 _EPOCH)
     -  5 bits: 数据中心 ID
     -  5 bits: 机器 ID
-    - 12 bits: 序列号
+    - 12 bits: 序列号（每毫秒从 0 递增）
     """
     global _sequence, _last_timestamp
 
@@ -44,7 +43,7 @@ def generate_id() -> int:
                 while timestamp <= _last_timestamp:
                     timestamp = int(time.time() * 1000)
         else:
-            _sequence = random.randint(0, 4095)
+            _sequence = 0
         _last_timestamp = timestamp
 
     return int(
