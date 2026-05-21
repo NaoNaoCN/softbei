@@ -20,7 +20,7 @@ vector_db:
 llm:
   api_key: "${LLM_API_KEY}"
   base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-  model: "qwen3.5-plus-2026-02-15"
+  model: "qwen-flash-character-2026-02-26"
   provider: "qwen"
   default_max_tokens: 2048       # 默认最大输出 token 数
 
@@ -48,7 +48,7 @@ llm:
       default_model: "deepseek-chat"
     qwen:
       base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-      default_model: "qwen3.5-plus-2026-02-15"
+      default_model: "qwen-flash-character-2026-02-26"
     openai:
       base_url: "https://api.openai.com/v1"
       default_model: "gpt-4o-mini"
@@ -96,7 +96,7 @@ chat:
 
 # 知识图谱构建配置
 knowledge_graph:
-  llm_concurrency: 10           # 构建时 LLM 并发上限
+  llm_concurrency: 10          # 构建时 LLM 并发上限（DashScope 免费额度限制较低）
   max_batches: 30               # 送入 LLM 的最大文本批数
   toc_max_items: 100            # TOC 条目数上限（超出后裁剪）
   batch_chars_limit: 12000      # 每批最大字符数
@@ -211,6 +211,15 @@ pagination:
 server:
   version: "0.1.0"
   cors_origins: ["*"]
+
+# 视频搜索配置
+video_search:
+  enabled: true                   # 总开关
+  max_results: 3                  # 最大返回视频数
+  min_query_length: 2             # 查询词最短长度
+  bilibili_timeout: 5             # Bilibili HTTP 超时（秒）
+  tavily_api_key: "${TAVILY_API_KEY}"  # Tavily 备选源 API Key（可选）
+  tavily_timeout: 8               # Tavily HTTP 超时（秒）
 
 # 认证配置
 auth:
