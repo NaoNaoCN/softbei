@@ -429,19 +429,31 @@ def _parse_markdown_to_chunks(
     """
     sections = _split_markdown_by_headers(md_text)
 
+    # 从文件路径提取课程名（取直接父目录名）
+    course = Path(source_path).parent.name if Path(source_path).parent.name else None
+
     chunks: list[TextChunk] = []
     chunk_index = 0
 
     for section_title, section_text in sections:
         sub_chunks = split_text(section_text)
         for sub_chunk in sub_chunks:
+            meta = {}
+            # 自动检测语言
+            lang = _detect_language(sub_chunk)
+            if lang:
+                meta["language"] = lang
+            # 自动填充课程名
+            if course:
+                meta["course"] = course
+
             chunk = TextChunk(
                 chunk_id=f"{doc_id}_{chunk_index}",
                 text=sub_chunk,
                 doc_id=doc_id,
                 source_path=source_path,
                 section=section_title,
-                metadata={},
+                metadata=meta,
             )
             chunks.append(chunk)
             chunk_index += 1
@@ -553,3 +565,22 @@ def load_directory_as_documents(
     """
     chunks = load_directory(dir_path, glob_pattern, recursive)
     return [chunk.to_langchain_doc() for chunk in chunks]
+
+
+def _detect_language(text: str) -> str:
+    """
+    检测文本语言：统计中文字符和英文字符比例。
+
+    :return: "zh" | "en" | "mixed"
+    """
+    cn_chars = len(re.findall(r'[\u4e00-\u9fff]', text))
+    en_chars = len(re.findall(r'[a-zA-Z]', text))
+    total = cn_chars + en_chars
+    if total == 0:
+        return "unknown"
+    cn_ratio = cn_chars / total
+    if cn_ratio > 0.75:
+        return "zh"
+    elif cn_ratio < 0.25:
+        return "en"
+    return "mixed"
