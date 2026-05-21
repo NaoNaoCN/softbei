@@ -148,7 +148,7 @@ async def upsert_documents(
     ):
         cols = _convert_metadata_to_columns(meta)
         doc_id = meta.get("doc_id", "")
-        # pgvector 的 asyncpg codec 自动将 list[float] 转为向量格式，无需手动拼字符串
+        # 使用 text() 绑定参数时，pgvector 需要向量以字符串形式传入
         row_placeholders = ", ".join([
             f":id_{i}", f":chunk_id_{i}", f":doc_id_{i}", f":col_{i}",
             f":text_{i}", f":emb_{i}", f":source_{i}", f":page_{i}",
@@ -161,7 +161,7 @@ async def upsert_documents(
             f"doc_id_{i}": doc_id,
             f"col_{i}": col,
             f"text_{i}": doc_text,
-            f"emb_{i}": emb,          # list[float] — pgvector asyncpg codec 自动转换
+            f"emb_{i}": str(emb),     # pgvector 需要字符串格式 "[0.1, 0.2, ...]"
             f"source_{i}": cols["source"],
             f"page_{i}": cols["page"],
             f"section_{i}": cols["section"],
@@ -236,8 +236,8 @@ async def query_documents(
     engine = get_engine()
 
     conditions = ["collection_name = :cn"]
-    # pgvector 的 asyncpg codec 自动将 list[float] 转为向量格式
-    params: dict = {"cn": col, "embedding": query_embedding}
+    # pgvector 需要字符串格式的向量
+    params: dict = {"cn": col, "embedding": str(query_embedding)}
 
     where_clause, where_params = _build_where_clause(where)
     if where_clause:

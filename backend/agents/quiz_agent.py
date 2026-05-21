@@ -9,7 +9,7 @@ import json
 
 from loguru import logger  # noqa: F401
 
-from backend.config import config
+from backend.config import config as app_config
 from backend.models.schemas import AgentState, QuestionType
 from backend.agents.utils import resolve_kp_name, retrieve_context, parse_json_llm_response
 from backend.services.llm import chat_completion
@@ -41,14 +41,14 @@ SYSTEM_PROMPT = """你是一位出题专家。
 def _get_question_counts(profile) -> tuple[int, int, int]:
     """根据画像决定题目数量分布。"""
     if not profile:
-        return tuple(config.generation.quiz.counts_default)
+        return tuple(app_config.generation.quiz.counts_default)
     # 根据薄弱知识点数量决定题目量
     weak_count = len(getattr(profile, "knowledge_weak", []) or [])
-    if weak_count > config.generation.quiz.weak_threshold_high:
-        return tuple(config.generation.quiz.counts_high)
-    elif weak_count > config.generation.quiz.weak_threshold_mid:
-        return tuple(config.generation.quiz.counts_mid)
-    return tuple(config.generation.quiz.counts_default)
+    if weak_count > app_config.generation.quiz.weak_threshold_high:
+        return tuple(app_config.generation.quiz.counts_high)
+    elif weak_count > app_config.generation.quiz.weak_threshold_mid:
+        return tuple(app_config.generation.quiz.counts_mid)
+    return tuple(app_config.generation.quiz.counts_default)
 
 
 async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
@@ -104,8 +104,8 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     try:
         raw = await chat_completion(
             [{"role": "user", "content": prompt}],
-            temperature=config.agents.quiz.temperature,
-            max_tokens=config.agents.quiz.max_tokens,
+            temperature=app_config.agents.quiz.temperature,
+            max_tokens=app_config.agents.quiz.max_tokens,
         )
 
         # 解析 JSON

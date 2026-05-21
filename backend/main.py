@@ -945,7 +945,7 @@ async def get_quiz_items(
         items = res.content_json["items"]
         return [
             QuizItemOut(
-                id=string_to_id(f"{resource_id}-{idx}"),
+                id=item.get("id") or string_to_id(f"{resource_id}-{idx}"),
                 kp_id=res.kp_id,
                 question_type=QuestionType(item["question_type"]) if item.get("question_type") else QuestionType.single,
                 difficulty=item.get("difficulty"),
@@ -1009,6 +1009,23 @@ async def submit_quiz(
 
     if not quiz_item and found_answer is None:
         raise HTTPException(status_code=404, detail="Quiz item not found")
+
+    # 题目来自 content_json 但不在 quiz_item 表中，先持久化以满足外键约束
+    if not quiz_item and found_answer is not None:
+        quiz_item = await insert(
+            db, QuizItem,
+            data={
+                "id": body.quiz_item_id,
+                "resource_id": res.id,
+                "kp_id": found_kp_id,
+                "question_type": found_qtype or "single",
+                "stem": item.get("stem", ""),
+                "options": item.get("options"),
+                "answer": str(found_answer),
+                "explanation": item.get("explanation"),
+                "order_index": idx,
+            },
+        )
 
     def extract_letters(text: str) -> set[str]:
         return set(re.findall(r'\b([A-Z])\b', text))

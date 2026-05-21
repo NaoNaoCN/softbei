@@ -9,7 +9,7 @@ import json
 
 from loguru import logger  # noqa: F401
 
-from backend.config import config
+from backend.config import config as app_config
 from backend.models.schemas import AgentState
 from backend.agents.utils import parse_json_llm_response
 from backend.services import profile as profile_svc
@@ -18,7 +18,7 @@ from backend.db.crud import select as db_select
 from langchain_core.runnables import RunnableConfig
 
 SYSTEM_PROMPT = f"""你是一位智能学习顾问。
-根据学生的当前画像和已学知识点，从知识图谱中推荐 {config.agents.recommend.min_recommendations}-{config.agents.recommend.max_recommendations} 个下一步应学习的知识点。
+根据学生的当前画像和已学知识点，从知识图谱中推荐 {app_config.agents.recommend.min_recommendations}-{app_config.agents.recommend.max_recommendations} 个下一步应学习的知识点。
 
 学生画像：
 {{profile}}
@@ -37,7 +37,7 @@ SYSTEM_PROMPT = f"""你是一位智能学习顾问。
 - 如果可选知识点为空或不可用，返回空数组 []
 
 以 JSON 数组返回，每项包含：
-{{"kp_id": "...", "kp_name": "...", "reason": "推荐原因"}}
+{{{{"kp_id": "...", "kp_name": "...", "reason": "推荐原因"}}}}
 """
 
 
@@ -109,8 +109,8 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     try:
         raw = await chat_completion(
             [{"role": "user", "content": prompt}],
-            temperature=config.agents.recommend.temperature,
-            max_tokens=config.agents.recommend.max_tokens,
+            temperature=app_config.agents.recommend.temperature,
+            max_tokens=app_config.agents.recommend.max_tokens,
         )
         # 去除 LLM 可能返回的 markdown 代码块包裹
         cleaned = parse_json_llm_response(raw)

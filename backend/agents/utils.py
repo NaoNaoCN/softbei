@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from loguru import logger  # noqa: F401
 
-from backend.config import config
+from backend.config import config as app_config
 from backend.models.schemas import AgentState
 
 
@@ -104,11 +104,11 @@ async def retrieve_context(
     t_start = time.perf_counter()
     chunks = []
     try:
-        chunks = await retrieve_by_kp(kp_name, n_results=config.rag.n_results, user_id=str(user_id))
-        context = format_context(chunks, max_tokens=config.rag.context_max_tokens)
+        chunks = await retrieve_by_kp(kp_name, n_results=app_config.rag.n_results, user_id=str(user_id))
+        context = format_context(chunks, max_tokens=app_config.rag.context_max_tokens)
         retrieved_texts = [c.text for c in chunks]
         if chunks:
-            logger.info("[%s] RAG 检索到 %d 条参考资料", agent_label, len(chunks))
+            logger.info("[%s] RAG 检索到 %d 条参考资料" % (agent_label, len(chunks)))
         else:
             logger.warning("[%s] RAG 未检索到参考资料，降级为纯 LLM 生成", agent_label)
     except Exception as e:

@@ -9,7 +9,7 @@ import json
 
 from loguru import logger  # noqa: F401
 
-from backend.config import config
+from backend.config import config as app_config
 from backend.models.schemas import AgentState
 from backend.agents.utils import parse_json_llm_response
 from backend.services.llm import chat_completion
@@ -58,8 +58,8 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     logger.info(f"[SafetyAgent] 开始审核，draft_len={len(state.draft_content)}")
 
     # 构造上下文（只取前 N 条参考资料，draft 只取前 N 字用于审核）
-    max_ref = config.agents.safety.max_ref_docs
-    preview_chars = config.agents.safety.draft_preview_chars
+    max_ref = app_config.agents.safety.max_ref_docs
+    preview_chars = app_config.agents.safety.draft_preview_chars
     context = "\n".join(state.retrieved_docs[:max_ref]) if state.retrieved_docs else "（无参考资料）"
     draft_preview = state.draft_content[:preview_chars]
     prompt = SYSTEM_PROMPT.format(context=context, draft_preview=draft_preview)
@@ -67,8 +67,8 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     try:
         raw = await chat_completion(
             [{"role": "user", "content": prompt}],
-            temperature=config.agents.safety.temperature,
-            max_tokens=config.agents.safety.max_tokens,  # 只需返回 passed + issues
+            temperature=app_config.agents.safety.temperature,
+            max_tokens=app_config.agents.safety.max_tokens,  # 只需返回 passed + issues
         )
         # 去除 markdown 代码块包裹
         cleaned = parse_json_llm_response(raw)

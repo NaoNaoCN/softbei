@@ -16,8 +16,8 @@ from backend.rag.loader import TextChunk
 from backend.services.llm import get_embeddings_batch
 
 
-# DashScope text-embedding-v4 单次 API 最多 25 条
-_API_MAX_BATCH = 25
+# DashScope text-embedding-v4 单次 API 最多 10 条
+_API_MAX_BATCH = 10
 
 
 # ----------------------------------------------------------
@@ -71,6 +71,10 @@ async def index_chunks(
             f"[Indexer] 正在 embedding 第 {i+1}-{i+len(batch)}/{len(chunks)} 块..."
         )
         embeddings = await _embed_batch([c.text for c in batch])
+        # 如果 embedding 失败（返回空向量），跳过本批写入，避免数据库类型错误
+        if not embeddings or any(len(e) == 0 for e in embeddings):
+            logger.warning(f"[Indexer] 第 {batch_num}/{total_batches} 批 embedding 失败，跳过写入")
+            continue
         await upsert_documents(
             ids=[c.chunk_id for c in batch],
             documents=[c.text for c in batch],

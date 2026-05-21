@@ -68,7 +68,7 @@ class StudentProfile(Base):
     major: Mapped[str | None] = mapped_column(String(128))
     learning_goal: Mapped[str | None] = mapped_column(Text)
     cognitive_style: Mapped[str | None] = mapped_column(
-        Enum(CognitiveStyle, values_callable=lambda e: [m.value for m in e])
+        Enum(CognitiveStyle, values_callable=lambda e: [m.value for m in e], native_enum=False)
     )
     daily_time_minutes: Mapped[int | None] = mapped_column(Integer)
     knowledge_mastered: Mapped[list | None] = mapped_column(JSON)
@@ -180,7 +180,7 @@ class KGNode(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)   # e.g. "kp_03_01"
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     node_type: Mapped[str] = mapped_column(
-        Enum(KGNodeType, values_callable=lambda e: [m.value for m in e]),
+        Enum(KGNodeType, values_callable=lambda e: [m.value for m in e], native_enum=False),
         nullable=False,
     )
     description: Mapped[str | None] = mapped_column(Text)
@@ -205,7 +205,7 @@ class KGEdge(Base):
     source_id: Mapped[str] = mapped_column(ForeignKey("kg_node.id"), nullable=False)
     target_id: Mapped[str] = mapped_column(ForeignKey("kg_node.id"), nullable=False)
     relation: Mapped[str] = mapped_column(
-        Enum(KGRelation, values_callable=lambda e: [m.value for m in e]),
+        Enum(KGRelation, values_callable=lambda e: [m.value for m in e], native_enum=False),
         nullable=False,
     )
 
@@ -230,7 +230,7 @@ class ResourceMeta(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
     kp_id: Mapped[str] = mapped_column(String(256), nullable=False)
     resource_type: Mapped[str] = mapped_column(
-        Enum(ResourceType, values_callable=lambda e: [m.value for m in e]),
+        Enum(ResourceType, values_callable=lambda e: [m.value for m in e], native_enum=False),
         nullable=False,
     )
     title: Mapped[str | None] = mapped_column(String(256))
@@ -254,7 +254,7 @@ class GenerationBatch(Base):
     )
     kp_id: Mapped[str] = mapped_column(String(256), nullable=False)
     status: Mapped[str] = mapped_column(
-        Enum(TaskStatus, values_callable=lambda e: [m.value for m in e]),
+        Enum(TaskStatus, values_callable=lambda e: [m.value for m in e], native_enum=False),
         default=TaskStatus.pending,
         nullable=False,
     )
@@ -275,7 +275,7 @@ class GenerationTask(Base):
         BigInteger, ForeignKey("generation_batch.id"), nullable=True, index=True,
     )
     status: Mapped[str] = mapped_column(
-        Enum(TaskStatus, values_callable=lambda e: [m.value for m in e]),
+        Enum(TaskStatus, values_callable=lambda e: [m.value for m in e], native_enum=False),
         default=TaskStatus.pending,
         nullable=False,
     )
@@ -303,7 +303,7 @@ class KGBuildTask(Base):
     doc_id: Mapped[str] = mapped_column(String(128), nullable=False)
     user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
     status: Mapped[str] = mapped_column(
-        Enum(TaskStatus, values_callable=lambda e: [m.value for m in e]),
+        Enum(TaskStatus, values_callable=lambda e: [m.value for m in e], native_enum=False),
         default=TaskStatus.pending,
         nullable=False,
     )
@@ -329,7 +329,7 @@ class QuizItem(Base):
     )
     kp_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     question_type: Mapped[str] = mapped_column(
-        Enum(QuestionType, values_callable=lambda e: [m.value for m in e]),
+        Enum(QuestionType, values_callable=lambda e: [m.value for m in e], native_enum=False),
         nullable=False,
     )
     stem: Mapped[str] = mapped_column(Text, nullable=False)

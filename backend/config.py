@@ -138,7 +138,7 @@ class ChatConfig:
 @dataclass
 class KnowledgeGraphConfig:
     """知识图谱构建配置"""
-    llm_concurrency: int = 10
+    llm_concurrency: int = 3
     max_batches: int = 30
     toc_max_items: int = 100
     batch_chars_limit: int = 12000
@@ -313,6 +313,17 @@ class AgentsConfig:
 # ===========================================================
 
 @dataclass
+class VideoSearchConfig:
+    """视频搜索配置"""
+    enabled: bool = True
+    max_results: int = 3
+    min_query_length: int = 2
+    bilibili_timeout: int = 5
+    tavily_api_key: str = ""
+    tavily_timeout: int = 8
+
+
+@dataclass
 class PaginationConfig:
     """分页配置"""
     default_limit: int = 20
@@ -354,6 +365,7 @@ class Config:
     pagination: PaginationConfig = field(default_factory=PaginationConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
+    video_search: VideoSearchConfig = field(default_factory=VideoSearchConfig)
 
 
 # ===========================================================
@@ -561,7 +573,7 @@ def _build_config() -> Config:
             token_estimation=token_estimation,
         ),
         knowledge_graph=KnowledgeGraphConfig(
-            llm_concurrency=_get("knowledge_graph.llm_concurrency", 10),
+            llm_concurrency=_get("knowledge_graph.llm_concurrency", 3),
             max_batches=_get("knowledge_graph.max_batches", 30),
             toc_max_items=_get("knowledge_graph.toc_max_items", 100),
             batch_chars_limit=_get("knowledge_graph.batch_chars_limit", 12000),
@@ -613,6 +625,14 @@ def _build_config() -> Config:
         ),
         auth=AuthConfig(
             bcrypt_rounds=_get("auth.bcrypt_rounds", 12),
+        ),
+        video_search=VideoSearchConfig(
+            enabled=_get("video_search.enabled", True),
+            max_results=_get("video_search.max_results", 3),
+            min_query_length=_get("video_search.min_query_length", 2),
+            bilibili_timeout=_get("video_search.bilibili_timeout", 5),
+            tavily_api_key=_get("video_search.tavily_api_key", ""),
+            tavily_timeout=_get("video_search.tavily_timeout", 8),
         ),
     )
 

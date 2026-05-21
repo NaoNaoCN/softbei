@@ -41,6 +41,7 @@ loguru>=0.7.0
 tenacity>=8.3.0         # 重试装饰器
 PyJWT>=2.8.0            # JWT 编解码
 bcrypt>=4.1.0           # 密码哈希（已用于 auth）
+jieba
 
 # ---- 测试 ----
 pytest>=8.2.0
