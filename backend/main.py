@@ -1063,14 +1063,25 @@ async def submit_quiz(
         },
     )
 
-    # 答对时写入学习记录，标记该知识点已通过测验
+    # 答对时写入学习记录，记录学习行为和时长
     kp = quiz_item.kp_id if quiz_item else found_kp_id
-    if is_correct and kp:
+    if kp:
+        # 时长：优先用前端上报的，否则默认估算 30 秒/题
+        quiz_duration = body.duration_seconds if body.duration_seconds else 30
         await insert(db, LearningRecord, data={
             "user_id": user_id,
             "kp_id": kp,
             "action": "quiz",
+            "duration_seconds": quiz_duration,
         })
+
+    # 测验提交后自动更新学生画像（基于正确率统计）
+    if kp:
+        from backend.services.profile import update_profile_from_quiz
+        try:
+            await update_profile_from_quiz(user_id, kp, db)
+        except Exception as e:
+            logger.warning(f"[QuizSubmit] 自动更新画像失败: {e}")
 
     return QuizAttemptOut(
         id=attempt.id,
@@ -1686,3 +1697,263 @@ async def list_eval_records(
         }
         for r in records
     ]
+
+
+# ===========================================================
+# 学习效果评估 — 综合分析仪表盘
+# ===========================================================
+
+@app.get("/analytics/dashboard", tags=["analytics"])
+async def get_learning_analytics(
+    user_id: int,
+    db: AsyncSession = Depends(get_session),
+):
+    """
+    综合学习分析仪表盘，返回：
+    1. quiz_mastery: 各知识点掌握度（正确率+做题数）
+    2. learning_behavior: 学习行为统计（总时长、日活跃度曲线）
+    3. forgetting_curve: 遗忘曲线提醒（需要复习的知识点）
+    4. radar_data: 能力雷达图数据
+    """
+    import sqlalchemy as sa
+    from datetime import datetime, timedelta
+    from collections import defaultdict
+
+    now = datetime.utcnow()
+
+    # ── 1. 知识掌握度量化（正确率 70% + 答题效率 30%） ──
+    quiz_rows = await db.execute(
+        sa.select(
+            QuizAttempt.kp_id,
+            sa.func.count().label("total"),
+            sa.func.sum(sa.case((QuizAttempt.is_correct == True, 1), else_=0)).label("correct"),
+        ).where(
+            QuizAttempt.user_id == user_id,
+            QuizAttempt.kp_id.isnot(None),
+        ).group_by(QuizAttempt.kp_id)
+    )
+    quiz_mastery = []
+    radar_indicators = []
+    for row in quiz_rows.all():
+        kp_id, total, correct = row.kp_id, row.total, row.correct or 0
+        accuracy = round(correct / total * 100) if total > 0 else 0
+
+        # 查询该知识点的平均答题时长
+        dur_row = await db.execute(
+            sa.select(
+                sa.func.avg(LearningRecord.duration_seconds).label("avg_sec")
+            ).where(
+                LearningRecord.user_id == user_id,
+                LearningRecord.kp_id == kp_id,
+                LearningRecord.action == "quiz",
+                LearningRecord.duration_seconds.isnot(None),
+                LearningRecord.duration_seconds > 0,
+            )
+        )
+        avg_sec = float(dur_row.scalar_one_or_none() or 0)
+
+        # 答题效率分：平均用时越短分越高（满分 100）
+        # <=15s: 100, 30s: 80, 45s: 60, 60s: 40, >=90s: 0
+        if avg_sec <= 0:
+            time_score = 50  # 无时长数据时给中等分
+        else:
+            time_score = max(0, min(100, round(100 - (avg_sec - 15) * (100 / 75))))
+
+        # 综合掌握度 = 正确率 * 0.7 + 答题效率 * 0.3
+        mastery_score = round(accuracy * 0.7 + time_score * 0.3)
+
+        # 查询知识点名称
+        kp_node = await db.execute(
+            sa.select(KGNode.name).where(KGNode.id == kp_id)
+        )
+        kp_name = kp_node.scalar_one_or_none() or kp_id
+        quiz_mastery.append({
+            "kp_id": kp_id,
+            "kp_name": kp_name,
+            "total": total,
+            "correct": correct,
+            "accuracy": accuracy,
+            "avg_seconds": round(avg_sec, 1),
+            "time_score": time_score,
+            "mastery_score": mastery_score,
+        })
+        radar_indicators.append({
+            "name": kp_name if len(str(kp_name)) <= 8 else str(kp_name)[:8] + "…",
+            "value": mastery_score,
+            "full_name": kp_name,
+        })
+
+    # ── 2. 学习行为分析 ──
+    # 近 30 天日学习时长
+    thirty_days_ago = now - timedelta(days=30)
+    lr_rows = await db.execute(
+        sa.select(
+            sa.func.date(LearningRecord.recorded_at).label("day"),
+            sa.func.sum(LearningRecord.duration_seconds).label("seconds"),
+            sa.func.count().label("actions"),
+        ).where(
+            LearningRecord.user_id == user_id,
+            LearningRecord.recorded_at >= thirty_days_ago,
+        ).group_by(sa.func.date(LearningRecord.recorded_at))
+        .order_by(sa.func.date(LearningRecord.recorded_at))
+    )
+    daily_data = []
+    total_seconds = 0
+    total_actions = 0
+    active_days = 0
+    for row in lr_rows.all():
+        day_str = str(row.day)
+        seconds = row.seconds or 0
+        actions = row.actions or 0
+        daily_data.append({
+            "date": day_str,
+            "minutes": round(seconds / 60, 1),
+            "actions": actions,
+        })
+        total_seconds += seconds
+        total_actions += actions
+        active_days += 1
+
+    # 连续学习天数（streak）
+    streak = 0
+    check_date = now.date()
+    day_set = {item["date"] for item in daily_data}
+    while str(check_date) in day_set:
+        streak += 1
+        check_date -= timedelta(days=1)
+
+    learning_behavior = {
+        "total_minutes": round(total_seconds / 60, 1),
+        "total_actions": total_actions,
+        "active_days": active_days,
+        "streak_days": streak,
+        "daily_trend": daily_data,
+    }
+
+    # ── 3. 遗忘曲线提醒 ──
+    # 对每个知识点，取最后学习时间，计算距今天数
+    # 基于艾宾浩斯遗忘曲线: 1天、2天、4天、7天、15天、30天
+    REVIEW_INTERVALS = [1, 2, 4, 7, 15, 30]
+    last_study_rows = await db.execute(
+        sa.select(
+            LearningRecord.kp_id,
+            sa.func.max(LearningRecord.recorded_at).label("last_at"),
+            sa.func.count().label("study_count"),
+        ).where(
+            LearningRecord.user_id == user_id,
+            LearningRecord.kp_id.isnot(None),
+        ).group_by(LearningRecord.kp_id)
+    )
+    forgetting_items = []
+    for row in last_study_rows.all():
+        kp_id = row.kp_id
+        last_at = row.last_at
+        study_count = row.study_count or 0
+        if not last_at:
+            continue
+        days_since = (now - last_at).days
+        # 判断是否需要复习
+        needs_review = False
+        next_review_day = None
+        for interval in REVIEW_INTERVALS:
+            if days_since >= interval:
+                needs_review = True
+                next_review_day = interval
+        # 查 kp name
+        kp_node = await db.execute(
+            sa.select(KGNode.name).where(KGNode.id == kp_id)
+        )
+        kp_name = kp_node.scalar_one_or_none() or kp_id
+        urgency = "high" if days_since >= 7 else ("medium" if days_since >= 3 else "low")
+        forgetting_items.append({
+            "kp_id": kp_id,
+            "kp_name": kp_name,
+            "days_since_last": days_since,
+            "study_count": study_count,
+            "needs_review": needs_review,
+            "urgency": urgency,
+        })
+    # 按紧迫度排序
+    urgency_order = {"high": 0, "medium": 1, "low": 2}
+    forgetting_items.sort(key=lambda x: (urgency_order.get(x["urgency"], 3), -x["days_since_last"]))
+
+    # ── 4. 能力雷达图数据 ──
+    # 取掌握度最高的 8 个知识点作为雷达维度
+    radar_sorted = sorted(radar_indicators, key=lambda x: x["value"], reverse=True)[:8]
+
+    # ── 5. 学习行为分类统计 ──
+    action_rows = await db.execute(
+        sa.select(
+            LearningRecord.action,
+            sa.func.count().label("count"),
+            sa.func.coalesce(sa.func.sum(LearningRecord.duration_seconds), 0).label("total_sec"),
+        ).where(
+            LearningRecord.user_id == user_id,
+        ).group_by(LearningRecord.action)
+    )
+    behavior_breakdown = []
+    for row in action_rows.all():
+        action_label = {"view": "浏览学习", "quiz": "答题练习", "complete": "完成学习"}.get(row.action, row.action)
+        behavior_breakdown.append({
+            "action": row.action,
+            "label": action_label,
+            "count": row.count,
+            "total_minutes": round(float(row.total_sec or 0) / 60, 1),
+        })
+
+    # ── 6. 资源使用情况（按实际使用次数统计，而非生成数量） ──
+    res_rows = await db.execute(
+        sa.select(
+            ResourceMeta.resource_type,
+            sa.func.count(LearningRecord.id).label("use_count"),
+            sa.func.count(sa.distinct(LearningRecord.resource_id)).label("res_count"),
+            sa.func.coalesce(sa.func.sum(LearningRecord.duration_seconds), 0).label("total_sec"),
+        ).join(
+            LearningRecord, LearningRecord.resource_id == ResourceMeta.id
+        ).where(
+            LearningRecord.user_id == user_id,
+        ).group_by(ResourceMeta.resource_type)
+    )
+    resource_usage = []
+    type_labels = {"doc": "文档讲义", "mindmap": "思维导图", "quiz": "测验题", "code": "代码示例", "summary": "知识总结"}
+    for row in res_rows.all():
+        rt = row.resource_type.value if hasattr(row.resource_type, 'value') else row.resource_type
+        resource_usage.append({
+            "type": rt,
+            "label": type_labels.get(rt, rt),
+            "count": row.use_count,
+            "res_count": row.res_count,
+            "total_minutes": round(float(row.total_sec or 0) / 60, 1),
+        })
+
+    # ── 7. 最近学习记录（最新 10 条） ──
+    recent_rows = await db.execute(
+        sa.select(LearningRecord)
+        .where(LearningRecord.user_id == user_id)
+        .order_by(LearningRecord.recorded_at.desc())
+        .limit(10)
+    )
+    recent_activities = []
+    for r in recent_rows.scalars().all():
+        action_label = {"view": "浏览学习", "quiz": "答题练习", "complete": "完成学习"}.get(r.action, r.action)
+        recent_activities.append({
+            "action": r.action,
+            "label": action_label,
+            "kp_id": r.kp_id,
+            "duration_seconds": r.duration_seconds,
+            "recorded_at": r.recorded_at.isoformat() if r.recorded_at else None,
+        })
+
+    return {
+        "quiz_mastery": quiz_mastery,
+        "learning_behavior": learning_behavior,
+        "forgetting_curve": forgetting_items,
+        "radar_data": {
+            "indicators": [{"name": r["name"], "max": 100} for r in radar_sorted],
+            "values": [r["value"] for r in radar_sorted],
+            "full_names": [r["full_name"] for r in radar_sorted],
+        },
+        "behavior_breakdown": behavior_breakdown,
+        "resource_usage": resource_usage,
+        "recent_activities": recent_activities,
+    }

@@ -302,11 +302,13 @@ export async function getQuizItems(resource_id, user_id) {
     return resp?.json();
 }
 
-export async function submitQuizAnswer(user_id, quiz_item_id, user_answer) {
+export async function submitQuizAnswer(user_id, quiz_item_id, user_answer, duration_seconds = null) {
+    const body = { quiz_item_id, user_answer };
+    if (duration_seconds) body.duration_seconds = duration_seconds;
     const resp = await apiFetch(`/quiz/submit?user_id=${encodeURIComponent(user_id)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quiz_item_id, user_answer })
+        body: JSON.stringify(body)
     });
     return resp?.json();
 }
@@ -397,5 +399,14 @@ export async function getLearningRecords(user_id, { kp_id, limit } = {}) {
     if (kp_id) url += `&kp_id=${encodeURIComponent(kp_id)}`;
     if (limit) url += `&limit=${limit}`;
     const resp = await apiFetch(url);
+    return resp?.json();
+}
+
+// ===========================================================
+// 学习分析仪表盘
+// ===========================================================
+
+export async function getLearningAnalytics(user_id) {
+    const resp = await apiFetch(`/analytics/dashboard?user_id=${encodeURIComponent(user_id)}`);
     return resp?.json();
 }
