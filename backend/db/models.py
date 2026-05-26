@@ -29,7 +29,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.db.database import Base
 from backend.models.schemas import (
     CognitiveStyle,
-    KGNodeType,
     KGRelation,
     QuestionType,
     ResourceType,
@@ -160,11 +159,17 @@ class DocumentChunk(Base):
     section: Mapped[str | None] = mapped_column(String(256))
     user_id: Mapped[str | None] = mapped_column(String(64))
     metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB, default=dict)
+    content_hash: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    parent_chunk_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    is_parent: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (
         Index("ix_document_chunk_doc_id", "doc_id"),
         Index("ix_document_chunk_user_id", "user_id"),
+        Index("ix_document_chunk_doc_id_hash", "doc_id", "content_hash"),
+        Index("ix_document_chunk_parent", "parent_chunk_id"),
+        Index("ix_document_chunk_is_parent", "is_parent"),
     )
 
 
@@ -181,10 +186,7 @@ class KGNode(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)   # e.g. "kp_03_01"
     name: Mapped[str] = mapped_column(String(256), nullable=False)
-    node_type: Mapped[str] = mapped_column(
-        Enum(KGNodeType, values_callable=lambda e: [m.value for m in e]),
-        nullable=False,
-    )
+    node_type: Mapped[str] = mapped_column(String(32), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     course_id: Mapped[str | None] = mapped_column(String(64))
     user_id: Mapped[int | None] = mapped_column(

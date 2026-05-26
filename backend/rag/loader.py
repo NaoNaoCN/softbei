@@ -37,6 +37,8 @@ class TextChunk:
     source_path: str            # 原始文件路径
     page: Optional[int] = None  # 页码（PDF）
     section: Optional[str] = None  # 章节标题
+    parent_chunk_id: Optional[str] = None  # 父块 chunk_id（子块回指父块）
+    is_parent: bool = False     # 自身是否为父块
     metadata: dict = field(default_factory=dict)  # 额外元数据
 
     def to_langchain_doc(self) -> Document:
@@ -249,6 +251,24 @@ def load_directory(
     return chunks
 
 
+def _find_table_regions(text: str) -> list[tuple[int, int]]:
+    """
+    找到 Markdown 管道表格区域，返回 (start, end) 位置列表。
+
+    识别格式：
+      | Header1 | Header2 |
+      |---------|---------|
+      | Data1   | Data2   |
+    """
+    pattern = re.compile(
+        r'^\|.+\|[ \t]*\n'        # 表头行
+        r'^\|[-:| ]+\|[ \t]*\n'   # 分隔行（|:---|:---:| 等）
+        r'(?:^\|.+\|[ \t]*\n)*',  # 数据行（0 或多行）
+        re.MULTILINE,
+    )
+    return [(m.start(), m.end()) for m in pattern.finditer(text)]
+
+
 def split_text(
     text: str,
     chunk_size: int | None = None,
@@ -257,6 +277,10 @@ def split_text(
     """
     将长文本按 chunk_size（字符数）切分，相邻块保留 overlap 字符的上下文。
     尽量在句子边界处切分，避免在词/句中间截断。
+
+    结构化内容保护：
+    - 代码块（```...```）：切分前替换为占位符，切分后还原，确保语法完整
+    - Markdown 表格：识别表格边界，在行尾切分；超长表格分割时重复表头
 
     :param text:        原始文本
     :param chunk_size:  每块字符数，默认使用配置值
@@ -272,25 +296,100 @@ def split_text(
     # overlap 不能超过 chunk_size，否则会导致无限循环
     overlap = min(overlap, chunk_size - 1)
 
+    # ---- 保护代码块：占位符策略（同 _split_markdown_by_headers） ----
+    code_block_pattern = re.compile(r'```[\s\S]*?```')
+    code_blocks: dict[str, str] = {}
+    code_counter = [0]
+
+    def _save_code(match: re.Match) -> str:
+        key = f"__CODE_BLOCK_{code_counter[0]}__"
+        code_blocks[key] = match.group(0)
+        code_counter[0] += 1
+        return key
+
+    protected_text = code_block_pattern.sub(_save_code, text)
+
+    def _restore_code(t: str) -> str:
+        for key, original in code_blocks.items():
+            t = t.replace(key, original)
+        return t
+
+    # ---- 找到表格区域 ----
+    table_regions = _find_table_regions(protected_text)
+
+    def _get_enclosing_table(pos: int) -> tuple[int, int] | None:
+        """若 pos 落在某个表格区域内，返回 (table_start, table_end)。"""
+        for ts, te in table_regions:
+            if ts <= pos < te:
+                return (ts, te)
+        return None
+
+    def _get_table_header(region_start: int) -> str:
+        """提取表格区域的表头+分隔行。"""
+        nl1 = protected_text.find('\n', region_start)
+        if nl1 == -1:
+            return ''
+        nl2 = protected_text.find('\n', nl1 + 1)
+        if nl2 == -1:
+            return ''
+        return protected_text[region_start:nl2 + 1]
+
     # 句子边界正则：。！？.!?\n
     sentence_endings = re.compile(r'[。！？.!?\n]')
 
     chunks: list[str] = []
     start = 0
-    while start < len(text):
-        end = min(start + chunk_size, len(text))
-        # 在 chunk_size 附近找最近的句子边界
-        if end < len(text):
-            # 从 end 往前找最近的分隔点（不超过 chunk_size 的 20%）
-            lookback = min(int(chunk_size * 0.2), end - start)
-            match = None
-            for m in sentence_endings.finditer(text, end - lookback, end):
-                match = m
-            if match is not None and match.end() > start:
-                end = match.end()
-        chunks.append(text[start:end].strip())
+    while start < len(protected_text):
+        end = min(start + chunk_size, len(protected_text))
+
+        if end < len(protected_text):
+            table_info = _get_enclosing_table(end)
+            if table_info is not None:
+                ts, te = table_info
+                if te - start <= chunk_size:
+                    # 整个表格能放进当前 chunk，扩展到表格结束
+                    end = te
+                else:
+                    # 表格太大，在行边界处切分
+                    nl = protected_text.find('\n', end)
+                    if nl != -1 and nl < te:
+                        end = nl + 1
+                    else:
+                        # 找不到换行符时往前找最近的行尾
+                        nl = protected_text.rfind('\n', start, end)
+                        if nl != -1 and nl > ts:
+                            end = nl + 1
+            else:
+                # 不在表格内，找句子边界
+                lookback = min(int(chunk_size * 0.2), end - start)
+                match = None
+                for m in sentence_endings.finditer(protected_text, end - lookback, end):
+                    match = m
+                if match is not None and match.end() > start:
+                    end = match.end()
+
+        chunk_text = protected_text[start:end].strip()
+
+        # 若当前 chunk 从表格内部开始（续前表），重复表头
+        table_info_start = _get_enclosing_table(start)
+        if table_info_start is not None and start > table_info_start[0]:
+            header = _get_table_header(table_info_start[0])
+            if header and not chunk_text.startswith(header.rstrip()):
+                chunk_text = header + chunk_text
+
+        # 还原代码块
+        chunk_text = _restore_code(chunk_text)
+        chunks.append(chunk_text)
+
         # 确保 forward progress：start 必须严格递增
         next_start = end - overlap
+
+        # 若重叠区域落在表格内，对齐到行首，避免产生残缺行
+        if _get_enclosing_table(next_start) is not None:
+            nl = protected_text.rfind('\n', 0, next_start)
+            if nl != -1:
+                next_start = nl + 1
+
         if next_start <= start:
             next_start = start + chunk_size - overlap
         start = max(start + 1, next_start)
@@ -410,6 +509,95 @@ def _backfill_page_numbers(
     return chunks
 
 
+def _split_into_parents(
+    text: str,
+    parent_max_chars: int = 2000,
+) -> list[str]:
+    """
+    将一段文本切分为父块。优先在段落边界（\\n\\n）处切分，
+    保护代码块（```...```）和表格的完整性。
+
+    :param text:             原始文本
+    :param parent_max_chars: 父块最大字符数
+    :return:                 父块文本列表
+    """
+    if len(text) <= parent_max_chars:
+        return [text] if text.strip() else []
+
+    # 保护代码块：占位符（与 split_text 一致）
+    code_pattern = re.compile(r'```[\s\S]*?```')
+    code_blocks: dict[str, str] = {}
+    code_counter = [0]
+
+    def _save_code(match: re.Match) -> str:
+        key = f"__PC_CODE_{code_counter[0]}__"
+        code_blocks[key] = match.group(0)
+        code_counter[0] += 1
+        return key
+
+    protected = code_pattern.sub(_save_code, text)
+
+    def _restore(t: str) -> str:
+        for key, original in code_blocks.items():
+            t = t.replace(key, original)
+        return t
+
+    # 找到表格区域
+    table_regions = _find_table_regions(protected) if _find_table_regions else []
+
+    def _in_table(pos: int) -> bool:
+        for ts, te in table_regions:
+            if ts <= pos < te:
+                return True
+        return False
+
+    chunks: list[str] = []
+    start = 0
+
+    while start < len(protected):
+        end = min(start + parent_max_chars, len(protected))
+
+        if end < len(protected):
+            # 在 parent_max_chars 附近找安全的切分点:
+            # 优先级: \\n\\n (段落边界) > \\n (行尾) > 句子边界 > 硬截断
+            lookback = min(400, end - start)
+            search_start = max(start, end - lookback)
+
+            best = -1
+            best_priority = -1
+
+            for pos in range(end, search_start - 1, -1):
+                if _in_table(pos):
+                    continue  # 不在表格内切分
+
+                # 检查代码块占位符边界（__PC_CODE_N__）
+                if pos > 0 and protected[pos-1:pos+13].startswith('__PC_CODE_'):
+                    continue
+
+                if protected[pos:pos+2] == '\n\n':
+                    # 还要确认这个 \n\n 不在代码占位符范围内
+                    best = pos + 2
+                    best_priority = 3
+                    break
+                elif best_priority < 2 and protected[pos] == '\n':
+                    best = pos + 1
+                    best_priority = 2
+                elif best_priority < 1 and protected[pos] in '。！？.!?':
+                    best = pos + 1
+                    best_priority = 1
+
+            if best > start and best_priority >= 0:
+                end = best
+
+        chunk_text = protected[start:end].strip()
+        chunk_text = _restore(chunk_text)
+        if chunk_text:
+            chunks.append(chunk_text)
+        start = end
+
+    return chunks
+
+
 # ----------------------------------------------------------
 # 私有辅助函数
 # ----------------------------------------------------------
@@ -422,11 +610,25 @@ def _parse_markdown_to_chunks(
     """
     将 Markdown 文本按标题（# / ## / ###）切分章节，每节再做字符级切分。
 
+    当 config.rag.parent_chunking.enabled 为 True 时，使用父子切割模式：
+    - 章节文本先按 parent_max_chars 切分为父块（不嵌入）
+    - 每个父块再按 child_chunk_size 切分为子块（嵌入 + 检索）
+    - 子块命中后，retriever 自动回填父块文本
+
     :param md_text:     Markdown 文本
     :param doc_id:      文档 ID
     :param source_path: 原始文件路径
-    :return:            TextChunk 列表
+    :return:            TextChunk 列表（含父块和子块）
     """
+    parent_cfg = getattr(config.rag, 'parent_chunking', None)
+    if parent_cfg and getattr(parent_cfg, 'enabled', False):
+        return _parse_markdown_to_chunks_parent_child(
+            md_text, doc_id, source_path,
+            parent_max_chars=getattr(parent_cfg, 'parent_max_chars', 2000),
+            child_chunk_size=getattr(parent_cfg, 'child_chunk_size', None),
+        )
+
+    # ---- 原逻辑：固定切分（向后兼容） ----
     sections = _split_markdown_by_headers(md_text)
 
     # 从文件路径提取课程名（取直接父目录名）
@@ -458,6 +660,94 @@ def _parse_markdown_to_chunks(
             chunks.append(chunk)
             chunk_index += 1
 
+    return chunks
+
+
+def _parse_markdown_to_chunks_parent_child(
+    md_text: str,
+    doc_id: str,
+    source_path: str,
+    parent_max_chars: int = 2000,
+    child_chunk_size: int | None = None,
+) -> list[TextChunk]:
+    """
+    父子切割模式：章节 → 父块 → 子块。
+
+    父块存储完整章节/大段文本（不嵌入），子块参与向量检索。
+    子块通过 parent_chunk_id 回指父块，检索后自动回填父块上下文。
+
+    :param md_text:          Markdown 文本
+    :param doc_id:           文档 ID
+    :param source_path:      原始文件路径
+    :param parent_max_chars: 父块最大字符数
+    :param child_chunk_size: 子块大小，None 使用 config.rag.chunk_size
+    :return:                 TextChunk 列表（父块在前，子块在后）
+    """
+    from backend.config import config as _cfg
+
+    sections = _split_markdown_by_headers(md_text)
+    course = Path(source_path).parent.name if Path(source_path).parent.name else None
+    child_size = child_chunk_size or _cfg.rag.chunk_size
+
+    chunks: list[TextChunk] = []
+    chunk_index = 0
+
+    for section_title, section_text in sections:
+        # Step 1: 将章节切分为父块（保护代码块/表格完整性）
+        parent_texts = _split_into_parents(section_text, parent_max_chars)
+
+        for parent_text in parent_texts:
+            parent_id = f"{doc_id}_p{chunk_index}"
+            chunk_index += 1
+
+            # 父块元数据
+            parent_meta = {}
+            lang = _detect_language(parent_text)
+            if lang:
+                parent_meta["language"] = lang
+            if course:
+                parent_meta["course"] = course
+
+            # 写入父块（is_parent=True，不嵌入）
+            parent_chunk = TextChunk(
+                chunk_id=parent_id,
+                text=parent_text,
+                doc_id=doc_id,
+                source_path=source_path,
+                section=section_title,
+                is_parent=True,
+                metadata=parent_meta,
+            )
+            chunks.append(parent_chunk)
+
+            # Step 2: 父块切分为子块，建立父子关系
+            child_texts = split_text(parent_text, chunk_size=child_size)
+            for child_text in child_texts:
+                child_meta = {}
+                lang = _detect_language(child_text)
+                if lang:
+                    child_meta["language"] = lang
+                if course:
+                    child_meta["course"] = course
+
+                child_chunk = TextChunk(
+                    chunk_id=f"{doc_id}_{chunk_index}",
+                    text=child_text,
+                    doc_id=doc_id,
+                    source_path=source_path,
+                    section=section_title,
+                    parent_chunk_id=parent_id,
+                    is_parent=False,
+                    metadata=child_meta,
+                )
+                chunks.append(child_chunk)
+                chunk_index += 1
+
+    logger.info(
+        f"[loader] 父子切割：{len(sections)} 个章节 → "
+        f"{sum(1 for c in chunks if c.is_parent)} 个父块 + "
+        f"{sum(1 for c in chunks if not c.is_parent)} 个子块"
+    )
     return chunks
 
 

@@ -220,8 +220,8 @@ async def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
         )
         return [d.embedding for d in response.data]
     except Exception as e:
-        logger.warning(f"[Embedding] 批量 embedding 失败: {e}，返回空向量")
-        return [[] for _ in texts]
+        logger.error(f"[Embedding] 批量 embedding 失败 ({len(texts)} 条文本): {e}")
+        raise
 
 
 async def check_embedding_health() -> bool:

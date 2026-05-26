@@ -80,7 +80,7 @@ embedding:
   timeout_connect: 10                    # API embedding 连接超时（秒）
   timeout_write: 30                      # API embedding 写入超时（秒）
   timeout_pool: 10                       # API embedding 连接池超时（秒）
-  index_batch_size: 128                  # 索引构建时每批处理的文本块数
+  index_batch_size: 10                   # 索引构建时每批处理的文本块数（DashScope API 上限 10）
   vector_dimension: 1024                 # 向量维度（text-embedding-v4 输出 1024 维）
 
 # ----------------------------------------------------------
@@ -93,6 +93,24 @@ rag:
   score_threshold: 0.5                   # 最低余弦相似度阈值，低于此值的文档块被丢弃
   context_max_tokens: 3000               # RAG 注入上下文的 token 预算上限
   max_sections_before_coarse_split: 50   # 文档节数超过此值时，自动切换为粗粒度切分策略
+
+  # -- 父子切割配置 — 章节=父块，段落=子块，检索命中子块后回填父块文本 --
+  parent_chunking:
+    enabled: true                        # 父子切割总开关（默认关闭，灰度上线）
+    parent_max_chars: 2000               # 父块最大字符数（超出则按段落边界二次切分）
+    child_chunk_size: null               # 子块大小，null 表示使用 rag.chunk_size（500）
+    child_chunk_overlap: 100             # 子块重叠字符数（更大的重叠减少父子关系断裂）
+    score_weight: "max"                  # 父块分数策略: "max"（取子块最高分）| "mean"（子块均分）
+
+  # -- Query Rewrite 配置 — 检索前改写/扩展用户查询 --
+  query_rewrite:
+    enabled: true                         # 总开关：是否启用查询改写
+    decontextualize: true                 # 策略A：对话去上下文化（指代消解）
+    profile_aware: true                   # 策略B：画像感知改写（偏向薄弱点）
+    multi_query: false                    # 策略C：多角度查询扩展（Phase 2 启用）
+    multi_query_count: 3                  # 扩展查询条数
+    temperature: 0.1                      # 改写 LLM 温度（需确定性）
+    max_tokens: 150                       # 改写输出最大 token 数
 
 # ----------------------------------------------------------
 # 对话配置 — 聊天会话管理与历史截断
@@ -119,7 +137,7 @@ chat:
 # 知识图谱构建配置 — 从文档自动构建 KG
 # ----------------------------------------------------------
 knowledge_graph:
-  llm_concurrency: 10                    # 构建时 LLM 并发上限（控制 API 调用并发）
+  llm_concurrency: 2                    # 构建时 LLM 并发上限（控制 API 调用并发）
   max_batches: 30                        # 送入 LLM 的最大文本批数（超出后裁剪）
   toc_max_items: 100                     # 目录条目数上限（超出后保留前 N 条）
   batch_chars_limit: 12000               # 每批送入 LLM 的最大字符数

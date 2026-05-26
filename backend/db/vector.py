@@ -19,8 +19,13 @@ from backend.db.database import get_engine
 
 COLLECTION_NAME: str = config.vector_db.collection
 
-# IVFFlat probes：控制检索精度与速度的平衡，10 是精度/速度的合理折中
-_IVFFLAT_PROBES: int = 10
+# HNSW ef_search：控制检索精度与速度的平衡，100 是高精度设定
+_HNSW_EF_SEARCH: int = 100
+
+
+def _format_vector(embedding: list[float]) -> str:
+    """将 list[float] 转为 pgvector 可解析的字符串（如 "[-0.02, 0.01, ...]"）。"""
+    return "[" + ",".join(str(x) for x in embedding) + "]"
 
 # ----------------------------------------------------------
 # 集合代理
@@ -118,16 +123,20 @@ def _convert_metadata_to_columns(meta: dict) -> dict:
     """将 metadata dict 转换为列值。"""
     import json
 
-    # 提取 extra metadata（排除固定列字段）
+    # 提取 extra metadata（排除固定列字段 + 父子切割字段）
     extra_meta = {
         k: v for k, v in meta.items()
-        if k not in ("source", "page", "section", "user_id", "doc_id", "chunk_id")
+        if k not in ("source", "page", "section", "user_id", "doc_id", "chunk_id",
+                      "content_hash", "parent_chunk_id", "is_parent")
     }
     return {
         "source": meta.get("source", ""),
         "page": int(meta["page"]) if meta.get("page") and str(meta["page"]).isdigit() else None,
         "section": meta.get("section", ""),
         "user_id": meta.get("user_id", ""),
+        "content_hash": meta.get("content_hash", ""),
+        "parent_chunk_id": meta.get("parent_chunk_id", ""),
+        "is_parent": bool(meta.get("is_parent", False)),
         "metadata_": json.dumps(extra_meta, ensure_ascii=False) if extra_meta else None,
     }
 
@@ -151,7 +160,8 @@ async def upsert_documents(
 
     columns = [
         "id", "chunk_id", "doc_id", "collection_name", "text",
-        "embedding", "source", "page", "section", "user_id", "metadata", "created_at",
+        "embedding", "source", "page", "section", "user_id",
+        "content_hash", "parent_chunk_id", "is_parent", "metadata", "created_at",
     ]
     value_rows: list[str] = []
     params: dict = {}
@@ -161,11 +171,17 @@ async def upsert_documents(
     ):
         cols = _convert_metadata_to_columns(meta)
         doc_id = meta.get("doc_id", "")
-        # pgvector 的 asyncpg codec 自动将 list[float] 转为向量格式，无需手动拼字符串
+        # 将 list[float] 转为 pgvector 字符串格式（如 "[-0.02, 0.01, ...]"），
+        # 配合 SQL 中 ::vector 转型，避免依赖 asyncpg codec 注册。
+        emb_str = _format_vector(emb) if (emb and len(emb) > 0) else None
         row_placeholders = ", ".join([
             f":id_{i}", f":chunk_id_{i}", f":doc_id_{i}", f":col_{i}",
-            f":text_{i}", f":emb_{i}", f":source_{i}", f":page_{i}",
-            f":section_{i}", f":user_id_{i}", f":metadata__{i}", "NOW()",
+            f":text_{i}",
+            f"CAST(:emb_{i} AS vector)" if emb_str else "NULL",
+            f":source_{i}", f":page_{i}",
+            f":section_{i}", f":user_id_{i}", f":content_hash_{i}",
+            f":parent_chunk_id_{i}", f":is_parent_{i}",
+            f":metadata__{i}", "NOW()",
         ])
         value_rows.append(f"({row_placeholders})")
         params.update({
@@ -174,13 +190,17 @@ async def upsert_documents(
             f"doc_id_{i}": doc_id,
             f"col_{i}": col,
             f"text_{i}": doc_text,
-            f"emb_{i}": emb,          # list[float] — pgvector asyncpg codec 自动转换
             f"source_{i}": cols["source"],
             f"page_{i}": cols["page"],
             f"section_{i}": cols["section"],
             f"user_id_{i}": cols["user_id"],
+            f"content_hash_{i}": cols["content_hash"],
+            f"parent_chunk_id_{i}": cols["parent_chunk_id"],
+            f"is_parent_{i}": cols["is_parent"],
             f"metadata__{i}": cols["metadata_"],
         })
+        if emb_str:
+            params[f"emb_{i}"] = emb_str
 
     sql = f"""
         INSERT INTO document_chunk ({', '.join(columns)})
@@ -192,6 +212,9 @@ async def upsert_documents(
             page = EXCLUDED.page,
             section = EXCLUDED.section,
             user_id = EXCLUDED.user_id,
+            content_hash = EXCLUDED.content_hash,
+            parent_chunk_id = EXCLUDED.parent_chunk_id,
+            is_parent = EXCLUDED.is_parent,
             metadata = EXCLUDED.metadata
     """
 
@@ -250,9 +273,10 @@ async def query_documents(
     col = collection_name or COLLECTION_NAME
     engine = get_engine()
 
-    conditions = ["collection_name = :cn"]
-    # pgvector 的 asyncpg codec 自动将 list[float] 转为向量格式
-    params: dict = {"cn": col, "embedding": query_embedding}
+    conditions = ["collection_name = :cn", "is_parent = FALSE"]
+    # 只检索子块；父块没有 embedding，不参与向量检索
+    emb_str = _format_vector(query_embedding)
+    params: dict = {"cn": col, "embedding": emb_str}
 
     where_clause, where_params = _build_where_clause(where)
     if where_clause:
@@ -264,21 +288,23 @@ async def query_documents(
             chunk_id,
             text,
             doc_id,
-            embedding <=> :embedding AS distance,
+            embedding <=> CAST(:embedding AS vector) AS distance,
             source,
             page,
             section,
             user_id,
-            metadata
+            metadata,
+            parent_chunk_id,
+            is_parent
         FROM document_chunk
         WHERE {' AND '.join(conditions)}
-        ORDER BY embedding <=> :embedding
+        ORDER BY embedding <=> CAST(:embedding AS vector)
         LIMIT :n_results
     """
 
     async with engine.connect() as conn:
-        # 设置 IVFFlat probes 控制检索精度/速度平衡
-        await conn.execute(text(f"SET LOCAL ivfflat.probes = {_IVFFLAT_PROBES}"))
+        # 设置 HNSW ef_search 控制检索精度/速度平衡
+        await conn.execute(text(f"SET LOCAL hnsw.ef_search = {_HNSW_EF_SEARCH}"))
         result = await conn.execute(text(sql), {**params, "n_results": n_results})
         rows = result.fetchall()
 
@@ -303,6 +329,11 @@ async def query_documents(
         raw_metadata = row[8] if len(row) > 8 else None
         if raw_metadata and isinstance(raw_metadata, dict):
             meta.update(raw_metadata)
+        # 父子切割字段（row[9], row[10]）
+        if len(row) > 9 and row[9]:
+            meta["parent_chunk_id"] = row[9]
+        if len(row) > 10:
+            meta["is_parent"] = row[10]
         metadatas_list.append(meta)
 
     return {
@@ -333,6 +364,62 @@ async def delete_by_doc_id(doc_id: str, collection_name: Optional[str] = None) -
         )
         deleted = result.rowcount
         logger.info(f"[VectorDB] 删除 doc_id={doc_id} 的 {deleted} 个向量块")
+
+
+async def get_chunk_hashes_by_doc_id(
+    doc_id: str,
+    collection_name: Optional[str] = None,
+) -> dict[str, Optional[str]]:
+    """
+    获取某个 doc_id 的所有 chunk 的 (chunk_id → content_hash) 映射。
+
+    content_hash 可能为 NULL（legacy 数据，在 content_hash 列新增之前入库的 chunk）。
+    调用方应将 NULL 视为"需要重新嵌入"，即 NULL != any_new_hash → changed。
+
+    :param doc_id:          文档 ID
+    :param collection_name: 可选集合过滤
+    :return:                {chunk_id: content_hash_or_None}
+    """
+    engine = get_engine()
+    col = collection_name or COLLECTION_NAME
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            text(
+                "SELECT chunk_id, content_hash FROM document_chunk "
+                "WHERE doc_id = :doc_id AND collection_name = :cn"
+            ),
+            {"doc_id": doc_id, "cn": col},
+        )
+        rows = result.fetchall()
+    return {row[0]: row[1] for row in rows}
+
+
+async def get_parent_texts(
+    parent_ids: list[str],
+    collection_name: Optional[str] = None,
+) -> dict[str, str]:
+    """
+    批量获取父块文本。用于检索后父块回填。
+
+    :param parent_ids:      父块 chunk_id 列表
+    :param collection_name: 可选集合过滤
+    :return:                {chunk_id: text} 映射（不存在的 key 不在结果中）
+    """
+    if not parent_ids:
+        return {}
+
+    engine = get_engine()
+    col = collection_name or COLLECTION_NAME
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            text(
+                "SELECT chunk_id, text FROM document_chunk "
+                "WHERE chunk_id = ANY(:ids) AND is_parent = TRUE AND collection_name = :cn"
+            ),
+            {"ids": parent_ids, "cn": col},
+        )
+        rows = result.fetchall()
+    return {row[0]: row[1] for row in rows}
 
 
 async def get_documents_by_doc_id(doc_id: str, collection_name: Optional[str] = None) -> dict:

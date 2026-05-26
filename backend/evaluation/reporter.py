@@ -240,30 +240,30 @@ class RAGReporter:
             f"",
             f"## 检索质量",
             f"",
-            f"| 指标 | 值 | 参考标准 |",
-            f"|------|-----|---------|",
-            f"| Precision@5 | {report.precision_at_5:.3f} | > 0.60 |",
-            f"| Recall@5 | {report.recall_at_5:.3f} | > 0.70 |",
-            f"| MRR | {report.mrr_val:.3f} | > 0.50 |",
-            f"| NDCG@5 | {report.ndcg_at_5:.3f} | > 0.60 |",
-            f"| Hit Rate@5 | {report.hit_rate_val:.3f} | > 0.80 |",
-            f"| Score P50 | {report.score_p50:.3f} | > 0.65 |",
+            f"| 指标 | 值 | 参考标准 | 达标 |",
+            f"|------|-----|---------|------|",
+            f"| Precision@5 | {report.precision_at_5:.3f} | > 0.60 | {_check_reference(report.precision_at_5, '> 0.60')} |",
+            f"| Recall@5 | {report.recall_at_5:.3f} | > 0.70 | {_check_reference(report.recall_at_5, '> 0.70')} |",
+            f"| MRR | {report.mrr_val:.3f} | > 0.50 | {_check_reference(report.mrr_val, '> 0.50')} |",
+            f"| NDCG@5 | {report.ndcg_at_5:.3f} | > 0.60 | {_check_reference(report.ndcg_at_5, '> 0.60')} |",
+            f"| Hit Rate@5 | {report.hit_rate_val:.3f} | > 0.80 | {_check_reference(report.hit_rate_val, '> 0.80')} |",
+            f"| Score P50 | {report.score_p50:.3f} | > 0.65 | {_check_reference(report.score_p50, '> 0.65')} |",
             f"",
             f"## 生成质量",
             f"",
-            f"| 指标 | 值 | 参考标准 |",
-            f"|------|-----|---------|",
-            f"| Avg Faithfulness | {report.avg_faithfulness:.3f} | > 0.70 |",
-            f"| Avg Hallucination Rate | {report.avg_hallucination_rate:.3f} | < 0.30 |",
-            f"| Avg Concept Coverage | {report.avg_concept_coverage:.3f} | > 0.60 |",
+            f"| 指标 | 值 | 参考标准 | 达标 |",
+            f"|------|-----|---------|------|",
+            f"| Avg Faithfulness | {report.avg_faithfulness:.3f} | > 0.70 | {_check_reference(report.avg_faithfulness, '> 0.70')} |",
+            f"| Avg Hallucination Rate | {report.avg_hallucination_rate:.3f} | < 0.30 | {_check_reference(report.avg_hallucination_rate, '< 0.30')} |",
+            f"| Avg Concept Coverage | {report.avg_concept_coverage:.3f} | > 0.60 | {_check_reference(report.avg_concept_coverage, '> 0.60')} |",
             f"",
             f"## 系统效率",
             f"",
-            f"| 指标 | 值 |",
-            f"|------|-----|",
-            f"| P50 Retrieval Latency | {report.p50_retrieval_latency_ms:.0f} ms |",
-            f"| P95 Retrieval Latency | {report.p95_retrieval_latency_ms:.0f} ms |",
-            f"| P50 Generation Latency | {report.p50_generation_latency_ms:.0f} ms |",
+            f"| 指标 | 值 | 参考标准 | 达标 |",
+            f"|------|-----|---------|------|",
+            f"| P50 Retrieval Latency | {report.p50_retrieval_latency_ms:.0f} ms | < 500 ms | {_check_reference(report.p50_retrieval_latency_ms, '< 500')} |",
+            f"| P95 Retrieval Latency | {report.p95_retrieval_latency_ms:.0f} ms | < 1000 ms | {_check_reference(report.p95_retrieval_latency_ms, '< 1000')} |",
+            f"| P50 Generation Latency | {report.p50_generation_latency_ms:.0f} ms | < 5000 ms | {_check_reference(report.p50_generation_latency_ms, '< 5000')} |",
         ]
 
         # 变化趋势
@@ -390,6 +390,37 @@ def write_report(report: RAGEvalReport, label: str = "report") -> str | None:
 # 内部辅助
 # ----------------------------------------------------------
 
+def _check_reference(value: float, ref_str: str) -> str:
+    """
+    对比实际值与参考标准，返回达标状态指示符。
+
+    支持格式:
+      - ``> 0.60``  (值 >= 阈值 → 达标)
+      - ``< 0.30``  (值 <= 阈值 → 达标)
+      - ``-``       (无参考标准，返回空)
+
+    :return: "✅" 达标, "❌" 未达标, "" 无参考
+    """
+    import re
+
+    ref_str = ref_str.strip()
+    if not ref_str or ref_str == "-":
+        return ""
+
+    match = re.match(r'([><]=?)\s*([\d.]+)', ref_str)
+    if not match:
+        return ""
+
+    op, threshold_str = match.groups()
+    threshold = float(threshold_str)
+
+    if op in (">", ">="):
+        return "✅" if value >= threshold else "❌"
+    elif op in ("<", "<="):
+        return "✅" if value <= threshold else "❌"
+    return ""
+
+
 def _make_json_safe(obj):
     """递归将不可序列化的对象转换为可 JSON 序列化的格式。"""
     if isinstance(obj, dict):
@@ -405,6 +436,13 @@ def _make_json_safe(obj):
 
 def _result_to_markdown(result: dict, label: str, ts: str) -> str:
     """将 evaluate_full() 结果渲染为 Markdown。"""
+    faith_score = result.get("faithfulness_score", 0) or 0
+    hallu_rate = result.get("hallucination_rate", 0) or 0
+    comp_score = result.get("completeness_score", 0) or 0
+    prec_at_5 = result.get("precision_at_5", 0) or 0
+    cit_prec = result.get("citation_precision")
+    eval_ms = result.get("evaluation_time_ms", 0) or 0
+
     lines = [
         f"# RAG 评估结果",
         f"",
@@ -415,17 +453,17 @@ def _result_to_markdown(result: dict, label: str, ts: str) -> str:
         f"",
         f"## 汇总",
         f"",
-        f"| 指标 | 值 | 参考 |",
-        f"|------|-----|------|",
-        f"| Faithfulness | {result.get('faithfulness_score', 0):.3f} | > 0.70 |",
-        f"| Hallucination Rate | {result.get('hallucination_rate', 0):.3f} | < 0.30 |",
-        f"| Completeness | {result.get('completeness_score', 0):.3f} | > 0.60 |",
-        f"| Precision@5 | {result.get('precision_at_5', 0):.3f} | > 0.60 |",
+        f"| 指标 | 值 | 参考 | 达标 |",
+        f"|------|-----|------|------|",
+        f"| Faithfulness | {faith_score:.3f} | > 0.70 | {_check_reference(faith_score, '> 0.70')} |",
+        f"| Hallucination Rate | {hallu_rate:.3f} | < 0.30 | {_check_reference(hallu_rate, '< 0.30')} |",
+        f"| Completeness | {comp_score:.3f} | > 0.60 | {_check_reference(comp_score, '> 0.60')} |",
+        f"| Precision@5 | {prec_at_5:.3f} | > 0.60 | {_check_reference(prec_at_5, '> 0.60')} |",
     ]
-    if result.get("citation_precision") is not None:
-        lines.append(f"| Citation Precision | {result['citation_precision']:.3f} | > 0.70 |")
+    if cit_prec is not None:
+        lines.append(f"| Citation Precision | {cit_prec:.3f} | > 0.70 | {_check_reference(cit_prec, '> 0.70')} |")
     lines.extend([
-        f"| 评估耗时 | {result.get('evaluation_time_ms', 0):.0f} ms | - |",
+        f"| 评估耗时 | {eval_ms:.0f} ms | - | - |",
         f"",
     ])
 

@@ -103,6 +103,16 @@ class EmbeddingConfig:
 
 
 @dataclass
+class ParentChunkingConfig:
+    """父子切割配置"""
+    enabled: bool = False
+    parent_max_chars: int = 2000
+    child_chunk_size: int | None = None   # None = 使用 rag.chunk_size
+    child_chunk_overlap: int = 100
+    score_weight: str = "max"             # "max"（取子块最高分）| "mean"（子块均分）
+
+
+@dataclass
 class RAGConfig:
     """RAG 配置"""
     chunk_size: int = 500
@@ -111,6 +121,15 @@ class RAGConfig:
     score_threshold: float = 0.5
     context_max_tokens: int = 3000
     max_sections_before_coarse_split: int = 50
+    parent_chunking: ParentChunkingConfig = field(default_factory=ParentChunkingConfig)
+    # Query Rewrite 子配置
+    query_rewrite_enabled: bool = True
+    query_rewrite_decontextualize: bool = True
+    query_rewrite_profile_aware: bool = True
+    query_rewrite_multi_query: bool = False
+    query_rewrite_multi_query_count: int = 3
+    query_rewrite_temperature: float = 0.1
+    query_rewrite_max_tokens: int = 150
 
 
 @dataclass
@@ -535,6 +554,20 @@ def _build_config() -> Config:
             score_threshold=_get("rag.score_threshold", 0.5),
             context_max_tokens=_get("rag.context_max_tokens", 3000),
             max_sections_before_coarse_split=_get("rag.max_sections_before_coarse_split", 50),
+            parent_chunking=ParentChunkingConfig(
+                enabled=_get("rag.parent_chunking.enabled", False),
+                parent_max_chars=_get("rag.parent_chunking.parent_max_chars", 2000),
+                child_chunk_size=_get("rag.parent_chunking.child_chunk_size", None),
+                child_chunk_overlap=_get("rag.parent_chunking.child_chunk_overlap", 100),
+                score_weight=_get("rag.parent_chunking.score_weight", "max"),
+            ),
+            query_rewrite_enabled=_get("rag.query_rewrite.enabled", True),
+            query_rewrite_decontextualize=_get("rag.query_rewrite.decontextualize", True),
+            query_rewrite_profile_aware=_get("rag.query_rewrite.profile_aware", True),
+            query_rewrite_multi_query=_get("rag.query_rewrite.multi_query", False),
+            query_rewrite_multi_query_count=_get("rag.query_rewrite.multi_query_count", 3),
+            query_rewrite_temperature=_get("rag.query_rewrite.temperature", 0.1),
+            query_rewrite_max_tokens=_get("rag.query_rewrite.max_tokens", 150),
         ),
         embedding=EmbeddingConfig(
             use_spark=_get("embedding.use_spark", True),

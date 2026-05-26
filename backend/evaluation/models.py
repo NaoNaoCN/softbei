@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RetrievalEvalRecord(BaseModel):
@@ -61,6 +61,8 @@ class GenerationEvalRecord(BaseModel):
     faithfulness_statements: list[dict] = Field(default_factory=list)  # Judge 2
     completeness_aspects: list[dict] = Field(default_factory=list)     # Judge 3
 
+    model_config = ConfigDict(populate_by_name=True)
+
 
 class RAGEvalReport(BaseModel):
     """周期性评估报告。"""
@@ -90,5 +92,4 @@ class RAGEvalReport(BaseModel):
     # 变化趋势（与上期对比）
     delta_vs_previous: dict[str, float] = Field(default_factory=dict)
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)

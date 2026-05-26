@@ -985,36 +985,17 @@ async def submit_quiz(
     import re
     import ast
 
-    # 先尝试从 QuizItem 表查找
+    # 从 QuizItem 表查找（权威数据源，O(1) 主键查询）
     quiz_item = await select_one(db, QuizItem, filters={"id": body.quiz_item_id})
 
-    # 如果找不到，尝试从用户的 quiz 资源的 content_json 中查找
-    found_answer = None
-    found_qtype = None
-    found_kp_id = None
     if not quiz_item:
-        from backend.db.crud import select
-        resources = await select(db, ResourceMeta, filters={"user_id": user_id, "resource_type": "quiz"})
-        for res in resources:
-            if res.content_json and res.content_json.get("items"):
-                for idx, item in enumerate(res.content_json["items"]):
-                    expected_id = str(string_to_id(f"{res.id}-{idx}"))
-                    if expected_id == str(body.quiz_item_id):
-                        found_answer = item.get("answer")
-                        found_qtype = item.get("question_type")
-                        found_kp_id = res.kp_id
-                        break
-                if found_answer is not None:
-                    break
-
-    if not quiz_item and found_answer is None:
         raise HTTPException(status_code=404, detail="Quiz item not found")
 
     def extract_letters(text: str) -> set[str]:
         return set(re.findall(r'\b([A-Z])\b', text))
 
-    question_type = quiz_item.question_type if quiz_item else (QuestionType(found_qtype) if found_qtype else QuestionType.single)
-    answer = quiz_item.answer if quiz_item else found_answer
+    question_type = quiz_item.question_type
+    answer = quiz_item.answer
 
     if question_type == QuestionType.single:
         user_letters = extract_letters(str(body.user_answer))
@@ -1042,16 +1023,15 @@ async def submit_quiz(
             "user_answer": str(body.user_answer),
             "is_correct": is_correct,
             "score": score,
-            "kp_id": quiz_item.kp_id if quiz_item else found_kp_id,
+            "kp_id": quiz_item.kp_id,
         },
     )
 
     # 答对时写入学习记录，标记该知识点已通过测验
-    kp = quiz_item.kp_id if quiz_item else found_kp_id
-    if is_correct and kp:
+    if is_correct and quiz_item.kp_id:
         await insert(db, LearningRecord, data={
             "user_id": user_id,
-            "kp_id": kp,
+            "kp_id": quiz_item.kp_id,
             "action": "quiz",
         })
 

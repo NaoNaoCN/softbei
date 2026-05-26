@@ -86,7 +86,7 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
                  kp_name, total, single, multi, fill))
 
     # 检索相关文档
-    context, retrieved_texts = await retrieve_context(kp_name, state.user_id, "QuizAgent")
+    context, retrieved_texts = await retrieve_context(state, "QuizAgent")
 
     # 更新 retrieved_docs
     state = state.model_copy(update={"retrieved_docs": retrieved_texts})

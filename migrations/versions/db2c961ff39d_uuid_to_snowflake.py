@@ -2,8 +2,21 @@
 
 将项目所有主键/外键从 PostgreSQL UUID 类型改为 BIGINT（Snowflake ID）。
 
-**警告：本迁移会重建所有表，现有数据将丢失。**
-这是从 UUID 到 BIGINT 的根本性类型变更，无法通过 ALTER COLUMN 自动完成。
+=============================================================================
+  ** 严重警告 / CRITICAL WARNING **
+  本迁移会 DROP 并重建全部 17 张表，现有数据将永久丢失且无法恢复。
+  This migration DROPs and recreates ALL 17 tables. All existing data will be
+  PERMANENTLY LOST with no recovery path.
+
+  切勿在生产环境或有数据的测试环境运行。
+  DO NOT run against any environment containing real data.
+
+  如需要在保留数据的前提下切换主键类型，方案如下：
+  1. pg_dump 导出全部数据
+  2. 创建新库并运行迁移链（从 head 开始直达此迁移）
+  3. 编写脚本将旧数据转换并导入新库
+  4. 切换应用连接到新库
+=============================================================================
 
 开发环境执行：
     alembic upgrade head

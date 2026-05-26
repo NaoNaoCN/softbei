@@ -92,6 +92,9 @@ async def retrieve(
     # Re-rank: 对 cosine 结果做关键词重叠加权重排
     if chunks:
         chunks = _rerank_by_keyword_overlap(query, chunks)
+
+        # 父块回填：子块 → 父块映射 + 去重（parent_chunking 启用时生效）
+        chunks = await _resolve_parent_chunks(chunks)
         chunks = chunks[:_n_results]
 
     if not chunks:
@@ -109,7 +112,7 @@ async def retrieve_by_kp(
 ) -> list[RetrievedChunk]:
     """
     按知识点名称检索相关文档片段。
-    使用多角度查询扩展以提升检索覆盖率和精度。
+    使用多角度查询扩展以提升检索覆盖率和精度（固定模板方案，Query Rewrite 未启用时使用）。
     """
     query = f"知识点：{kp_name}；定义：{kp_name}；{kp_name}的核心概念与原理"
     return await retrieve(
@@ -118,6 +121,44 @@ async def retrieve_by_kp(
         collection_name=collection_name,
         user_id=user_id,
     )
+
+
+async def retrieve_with_queries(
+    queries: list[str],
+    n_results: int | None = None,
+    score_threshold: float | None = None,
+    collection_name: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> list[list[RetrievedChunk]]:
+    """
+    使用多条查询分别检索，返回各查询的结果列表（供 RRF 融合使用）。
+
+    :param queries:        查询字符串列表
+    :param n_results:      每条查询的返回条数
+    :param score_threshold: 最低相似度阈值
+    :param collection_name: 集合名
+    :param user_id:        用户 ID（用于隔离）
+    :return:               每条查询的 RetrievedChunk 列表
+    """
+    import asyncio
+
+    async def _fetch_one(query: str) -> list[RetrievedChunk]:
+        try:
+            return await retrieve(
+                query=query,
+                n_results=n_results,
+                score_threshold=score_threshold,
+                collection_name=collection_name,
+                user_id=user_id,
+            )
+        except Exception as e:
+            logger.warning(f"[RAG] 子查询检索失败: {query[:40]!r}: {e}")
+            return []
+
+    # 并发执行所有子查询的检索
+    tasks = [_fetch_one(q) for q in queries]
+    results = await asyncio.gather(*tasks)
+    return list(results)
 
 
 def format_context(chunks: list[RetrievedChunk], max_tokens: int | None = None) -> str:
@@ -184,6 +225,82 @@ def _estimate_tokens(text: str) -> int:
     return int(cn_chars / 1.5 + en_chars / 4.0)
 
 
+async def _resolve_parent_chunks(
+    chunks: list[RetrievedChunk],
+) -> list[RetrievedChunk]:
+    """
+    将子块检索结果映射到父块文本，按父块去重。
+
+    对于有 parent_chunk_id 的子块，查询父块文本并以父块文本替代子块文本，
+    同时保留子块的检索分数。同一父块的多个子块只返回分数最高的那一个。
+
+    对于无 parent_chunk_id 的子块（旧数据或 parent_chunking 未启用），
+    直接保留原始子块。
+
+    :param chunks: re-rank 后的子块列表（已按分数降序）
+    :return:       父块回填 + 去重后的列表
+    """
+    # 收集需要查询的 parent_chunk_id（去重）
+    parent_ids: list[str] = []
+    child_to_parent: dict[str, str] = {}  # child_chunk_id → parent_chunk_id
+    seen_parents: set[str] = set()
+
+    for c in chunks:
+        pid = c.metadata.get("parent_chunk_id", "")
+        if pid:
+            child_to_parent[c.chunk_id] = pid
+
+    if not child_to_parent:
+        return chunks  # 无父子关系，直接返回
+
+    # 批量查询父块文本
+    parent_ids = list(set(child_to_parent.values()))
+    parent_texts = await _get_parent_texts_batch(parent_ids)
+
+    # 去重 + 回填
+    resolved: list[RetrievedChunk] = []
+    for c in chunks:
+        pid = child_to_parent.get(c.chunk_id, "")
+        if pid:
+            if pid in seen_parents:
+                continue  # 去重：同一父块只保留第一个（分数最高）
+            seen_parents.add(pid)
+
+            parent_text = parent_texts.get(pid)
+            if parent_text:
+                # 用父块文本替代子块文本，保留子块的分数和来源信息
+                resolved.append(RetrievedChunk(
+                    chunk_id=pid,
+                    text=parent_text,
+                    score=c.score,
+                    doc_id=c.doc_id,
+                    source=c.source,
+                    page=c.page,
+                    section=c.section,
+                    metadata={
+                        **c.metadata,
+                        "from_child_chunk": c.chunk_id,
+                    },
+                ))
+                continue
+
+        # 无父块或父块未找到 → 保留原始子块
+        resolved.append(c)
+
+    # 按分数降序
+    resolved.sort(key=lambda c: c.score, reverse=True)
+    return resolved
+
+
+async def _get_parent_texts_batch(parent_ids: list[str]) -> dict[str, str]:
+    """批量查询父块文本。"""
+    try:
+        from backend.db.vector import get_parent_texts
+        return await get_parent_texts(parent_ids)
+    except Exception:
+        return {}
+
+
 def _rerank_by_keyword_overlap(query: str, chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
     """
     轻量级 re-rank：基于查询关键词与文档文本的重叠度对 cosine 分加权。
@@ -192,7 +309,7 @@ def _rerank_by_keyword_overlap(query: str, chunks: list[RetrievedChunk]) -> list
     # 提取查询关键词（2字及以上中文字 + 3字及以上英文词）
     import re
     keywords = set(re.findall(r'[\u4e00-\u9fff]{2,}', query))
-    keywords |= set(w.lower() for w in re.findall(r'[a-zA-Z]{3,}', query))
+    keywords |= set(w.lower() for w in re.findall(r'[a-zA-Z]{2,}', query))
 
     if not keywords:
         return sorted(chunks, key=lambda c: c.score, reverse=True)
