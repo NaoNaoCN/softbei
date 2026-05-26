@@ -420,6 +420,7 @@
         let currentQuiz = [];
         let userAnswers = {};
         let currentResourceId = null;
+        let quizStartTime = null;  // 计时：开始做题时间
 
         function switchTab(btn, tab) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -461,6 +462,7 @@
                 return;
             }
             currentQuiz = data;
+            quizStartTime = Date.now();  // 开始计时
             container.innerHTML = data.map((q, idx) => {
                 const qTypeLabel = q.question_type === 'multi' ? '多选题' : q.question_type === 'fill' ? '填空题' : '单选题';
                 let bodyHtml = '';
@@ -513,8 +515,12 @@
         async function submitQuiz() {
             let correct = 0;
             const submitted = [];
+            // 计算每题平均用时（秒）
+            const totalSec = quizStartTime ? Math.round((Date.now() - quizStartTime) / 1000) : 0;
+            const answeredCount = Object.keys(userAnswers).length || 1;
+            const perQuestionSec = Math.max(Math.round(totalSec / answeredCount), 5); // 最少 5 秒
             for (const [qId, opts] of Object.entries(userAnswers)) {
-                const result = await submitQuizAnswer(userId, qId, opts.join(','));
+                const result = await submitQuizAnswer(userId, qId, opts.join(','), perQuestionSec);
                 const isCorrect = !!(result && result.is_correct);
                 if (isCorrect) correct++;
                 submitted.push({ qId, opts, isCorrect });
@@ -730,5 +736,6 @@
         </div>
     </div>
     <script>lucide.createIcons();</script>
+    <script src="./assets/tracker.js"></script>
 </body>
 </html>

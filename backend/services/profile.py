@@ -366,3 +366,109 @@ async def build_profile_context(profile: StudentProfileOut) -> str:
     if not parts:
         return "暂无学生画像信息"
     return "，".join(parts)
+
+
+# ----------------------------------------------------------
+# 测验驱动画像更新
+# ----------------------------------------------------------
+
+# 掌握度阈值
+_MASTERY_THRESHOLD = 0.8   # 正确率 >= 80% 视为已掌握
+_WEAK_THRESHOLD = 0.6      # 正确率 < 60% 视为薄弱
+_MIN_ATTEMPTS = 2          # 至少做过 2 题才纳入统计
+
+
+async def update_profile_from_quiz(
+    user_id: int,
+    kp_id: str,
+    db: AsyncSession,
+) -> None:
+    """
+    测验提交后根据该知识点的历史正确率自动更新学生画像。
+
+    规则：
+    - 正确率 >= 80% 且做题数 >= 2：加入 knowledge_mastered，从 knowledge_weak 移除
+    - 正确率 < 60%：加入 knowledge_weak，从 knowledge_mastered 移除
+    - 答错时：加入 error_prone（去重）
+    """
+    import sqlalchemy as sa
+    from backend.db.models import QuizAttempt, KGNode
+
+    # 1. 查询该用户在该知识点的所有答题记录
+    result = await db.execute(
+        sa.select(
+            sa.func.count().label("total"),
+            sa.func.sum(sa.case((QuizAttempt.is_correct == True, 1), else_=0)).label("correct"),
+        ).where(
+            QuizAttempt.user_id == user_id,
+            QuizAttempt.kp_id == kp_id,
+        )
+    )
+    row = result.one_or_none()
+    if not row or not row.total or row.total < _MIN_ATTEMPTS:
+        return
+
+    total = row.total
+    correct = row.correct or 0
+    accuracy = correct / total
+
+    # 2. 解析知识点名称
+    kp_node = await select_one(db, KGNode, filters={"id": kp_id})
+    kp_name = kp_node.name if kp_node else kp_id
+
+    # 3. 获取当前画像
+    profile = await select_one(db, StudentProfile, filters={"user_id": user_id})
+    if not profile:
+        return
+
+    mastered = list(profile.knowledge_mastered or [])
+    weak = list(profile.knowledge_weak or [])
+    error_prone = list(profile.error_prone or [])
+    changed = False
+
+    # 4. 根据正确率更新画像
+    if accuracy >= _MASTERY_THRESHOLD:
+        # 加入已掌握
+        if kp_name not in mastered:
+            mastered.append(kp_name)
+            changed = True
+        # 从薄弱移除
+        if kp_name in weak:
+            weak.remove(kp_name)
+            changed = True
+    elif accuracy < _WEAK_THRESHOLD:
+        # 加入薄弱
+        if kp_name not in weak:
+            weak.append(kp_name)
+            changed = True
+        # 从已掌握移除
+        if kp_name in mastered:
+            mastered.remove(kp_name)
+            changed = True
+
+    # 5. 最近一次答错 → 加入易错点
+    last_attempt = await db.execute(
+        sa.select(QuizAttempt).where(
+            QuizAttempt.user_id == user_id,
+            QuizAttempt.kp_id == kp_id,
+        ).order_by(QuizAttempt.created_at.desc()).limit(1)
+    )
+    last = last_attempt.scalar_one_or_none()
+    if last and not last.is_correct:
+        if kp_name not in error_prone:
+            error_prone.append(kp_name)
+            changed = True
+
+    # 6. 持久化
+    if changed:
+        update_data = {
+            "knowledge_mastered": mastered,
+            "knowledge_weak": weak,
+            "error_prone": error_prone,
+        }
+        await update_by_id(db, StudentProfile, profile.id, update_data)
+        logger.info(
+            f"[ProfileQuiz] user={user_id} kp={kp_name} "
+            f"accuracy={accuracy:.0%}({correct}/{total}) "
+            f"mastered={len(mastered)} weak={len(weak)} error={len(error_prone)}"
+        )

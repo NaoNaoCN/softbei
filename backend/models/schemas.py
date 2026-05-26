@@ -321,6 +321,7 @@ class QuizSubmitIn(BaseModel):
     """学生提交答题结果"""
     quiz_item_id: int
     user_answer: Any
+    duration_seconds: Optional[int] = None  # 可选：前端上报做题用时（秒）
 
 
 class QuizAttemptOut(BaseModel):

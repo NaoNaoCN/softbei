@@ -252,6 +252,21 @@
             align-items: center;
             gap: 8px;
         }
+        .rec-close {
+            margin-left: auto;
+            cursor: pointer;
+            font-size: 20px;
+            color: #999;
+            line-height: 1;
+            padding: 0 4px;
+            border-radius: 4px;
+            transition: color 0.2s, background 0.2s;
+        }
+        .rec-close:hover {
+            color: #333;
+            background: #f0f0f0;
+        }
+        }
         .recommendation-item {
             display: flex;
             align-items: center;
@@ -418,7 +433,7 @@
             });
         }
 
-        function renderMarkdown(text) {
+        function renderMarkdown(text, videoRefs) {
             if (!text || typeof marked === 'undefined') return escapeHtml(text || '');
             try {
                 const mathPlaceholders = [];
@@ -434,6 +449,15 @@
                 });
                 let html = marked.parse(processed);
                 html = html.replace(/\x00MATH(\d+)\x00/g, (_, idx) => mathPlaceholders[parseInt(idx)]);
+                // 渲染 [v1] [v2] 视频引用为上标链接
+                if (videoRefs && videoRefs.length) {
+                    html = html.replace(/\[v(\d+)\]/g, (_, n) => {
+                        const idx = parseInt(n) - 1;
+                        const video = videoRefs[idx];
+                        if (!video) return `[v${n}]`;
+                        return `<sup><a href="${video.url}" target="_blank" class="video-cite" title="${video.title}">[v${n}]</a></sup>`;
+                    });
+                }
                 return html;
             } catch (e) {
                 return escapeHtml(text);
@@ -443,6 +467,23 @@
         function escapeHtml(s) {
             if (!s) return '';
             return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function renderVideoCards(videoRefs) {
+            if (!videoRefs || !videoRefs.length) return '';
+            return `<div class="video-cards">${videoRefs.map((v, i) => `
+                <a href="${v.url}" target="_blank" class="video-card">
+                    <div class="video-card-cover">
+                        ${v.thumbnail ? `<img src="${v.thumbnail}" referrerpolicy="no-referrer" onerror="this.parentElement.classList.add('no-img')" alt=""/>` : ''}
+                        <span class="video-card-duration">${v.duration || ''}</span>
+                        <span class="video-cite-badge">v${i+1}</span>
+                    </div>
+                    <div class="video-card-info">
+                        <span class="video-card-title">${escapeHtml(v.title)}</span>
+                        <span class="video-card-meta"><span class="video-card-source">${v.source === 'bilibili' ? 'B站' : v.source}</span></span>
+                    </div>
+                </a>`).join('')}
+            </div>`;
         }
 
         function formatTime(dateStr) {
@@ -556,6 +597,7 @@
                 <div class="recommendations-title">
                     <i data-lucide="compass" style="width:16px;height:16px;"></i>
                     推荐学习路线
+                    <span class="rec-close" onclick="this.closest('.recommendations-panel').remove()" title="关闭">&times;</span>
                 </div>
                 ${recs.map((r, i) => `
                     <div class="recommendation-item">
@@ -731,6 +773,19 @@
                         if (response.metadata.batch_id) {
                             renderBatchProgressCard(response.metadata.batch_id);
                         }
+                        // 渲染视频引用卡片
+                        if (response.metadata.video_refs && response.metadata.video_refs.length) {
+                            const area = document.getElementById('messages-area');
+                            const allAssistant = area.querySelectorAll('.message.assistant');
+                            const lastMsg = allAssistant[allAssistant.length - 1];
+                            if (lastMsg) {
+                                const bubble = lastMsg.querySelector('.message-bubble');
+                                if (bubble) {
+                                    bubble.innerHTML = renderMarkdown(response.content, response.metadata.video_refs);
+                                }
+                                lastMsg.insertAdjacentHTML('afterend', renderVideoCards(response.metadata.video_refs));
+                            }
+                        }
                     }
                     // 延迟刷新会话列表，等待后台自动命名完成
                     setTimeout(() => loadSessions(), 3000);
@@ -767,5 +822,6 @@
         loadSessions();
     </script>
     <script>lucide.createIcons();</script>
+    <script src="./assets/tracker.js"></script>
 </body>
 </html>

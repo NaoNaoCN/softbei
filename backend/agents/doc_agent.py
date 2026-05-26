@@ -5,14 +5,16 @@ DocAgent：基于 RAG 生成结构化学习文档（Markdown 格式）。
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 from loguru import logger  # noqa: F401
 
-from backend.config import config
+from backend.config import config as app_config
 from backend.models.schemas import AgentState
 from backend.agents.utils import resolve_kp_name, retrieve_context
 from backend.services.llm import chat_completion
+from backend.services.video_search import search_videos, inject_video_citations
 from langchain_core.runnables import RunnableConfig
 
 SYSTEM_PROMPT = """你是一位专业的教学资料撰写专家。
@@ -52,13 +54,22 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     prompt = SYSTEM_PROMPT.format(context=context, kp_name=kp_name)
 
     try:
-        draft = await chat_completion(
-            [{"role": "user", "content": prompt}],
-            temperature=config.agents.doc.temperature,
-            max_tokens=config.agents.doc.max_tokens,
+        draft, videos = await asyncio.gather(
+            chat_completion(
+                [{"role": "user", "content": prompt}],
+                temperature=app_config.agents.doc.temperature,
+                max_tokens=app_config.agents.doc.max_tokens,
+            ),
+            search_videos(kp_name),
         )
-        logger.info("[DocAgent] 文档生成成功，draft_len=%d" % len(draft))
-        state = state.model_copy(update={"draft_content": draft})
+        # 后处理：注入视频引用
+        if videos:
+            draft = inject_video_citations(draft, videos)
+        logger.info("[DocAgent] 文档生成成功，draft_len=%d, videos=%d" % (len(draft), len(videos)))
+        state = state.model_copy(update={
+            "draft_content": draft,
+            "metadata": {**state.metadata, "video_refs": [v.model_dump() for v in videos]},
+        })
     except Exception as e:
         logger.error("[DocAgent] 生成失败: %s" % e)
         state = state.model_copy(update={"draft_content": f"文档生成失败：{e}"})

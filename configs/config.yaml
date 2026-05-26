@@ -32,11 +32,11 @@ vector_db:
 # 当前使用 DashScope（阿里云）qwen3.5 系列
 # ----------------------------------------------------------
 llm:
-  api_key: "${LLM_API_KEY}"             # 从环境变量读取
-  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"  # API 地址（OpenAI 兼容格式）
-  model: "qwen3.5-plus-2026-02-15"      # 默认模型名称
-  provider: "qwen"                      # 当前使用的 Provider（详见 providers 子配置）
-  default_max_tokens: 2048               # 默认最大输出 token 数（各 Agent 可独立覆盖）
+  api_key: "${LLM_API_KEY}"
+  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  model: "qwen-flash-character-2026-02-26"
+  provider: "qwen"
+  default_max_tokens: 2048       # 默认最大输出 token 数
 
   # -- 重试策略 — 指数退避 --
   retry:
@@ -63,7 +63,7 @@ llm:
       default_model: "deepseek-chat"
     qwen:
       base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-      default_model: "qwen3.5-plus-2026-02-15"
+      default_model: "qwen-flash-character-2026-02-26"
     openai:
       base_url: "https://api.openai.com/v1"
       default_model: "gpt-4o-mini"
@@ -80,7 +80,7 @@ embedding:
   timeout_connect: 10                    # API embedding 连接超时（秒）
   timeout_write: 30                      # API embedding 写入超时（秒）
   timeout_pool: 10                       # API embedding 连接池超时（秒）
-  index_batch_size: 10                   # 索引构建时每批处理的文本块数（DashScope API 上限 10）
+  index_batch_size: 128                  # 索引构建时每批处理的文本块数
   vector_dimension: 1024                 # 向量维度（text-embedding-v4 输出 1024 维）
 
 # ----------------------------------------------------------
@@ -93,24 +93,6 @@ rag:
   score_threshold: 0.5                   # 最低余弦相似度阈值，低于此值的文档块被丢弃
   context_max_tokens: 3000               # RAG 注入上下文的 token 预算上限
   max_sections_before_coarse_split: 50   # 文档节数超过此值时，自动切换为粗粒度切分策略
-
-  # -- 父子切割配置 — 章节=父块，段落=子块，检索命中子块后回填父块文本 --
-  parent_chunking:
-    enabled: true                        # 父子切割总开关（默认关闭，灰度上线）
-    parent_max_chars: 2000               # 父块最大字符数（超出则按段落边界二次切分）
-    child_chunk_size: null               # 子块大小，null 表示使用 rag.chunk_size（500）
-    child_chunk_overlap: 100             # 子块重叠字符数（更大的重叠减少父子关系断裂）
-    score_weight: "max"                  # 父块分数策略: "max"（取子块最高分）| "mean"（子块均分）
-
-  # -- Query Rewrite 配置 — 检索前改写/扩展用户查询 --
-  query_rewrite:
-    enabled: true                         # 总开关：是否启用查询改写
-    decontextualize: true                 # 策略A：对话去上下文化（指代消解）
-    profile_aware: true                   # 策略B：画像感知改写（偏向薄弱点）
-    multi_query: false                    # 策略C：多角度查询扩展（Phase 2 启用）
-    multi_query_count: 3                  # 扩展查询条数
-    temperature: 0.1                      # 改写 LLM 温度（需确定性）
-    max_tokens: 150                       # 改写输出最大 token 数
 
 # ----------------------------------------------------------
 # 对话配置 — 聊天会话管理与历史截断
@@ -137,19 +119,17 @@ chat:
 # 知识图谱构建配置 — 从文档自动构建 KG
 # ----------------------------------------------------------
 knowledge_graph:
-  llm_concurrency: 2                    # 构建时 LLM 并发上限（控制 API 调用并发）
-  max_batches: 30                        # 送入 LLM 的最大文本批数（超出后裁剪）
-  toc_max_items: 100                     # 目录条目数上限（超出后保留前 N 条）
-  batch_chars_limit: 12000               # 每批送入 LLM 的最大字符数
-  text_truncate_chars: 6000              # 单个文本段送入 LLM 的截断长度（用于节点提取提示词）
-  node_extraction_max_tokens: 4000       # 节点提取的 LLM max_tokens
-  edge_batch_size: 40                    # 边推理批量大小（一次 API 调用处理 N 对节点）
-  edge_overlap: 10                       # 边推理批间重叠数（防止边界遗漏）
-  section_merge_min_chars: 200           # 短于该字符数的相邻节会被合并为一个处理单元
+  llm_concurrency: 10          # 构建时 LLM 并发上限（DashScope 免费额度限制较低）
+  max_batches: 30               # 送入 LLM 的最大文本批数
+  toc_max_items: 100            # TOC 条目数上限（超出后裁剪）
+  batch_chars_limit: 12000      # 每批最大字符数
+  text_truncate_chars: 6000     # 送入 LLM 的文本截断长度
+  node_extraction_max_tokens: 4000  # 节点提取 max_tokens
+  edge_batch_size: 40           # 边推理批量大小
+  edge_overlap: 10              # 边推理批间重叠数
+  section_merge_min_chars: 200  # 短于该字符数的节会被合并
 
-# ----------------------------------------------------------
-# 资源生成配置 — Agent 生成题目、思维导图、文档等学习资源
-# ----------------------------------------------------------
+# 资源生成配置
 generation:
   default_num_questions: 4               # 默认题目数量
   max_questions: 20                      # 单次生成题目上限
@@ -281,7 +261,15 @@ server:
   version: "0.1.0"
   cors_origins: ["*"]                    # 允许的跨域来源，["*"] 表示允许所有来源
 
-# ----------------------------------------------------------
+# 视频搜索配置
+video_search:
+  enabled: true                   # 总开关
+  max_results: 3                  # 最大返回视频数
+  min_query_length: 2             # 查询词最短长度
+  bilibili_timeout: 5             # Bilibili HTTP 超时（秒）
+  tavily_api_key: "${TAVILY_API_KEY}"  # Tavily 备选源 API Key（可选）
+  tavily_timeout: 8               # Tavily HTTP 超时（秒）
+
 # 认证配置
 # ----------------------------------------------------------
 auth:

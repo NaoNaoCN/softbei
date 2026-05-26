@@ -9,7 +9,7 @@ import json
 
 from loguru import logger  # noqa: F401
 
-from backend.config import config
+from backend.config import config as app_config
 from backend.models.schemas import AgentState
 from backend.agents.utils import resolve_kp_name, retrieve_context
 from backend.services.llm import chat_completion
@@ -58,15 +58,15 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     # 构造 prompt
     prompt = SYSTEM_PROMPT.format(
         context=context, kp_name=kp_name,
-        max_depth=config.generation.mindmap_max_depth,
-        max_children=config.generation.mindmap_max_children,
+        max_depth=app_config.generation.mindmap_max_depth,
+        max_children=app_config.generation.mindmap_max_children,
     )
 
     try:
         raw = await chat_completion(
             [{"role": "user", "content": prompt}],
-            temperature=config.agents.mindmap.temperature,
-            max_tokens=config.agents.mindmap.max_tokens,
+            temperature=app_config.agents.mindmap.temperature,
+            max_tokens=app_config.agents.mindmap.max_tokens,
         )
 
         # 验证 JSON 合法性

@@ -258,7 +258,10 @@ async def _persist_quiz(
             }
             for i, q in enumerate(questions)
         ]
-        await insert_many(db, QuizItem, data_list=items_data)
+        instances = await insert_many(db, QuizItem, data_list=items_data)
+        # 将数据库生成的雪花 ID 写回 questions，供 content_json 存储
+        for q, inst in zip(questions, instances):
+            q["id"] = inst.id
 
     await update_by_id(
         db, ResourceMeta, resource_id,

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from loguru import logger  # noqa: F401
 
-from backend.config import config
+from backend.config import config as app_config
 from backend.models.schemas import AgentState
 from backend.agents.utils import resolve_kp_name, retrieve_context
 from backend.services import profile as profile_svc
@@ -76,8 +76,8 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     try:
         draft = await chat_completion(
             [{"role": "user", "content": prompt}],
-            temperature=config.agents.code.temperature,
-            max_tokens=config.agents.code.max_tokens,
+            temperature=app_config.agents.code.temperature,
+            max_tokens=app_config.agents.code.max_tokens,
         )
         logger.info(
             "[code_agent] draft_len=%d has_fence=%s preview=%.200s",

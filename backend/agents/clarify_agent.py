@@ -6,9 +6,17 @@ ClarifyAgent：针对用户追问/澄清请求，基于对话历史给出简短�
 
 from __future__ import annotations
 
-from backend.config import config
+import asyncio
+
+from backend.config import config as app_config
 from backend.models.schemas import AgentState
 from backend.services.llm import chat_completion
+from backend.services.video_search import (
+    search_videos,
+    inject_video_citations,
+    extract_search_keywords,
+    extract_topic_from_history,
+)
 from langchain_core.runnables import RunnableConfig
 
 
@@ -51,8 +59,26 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     messages.append({"role": "user", "content": state.user_message})
 
     try:
-        response = await chat_completion(messages, temperature=config.agents.clarify.temperature)
-        state = state.model_copy(update={"final_content": response})
+        # 构建带上下文的视频搜索词：历史主题 + 当前提问关键词
+        topic = extract_topic_from_history(state.chat_history)
+        print("提取的对话主题:", topic)
+        user_kw = extract_search_keywords(state.user_message)
+        print("提取的用户关键词:", user_kw)
+        # 拼接后限制总词数，避免搜索词过长
+        combined_parts = (topic.split() + user_kw.split())[:5]
+        video_query = " ".join(combined_parts)
+
+        response, videos = await asyncio.gather(
+            chat_completion(messages, temperature=app_config.agents.clarify.temperature),
+            search_videos(video_query, skip_extraction=True),
+        )
+        # 后处理：注入视频引用
+        if videos:
+            response = inject_video_citations(response, videos)
+        state = state.model_copy(update={
+            "final_content": response,
+            "metadata": {**state.metadata, "video_refs": [v.model_dump() for v in videos]},
+        })
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"[ClarifyAgent] LLM 调用失败: {e}")

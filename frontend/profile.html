@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>我的画像 - 个性化学习助手</title>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <link rel="stylesheet" href="./assets/styles.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -274,6 +275,89 @@
                     </div>
                 </div>
 
+                <!-- 学习效果评估 - 综合仪表盘 -->
+                <div id="analytics-section" style="margin-top:24px;display:none;">
+                    <!-- 概览统计卡 -->
+                    <div class="card">
+                        <div class="card-title">📊 学习效果评估</div>
+                        <div class="stats-grid" style="grid-template-columns:repeat(6,1fr);">
+                            <div class="stat-item">
+                                <div class="stat-value" id="stat-total-attempts">0</div>
+                                <div class="stat-label">总答题数</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="stat-accuracy">-</div>
+                                <div class="stat-label">总正确率</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="stat-kp-tested">0</div>
+                                <div class="stat-label">涉及知识点</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="stat-mastery-count">0</div>
+                                <div class="stat-label">已掌握(≥80%)</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="stat-total-time">0</div>
+                                <div class="stat-label">总学习(分钟)</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="stat-streak">0</div>
+                                <div class="stat-label">连续学习(天)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 学习行为分析 + 能力雷达图 -->
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;">
+                        <!-- 学习时长趋势 -->
+                        <div class="card">
+                            <div class="card-title">📈 学习行为分析（近30天）</div>
+                            <div id="activity-chart" style="width:100%;height:260px;"></div>
+                        </div>
+                        <!-- 能力雷达图 -->
+                        <div class="card">
+                            <div class="card-title">🎯 能力雷达图</div>
+                            <div id="radar-chart" style="width:100%;height:260px;"></div>
+                            <div id="radar-empty" style="display:none;text-align:center;color:#6B7280;padding:40px;font-size:14px;">暂无足够数据生成雷达图</div>
+                        </div>
+                    </div>
+
+                    <!-- 遗忘曲线提醒 -->
+                    <div class="card" style="margin-top:20px;">
+                        <div class="card-title">🔔 遗忘曲线复习提醒</div>
+                        <p style="font-size:13px;color:#6B7280;margin-bottom:16px;">基于艾宾浩斯遗忘曲线，以下知识点建议及时复习：</p>
+                        <div id="forgetting-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+                        <div id="forgetting-empty" style="display:none;text-align:center;color:#43A047;padding:20px;font-size:14px;">🎉 所有知识点都在记忆窗口内，暂无需复习</div>
+                    </div>
+
+                    <!-- 学习行为分类 + 资源使用情况 -->
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;">
+                        <!-- 学习行为分类 -->
+                        <div class="card">
+                            <div class="card-title">📝 学习行为统计</div>
+                            <div id="behavior-breakdown" style="display:flex;flex-direction:column;gap:12px;"></div>
+                        </div>
+                        <!-- 资源使用情况 -->
+                        <div class="card">
+                            <div class="card-title">📚 资源使用情况</div>
+                            <div id="resource-usage" style="display:flex;flex-direction:column;gap:12px;"></div>
+                        </div>
+                    </div>
+
+                    <!-- 最近学习动态 -->
+                    <div class="card" style="margin-top:20px;">
+                        <div class="card-title">💬 最近学习动态</div>
+                        <div id="recent-activities" style="display:flex;flex-direction:column;gap:8px;"></div>
+                    </div>
+
+                    <!-- 各知识点掌握度详情 -->
+                    <div class="card" style="margin-top:20px;">
+                        <div class="card-title">📋 各知识点掌握度</div>
+                        <div id="kp-mastery-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+                    </div>
+                </div>
+
                 <div style="text-align:right;margin-top:16px;">
                     <button class="btn-primary" onclick="document.querySelectorAll('.tab')[1].click();">编辑画像</button>
                 </div>
@@ -335,7 +419,7 @@
     </div>
 
     <script type="module">
-        import { isLoggedIn, getUserId, getProfile, updateProfile } from './assets/api.js';
+        import { isLoggedIn, getUserId, getProfile, updateProfile, getQuizAttempts, getLearningAnalytics } from './assets/api.js?v=2';
         
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
@@ -343,22 +427,10 @@
 
         const userId = getUserId();
 
-        // Form field ids
-        const FIELD_IDS = {
-            major: 'edit-major',
-            daily_time_minutes: 'edit-daily-time',
-            cognitive_style: 'edit-cognitive',
-            learning_goal: 'edit-goal',
-            knowledge_mastered: 'edit-mastered',
-            knowledge_weak: 'edit-weak',
-            knowledge_frequent_error: 'edit-error',
-        };
-
         async function loadProfile() {
             const profile = await getProfile(userId);
             if (!profile) return;
 
-            // View panel
             document.getElementById('view-major').textContent = profile.major || '未设置';
             document.getElementById('view-cognitive').textContent = profile.cognitive_style || '未设置';
             document.getElementById('view-daily').textContent = profile.daily_time_minutes ? `${profile.daily_time_minutes} 分钟` : '未设置';
@@ -379,13 +451,11 @@
                 ? errors.map(k => `<span class="tag tag-default">${k}</span>`).join('')
                 : '<span style="color:#6B7280;font-size:13px;">暂无</span>';
 
-            // Stats
             document.getElementById('stat-mastered-count').textContent = mastered.length;
             document.getElementById('stat-weak-count').textContent = weak.length;
             document.getElementById('stat-daily-display').textContent = profile.daily_time_minutes || '-';
             document.getElementById('stats-grid').style.display = 'grid';
 
-            // Edit form
             document.getElementById('edit-major').value = profile.major || '';
             document.getElementById('edit-daily-time').value = profile.daily_time_minutes ? String(profile.daily_time_minutes) : '';
             document.getElementById('edit-cognitive').value = profile.cognitive_style || '';
@@ -423,9 +493,267 @@
             }
         }
 
+        // ============ 综合学习分析仪表盘 ============
+        async function loadAnalyticsDashboard() {
+            try {
+                const data = await getLearningAnalytics(userId);
+                if (!data) return;
+
+                const section = document.getElementById('analytics-section');
+                section.style.display = 'block';
+
+                // --- 概览统计 ---
+                const quizMastery = data.quiz_mastery || [];
+                const behavior = data.learning_behavior || {};
+                const totalAttempts = quizMastery.reduce((s, m) => s + m.total, 0);
+                const totalCorrect = quizMastery.reduce((s, m) => s + m.correct, 0);
+                const overallAcc = totalAttempts > 0 ? Math.round(totalCorrect / totalAttempts * 100) : 0;
+                const masteredKpCount = quizMastery.filter(m => m.accuracy >= 80).length;
+
+                document.getElementById('stat-total-attempts').textContent = totalAttempts;
+                document.getElementById('stat-accuracy').textContent = totalAttempts > 0 ? overallAcc + '%' : '-';
+                document.getElementById('stat-kp-tested').textContent = quizMastery.length;
+                document.getElementById('stat-mastery-count').textContent = masteredKpCount;
+                document.getElementById('stat-total-time').textContent = Math.round(behavior.total_minutes || 0);
+                document.getElementById('stat-streak').textContent = behavior.streak_days || 0;
+
+                // --- 学习行为趋势图 (ECharts) ---
+                renderActivityChart(behavior.daily_trend || []);
+
+                // --- 能力雷达图 (ECharts) ---
+                renderRadarChart(data.radar_data || {});
+
+                // --- 遗忘曲线提醒 ---
+                renderForgettingCurve(data.forgetting_curve || []);
+
+                // --- 学习行为分类统计 ---
+                renderBehaviorBreakdown(data.behavior_breakdown || []);
+
+                // --- 资源使用情况 ---
+                renderResourceUsage(data.resource_usage || []);
+
+                // --- 最近学习动态 ---
+                renderRecentActivities(data.recent_activities || []);
+
+                // --- 知识点掌握度进度条 ---
+                renderMasteryList(quizMastery);
+
+            } catch (e) {
+                console.error('加载学习分析失败:', e);
+            }
+        }
+
+        function renderActivityChart(dailyTrend) {
+            const chartDom = document.getElementById('activity-chart');
+            if (!dailyTrend.length) {
+                chartDom.innerHTML = '<div style="text-align:center;color:#6B7280;padding:60px 0;font-size:14px;">暂无学习记录</div>';
+                return;
+            }
+            const chart = echarts.init(chartDom);
+            const dates = dailyTrend.map(d => d.date.slice(5)); // MM-DD
+            const minutes = dailyTrend.map(d => d.minutes);
+            const actions = dailyTrend.map(d => d.actions);
+            chart.setOption({
+                tooltip: { trigger: 'axis' },
+                legend: { data: ['学习时长(分钟)', '学习次数'], top: 0 },
+                grid: { left: '3%', right: '4%', bottom: '3%', top: '40px', containLabel: true },
+                xAxis: { type: 'category', data: dates, axisLabel: { fontSize: 11 } },
+                yAxis: [
+                    { type: 'value', name: '分钟', splitLine: { lineStyle: { type: 'dashed' } } },
+                    { type: 'value', name: '次数', splitLine: { show: false } }
+                ],
+                series: [
+                    {
+                        name: '学习时长(分钟)', type: 'bar', data: minutes,
+                        itemStyle: { color: '#1976D2', borderRadius: [4, 4, 0, 0] },
+                        barMaxWidth: 20,
+                    },
+                    {
+                        name: '学习次数', type: 'line', yAxisIndex: 1, data: actions,
+                        smooth: true, lineStyle: { color: '#FB8C00', width: 2 },
+                        itemStyle: { color: '#FB8C00' }, symbol: 'circle', symbolSize: 5,
+                    }
+                ]
+            });
+            window.addEventListener('resize', () => chart.resize());
+        }
+
+        function renderRadarChart(radarData) {
+            const chartDom = document.getElementById('radar-chart');
+            const emptyEl = document.getElementById('radar-empty');
+            if (!radarData.indicators || radarData.indicators.length < 2) {
+                chartDom.style.display = 'none';
+                emptyEl.style.display = 'block';
+                return;
+            }
+            const chart = echarts.init(chartDom);
+            chart.setOption({
+                tooltip: {},
+                radar: {
+                    indicator: radarData.indicators,
+                    shape: 'polygon',
+                    splitNumber: 4,
+                    axisName: { color: '#1A1A2E', fontSize: 11 },
+                    splitArea: { areaStyle: { color: ['#fff', '#F5F7FA', '#EEF4FB', '#E3F2FD'] } },
+                },
+                series: [{
+                    type: 'radar',
+                    data: [{
+                        value: radarData.values,
+                        name: '知识掌握度',
+                        areaStyle: { color: 'rgba(25,118,210,0.2)' },
+                        lineStyle: { color: '#1976D2', width: 2 },
+                        itemStyle: { color: '#1976D2' },
+                    }]
+                }]
+            });
+            window.addEventListener('resize', () => chart.resize());
+        }
+
+        function renderForgettingCurve(items) {
+            const container = document.getElementById('forgetting-list');
+            const emptyEl = document.getElementById('forgetting-empty');
+            const needsReview = items.filter(i => i.needs_review);
+            if (!needsReview.length) {
+                container.style.display = 'none';
+                emptyEl.style.display = 'block';
+                return;
+            }
+            const urgencyConfig = {
+                high: { color: '#E53935', bg: '#FFEBEE', icon: '🔴', label: '紧急' },
+                medium: { color: '#FB8C00', bg: '#FFF3E0', icon: '🟡', label: '建议' },
+                low: { color: '#43A047', bg: '#E8F5E9', icon: '🟢', label: '可选' },
+            };
+            container.innerHTML = needsReview.slice(0, 10).map(item => {
+                const cfg = urgencyConfig[item.urgency] || urgencyConfig.low;
+                return `
+                    <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:${cfg.bg};border-radius:8px;border-left:4px solid ${cfg.color};">
+                        <span style="font-size:16px;">${cfg.icon}</span>
+                        <div style="flex:1;">
+                            <div style="font-size:14px;font-weight:500;color:#1A1A2E;">${item.kp_name}</div>
+                            <div style="font-size:12px;color:#6B7280;margin-top:2px;">距上次学习 ${item.days_since_last} 天 | 已学 ${item.study_count} 次</div>
+                        </div>
+                        <span style="font-size:12px;font-weight:600;color:${cfg.color};background:#fff;padding:4px 10px;border-radius:12px;border:1px solid ${cfg.color};">${cfg.label}复习</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderBehaviorBreakdown(breakdown) {
+            const container = document.getElementById('behavior-breakdown');
+            if (!breakdown.length) {
+                container.innerHTML = '<span style="color:#6B7280;font-size:13px;">暂无学习行为记录</span>';
+                return;
+            }
+            const icons = { view: '👁️', quiz: '✏️', complete: '✅' };
+            const colors = { view: '#1976D2', quiz: '#FB8C00', complete: '#43A047' };
+            const totalCount = breakdown.reduce((s, b) => s + b.count, 0) || 1;
+            container.innerHTML = breakdown.map(b => {
+                const pct = Math.round(b.count / totalCount * 100);
+                const icon = icons[b.action] || '📌';
+                const color = colors[b.action] || '#6B7280';
+                return `
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <span style="font-size:18px;">${icon}</span>
+                        <div style="flex:1;">
+                            <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                                <span style="font-size:13px;font-weight:500;color:#1A1A2E;">${b.label}</span>
+                                <span style="font-size:12px;color:#6B7280;">${b.count}次 | ${b.total_minutes}分钟</span>
+                            </div>
+                            <div style="height:6px;background:#E0E6ED;border-radius:3px;overflow:hidden;">
+                                <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderResourceUsage(usage) {
+            const container = document.getElementById('resource-usage');
+            if (!usage.length) {
+                container.innerHTML = '<span style="color:#6B7280;font-size:13px;">暂无资源使用记录</span>';
+                return;
+            }
+            const icons = { doc: '📄', mindmap: '🧠', quiz: '📝', code: '💻', summary: '📖' };
+            const colors = { doc: '#1976D2', mindmap: '#7B1FA2', quiz: '#FB8C00', code: '#00897B', summary: '#43A047' };
+            const totalCount = usage.reduce((s, u) => s + u.count, 0) || 1;
+            container.innerHTML = usage.map(u => {
+                const pct = Math.round(u.count / totalCount * 100);
+                const icon = icons[u.type] || '📁';
+                const color = colors[u.type] || '#6B7280';
+                const timeInfo = u.total_minutes ? ` | ${u.total_minutes}分钟` : '';
+                const resInfo = u.res_count ? `${u.res_count}份` : '';
+                return `
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <span style="font-size:18px;">${icon}</span>
+                        <div style="flex:1;">
+                            <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                                <span style="font-size:13px;font-weight:500;color:#1A1A2E;">${u.label}</span>
+                                <span style="font-size:12px;color:#6B7280;">使用${u.count}次 | ${resInfo}${timeInfo} (${pct}%)</span>
+                            </div>
+                            <div style="height:6px;background:#E0E6ED;border-radius:3px;overflow:hidden;">
+                                <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderRecentActivities(activities) {
+            const container = document.getElementById('recent-activities');
+            if (!activities.length) {
+                container.innerHTML = '<span style="color:#6B7280;font-size:13px;">暂无学习记录</span>';
+                return;
+            }
+            const icons = { view: '👁️', quiz: '✏️', complete: '✅' };
+            container.innerHTML = activities.map(a => {
+                const icon = icons[a.action] || '📌';
+                const time = a.recorded_at ? new Date(a.recorded_at).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+                const dur = a.duration_seconds ? `${a.duration_seconds}s` : '';
+                return `
+                    <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#F5F7FA;border-radius:8px;">
+                        <span style="font-size:16px;">${icon}</span>
+                        <span style="font-size:13px;font-weight:500;color:#1A1A2E;flex:1;">${a.label}</span>
+                        ${dur ? `<span style="font-size:12px;color:#1976D2;background:#E3F2FD;padding:2px 8px;border-radius:10px;">${dur}</span>` : ''}
+                        <span style="font-size:12px;color:#6B7280;">${time}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderMasteryList(quizMastery) {
+            const container = document.getElementById('kp-mastery-list');
+            if (!quizMastery.length) {
+                container.innerHTML = '<span style="color:#6B7280;font-size:13px;">暂无测验数据</span>';
+                return;
+            }
+            const sorted = [...quizMastery].sort((a, b) => (a.mastery_score || a.accuracy) - (b.mastery_score || b.accuracy));
+            container.innerHTML = sorted.map(m => {
+                const score = m.mastery_score !== undefined ? m.mastery_score : m.accuracy;
+                let color = '#E53935';
+                if (score >= 80) color = '#43A047';
+                else if (score >= 60) color = '#FB8C00';
+                const avgTime = m.avg_seconds ? `${m.avg_seconds}s` : '-';
+                const detail = `正确率:${m.accuracy}% | 平均用时:${avgTime} | 答题:${m.correct}/${m.total}`;
+                return `
+                    <div style="display:flex;align-items:center;gap:12px;" title="${detail}">
+                        <div style="min-width:140px;font-size:13px;font-weight:500;color:#1A1A2E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${m.kp_name}">${m.kp_name}</div>
+                        <div style="flex:1;height:10px;background:#E0E6ED;border-radius:5px;overflow:hidden;position:relative;">
+                            <div style="height:100%;width:${score}%;background:${color};border-radius:5px;transition:width 0.3s;"></div>
+                        </div>
+                        <div style="min-width:110px;font-size:12px;color:${color};font-weight:600;text-align:right;">${score}分 (正${m.accuracy}%|时${m.time_score || 50})</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
         document.getElementById('save-btn').addEventListener('click', handleSave);
         loadProfile();
+        loadAnalyticsDashboard();
     </script>
     <script>lucide.createIcons();</script>
+    <script src="./assets/tracker.js"></script>
 </body>
 </html>
