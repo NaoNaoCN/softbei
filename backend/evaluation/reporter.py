@@ -39,7 +39,7 @@ class RAGReporter:
         if output_dir is None:
             from pathlib import Path as _Path
             from backend.config import config as _cfg
-            output_dir = str(_Path(__file__).parent.parent / _cfg.logging.dir)
+            output_dir = str(_Path(__file__).parent.parent.parent / _cfg.logging.dir)
         self._output_dir = output_dir
 
     # ----------------------------------------------------------
@@ -269,14 +269,16 @@ class RAGReporter:
         report: RAGEvalReport,
         filename: str | None = None,
     ) -> str:
-        """将报告写入日志目录，返回文件路径。"""
+        """将报告写入日志目录，返回文件路径。同名文件会覆盖。"""
         from pathlib import Path
+        from datetime import datetime
 
         out_dir = Path(self._output_dir)
         out_dir.mkdir(exist_ok=True)
 
         if filename is None:
-            filename = f"rag_eval_report_{report.period_start.strftime('%Y-%m-%d')}.md"
+            ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+            filename = f"rag_eval_report_{ts}.md"
 
         filepath = out_dir / filename
         md_content = self.to_markdown(report)
