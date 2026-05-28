@@ -75,7 +75,8 @@ def safe_json_loads(raw: str) -> dict | list:
     1. Markdown 代码块包裹
     2. LaTeX 反斜杠转义（如 \\frac、\\partial 等在 JSON 中非法）
     3. LLM 在 JSON 前后添加的解释性文字（提取首个 { 或 [ 块）
-    4. 首尾多余字符
+    4. JSON 被 max_tokens 截断（补全未闭合的括号）
+    5. 首尾多余字符
 
     所有 judge 的 json.loads() 调用都应用此函数替代。
     """
@@ -118,7 +119,25 @@ def safe_json_loads(raw: str) -> dict | list:
         except json.JSONDecodeError:
             pass
 
-    # 策略 4：尝试用 ast.literal_eval（对 Python 风格的 dict/list 字面量有效）
+    # 策略 4：修复被截断的 JSON（补全未闭合的括号和引号）
+    repaired = _repair_truncated_json(cleaned)
+    if repaired != cleaned:
+        try:
+            return json.loads(repaired)
+        except json.JSONDecodeError:
+            pass
+        # 修复后也尝试反斜杠修复
+        fixed_repaired = re.sub(
+            r'\\(?!["\\\/bfnrtu])(?![0-9A-Fa-f]{4})',
+            r'\\\\',
+            repaired,
+        )
+        try:
+            return json.loads(fixed_repaired)
+        except json.JSONDecodeError:
+            pass
+
+    # 策略 5：尝试用 ast.literal_eval（对 Python 风格的 dict/list 字面量有效）
     try:
         import ast
         return ast.literal_eval(cleaned)
@@ -136,19 +155,89 @@ def safe_json_loads(raw: str) -> dict | list:
     )
 
 
+def _repair_truncated_json(text: str) -> str:
+    """尝试修复被 max_tokens 截断的 JSON。
+
+    策略：统计未闭合的括号，在末尾补上缺失的闭合符号。
+    同时处理被截断的字符串（未闭合的双引号）。
+    """
+    # 去除末尾可能被截断的不完整片段（如被截断的字符串值）
+    # 找到最后一个完整的结构边界
+    stripped = text.rstrip()
+
+    # 如果末尾是未闭合的字符串（奇数个未转义的双引号），尝试截断到上一个完整的值
+    if _has_unclosed_string(stripped):
+        # 找到最后一个已闭合的 "} 或 "], 或 ],
+        last_complete = _find_last_complete_boundary(stripped)
+        if last_complete > 0:
+            stripped = stripped[:last_complete]
+
+    # 统计未闭合的括号
+    depth_brace = 0      # {}
+    depth_bracket = 0    # []
+    in_string = False
+    for i, ch in enumerate(stripped):
+        if ch == '"' and (i == 0 or stripped[i-1] != '\\'):
+            in_string = not in_string
+        elif not in_string:
+            if ch == '{':
+                depth_brace += 1
+            elif ch == '}':
+                depth_brace -= 1
+            elif ch == '[':
+                depth_bracket += 1
+            elif ch == ']':
+                depth_bracket -= 1
+
+    # 补全缺失的闭合括号
+    result = stripped.rstrip(',\n\r\t ')  # 去掉尾部逗号（数组最后一项可能被截断）
+    result += ']' * max(0, depth_bracket)
+    result += '}' * max(0, depth_brace)
+
+    return result
+
+
+def _has_unclosed_string(text: str) -> bool:
+    """检查文本末尾是否有未闭合的 JSON 字符串。"""
+    in_string = False
+    for i, ch in enumerate(text):
+        if ch == '"' and (i == 0 or text[i-1] != '\\'):
+            in_string = not in_string
+    return in_string
+
+
+def _find_last_complete_boundary(text: str) -> int:
+    """找到最后一个完整的 JSON 结构边界位置（}, ], " 后跟逗号或空白）。"""
+    in_string = False
+    last_boundary = 0
+    for i, ch in enumerate(text):
+        if ch == '"' and (i == 0 or text[i-1] != '\\'):
+            in_string = not in_string
+            if not in_string and i > 0:  # 字符串闭合
+                last_boundary = i + 1
+        elif not in_string and ch in ('}', ']'):
+            last_boundary = i + 1
+    return last_boundary
+
+
 def _extract_json_block(text: str) -> str | None:
     """从文本中提取第一个 JSON 对象或数组块。"""
     # 尝试找到 { 开头并匹配到 }
     start = text.find("{")
     if start >= 0:
         depth = 0
+        in_string = False
         for i in range(start, len(text)):
-            if text[i] == "{":
-                depth += 1
-            elif text[i] == "}":
-                depth -= 1
-                if depth == 0:
-                    return text[start:i + 1]
+            ch = text[i]
+            if ch == '"' and (i == 0 or text[i - 1] != '\\'):
+                in_string = not in_string
+            if not in_string:
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return text[start:i + 1]
     # 尝试找到 [ 开头并匹配到 ]
     start = text.find("[")
     if start >= 0:
@@ -156,7 +245,7 @@ def _extract_json_block(text: str) -> str | None:
         in_string = False
         for i in range(start, len(text)):
             ch = text[i]
-            if ch == '"' and (i == 0 or text[i - 1] != "\\\\"):
+            if ch == '"' and (i == 0 or text[i - 1] != '\\'):
                 in_string = not in_string
             if not in_string:
                 if ch == "[":

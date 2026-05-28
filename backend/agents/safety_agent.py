@@ -49,7 +49,7 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
 
     try:
         raw = await chat_completion(
-            [{"role": "user", "content": prompt}],
+            [{"role": "system", "content": prompt}],
             temperature=app_config.agents.safety.temperature,
             max_tokens=app_config.agents.safety.max_tokens,  # 只需返回 passed + issues
         )

@@ -410,6 +410,10 @@ def format_context(chunks: list[RetrievedChunk], max_tokens: int | None = None) 
     将检索结果格式化为 LLM prompt 上下文字符串，附带来源引用编号。
     超过 max_tokens 估算时截断。
 
+    增强特性：
+    - 多样感知排序：优先展示不同节/子主题的 chunk，避免 top-k 全是同一角度
+    - Citation 安全：截断时标注实际展示条数与总检索条数
+
     格式示例：
     [1] （来源：chapter_01.pdf, 第2页）
     梯度下降是一种...
@@ -423,9 +427,16 @@ def format_context(chunks: list[RetrievedChunk], max_tokens: int | None = None) 
     if not chunks:
         logger.warning("[RAG] format_context 收到空 chunks，LLM 将在无参考资料的情况下生成内容。")
         return "（暂无参考资料）"
+
+    # ---- 多样感知排序 ----
+    # 按分数排序后，重新排列：优先保留不同 section 的 chunk
+    # 避免 top-k 的 5 条全来自同一节的"定义"部分
+    diverse_chunks = _diversify_order(chunks)
+
     parts: list[str] = []
     estimated_tokens = 0
-    for i, chunk in enumerate(chunks, 1):
+    shown_count = 0
+    for i, chunk in enumerate(diverse_chunks):
         source_info = f"来源：{chunk.source}"
         if chunk.page:
             source_info += f"，第 {chunk.page} 页"
@@ -448,13 +459,73 @@ def format_context(chunks: list[RetrievedChunk], max_tokens: int | None = None) 
             extra_info_parts.append(diff_labels.get(diff, diff))
         if extra_info_parts:
             source_info += " [" + ", ".join(extra_info_parts) + "]"
-        entry = f"[{i}] （{source_info}）\n{chunk.text}"
+        entry = f"[{shown_count + 1}] （{source_info}）\n{chunk.text}"
         entry_tokens = _estimate_tokens(entry)
         if estimated_tokens + entry_tokens > _max_tokens:
             break
         parts.append(entry)
         estimated_tokens += entry_tokens
-    return "\n\n".join(parts)
+        shown_count += 1
+
+    result = "\n\n".join(parts)
+
+    # ---- Citation 编号安全 ----
+    # 如果截断了 chunk，在末尾显式告知 LLM 实际展示范围
+    total = len(diverse_chunks)
+    if shown_count < total:
+        result += (
+            f"\n\n[注意：以上仅展示了前 {shown_count} 条参考资料，"
+            f"共检索到 {total} 条。请勿引用 [{shown_count + 1}] 及更大的编号。]"
+        )
+        logger.info(
+            f"[RAG] format_context 截断: shown={shown_count}/{total}, "
+            f"estimated_tokens={estimated_tokens}/{_max_tokens}"
+        )
+
+    return result
+
+
+def _diversify_order(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+    """
+    多样感知排序：在保持相关性优先的前提下，将来自不同 section 的 chunk
+    交错排列，避免 top-k 全部集中在一个子主题。
+    """
+    if len(chunks) <= 2:
+        return list(chunks)
+
+    # 按 section 分组（保留每组内的分数排序）
+    sections: dict[str, list[RetrievedChunk]] = {}
+    no_section: list[RetrievedChunk] = []
+    for c in chunks:
+        sec = c.section.strip() if c.section else ""
+        if sec:
+            sections.setdefault(sec, []).append(c)
+        else:
+            no_section.append(c)
+
+    # 如果没有足够多的不同 section，回退到原始排序
+    if len(sections) < 2:
+        return list(chunks)
+
+    # Round-robin：轮流从每个 section 取一个 chunk
+    result: list[RetrievedChunk] = []
+    section_keys = list(sections.keys())
+    idx = [0] * len(section_keys)
+
+    while len(result) < len(chunks):
+        added = False
+        for i, key in enumerate(section_keys):
+            if idx[i] < len(sections[key]):
+                result.append(sections[key][idx[i]])
+                idx[i] += 1
+                added = True
+        if not added:
+            break
+
+    # 追加未归组的 chunk
+    result.extend(no_section)
+
+    return result
 
 
 # ----------------------------------------------------------

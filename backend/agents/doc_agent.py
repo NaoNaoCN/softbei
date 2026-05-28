@@ -46,7 +46,7 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     try:
         draft, videos = await asyncio.gather(
             chat_completion(
-                [{"role": "user", "content": prompt}],
+                [{"role": "system", "content": prompt}],
                 temperature=app_config.agents.doc.temperature,
                 max_tokens=app_config.agents.doc.max_tokens,
             ),

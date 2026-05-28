@@ -232,17 +232,17 @@ agents:
 
   # -- 代码 Agent — 生成代码示例 --
   code:
-    temperature: 0.7
+    temperature: 0.4                     # 降低温度减少偏离资料（原 0.7）
     max_tokens: 5000                     # 代码输出通常较长
 
   # -- 文档 Agent — 生成学习文档 --
   doc:
-    temperature: 0.7
+    temperature: 0.3                     # 降低温度减少事实编造（原 0.7）
     max_tokens: 4000
 
   # -- 思维导图 Agent — 生成结构化知识导图 --
   mindmap:
-    temperature: 0.5                     # 较低温度保证结构一致性
+    temperature: 0.3                     # 降低温度保证结构准确性（原 0.5）
     max_tokens: 2000
 
   # -- 规划 Agent — 意图识别 + 资源规划 --
@@ -265,7 +265,7 @@ agents:
 
   # -- 题目 Agent — 生成测验题目 --
   quiz:
-    temperature: 0.6
+    temperature: 0.3                     # 降低温度确保题目基于资料（原 0.6）
     max_tokens: 3000
 
   # -- 推荐 Agent — 推荐后续学习知识点 --
@@ -279,12 +279,12 @@ agents:
   safety:
     temperature: 0.1                     # 安全判断需低温度
     max_tokens: 300
-    max_ref_docs: 3                      # 安全审计引用的最大文档数
-    draft_preview_chars: 500             # 提交给安全审计的草稿预览字符数
+    max_ref_docs: 5                      # 安全审计引用的最大文档数（从 3 提升，减少漏审）
+    draft_preview_chars: 3000            # 提交给安全审计的草稿预览字符数（从 500 提升）
 
   # -- 摘要 Agent — 生成学习内容摘要 --
   summary:
-    temperature: 0.7
+    temperature: 0.3                     # 降低温度确保摘要忠实于原文（原 0.7）
     max_tokens: 1200
     target_words_min: 300                # 摘要最低字数
     target_words_max: 500                # 摘要最高字数

@@ -29,13 +29,16 @@ pytest tests/test_schemas.py -v
 
 # Run a single test function
 pytest tests/test_schemas.py::test_user_create -v
+
+# Run RAG golden evaluation (requires DB + LLM)
+python -m backend.evaluation.golden_dataset --run
 ```
 
 ## Architecture
 
 **Stack:** FastAPI (async) + HTML/CSS/JS frontend + LangGraph agents + PostgreSQL vector store (JSON + numpy cosine) + SQLAlchemy 2.0 (async ORM) + PostgreSQL
 
-**LLM & Config:** Provider/model configured in `configs/config.yaml` via `${ENV_VAR}` substitution. Currently uses Qwen (`qwen3.5-flash`) via DashScope. Multi-provider support (spark/deepseek/qwen/openai) in `backend/services/llm.py`. Config is a module-level singleton: `from backend.config import config`.
+**LLM & Config:** Provider/model configured in `configs/config.yaml` via `${ENV_VAR}` substitution. Currently uses Kimi K2.6 (`kimi-k2.6`) via DashScope. Multi-provider support (spark/deepseek/qwen/openai) in `backend/services/llm.py`. Agent system prompts in `configs/prompts.yaml`. Config is a module-level singleton: `from backend.config import config`.
 
 **Required env vars** (see `.env.example`): `LLM_API_KEY`, `JWT_SECRET`, `DATABASE_URL` (PostgreSQL, e.g. `postgresql+asyncpg://user:pass@localhost:5432/softbei`).
 
@@ -61,7 +64,59 @@ Resource generation is triggered via `POST /generate`, runs as a background task
 
 ### RAG Pipeline
 
-`backend/rag/loader.py` → `indexer.py` → `retriever.py`. Loader parses PDF/DOCX/Markdown/TXT into `TextChunk` objects. Indexer vectorizes with BGE-M3 into PostgreSQL `document_chunk` table. Retriever does semantic search via numpy cosine similarity with citation formatting.
+`backend/rag/loader.py` → `indexer.py` → `retriever.py`. Loader parses PDF/DOCX/Markdown/TXT into `TextChunk` objects. Indexer vectorizes with BGE-M3 (or DashScope `text-embedding-v4`) into PostgreSQL `document_chunk` table via **HNSW** index. Retriever does hybrid search (vector + keyword) with RRF fusion, diversity-aware reordering, and citation formatting.
+
+Key features:
+- **Parent-child chunking**: child chunks for precise retrieval, parent chunks provide full context
+- **Hybrid retrieval**: vector semantic search + jieba keyword search, merged via RRF
+- **Query rewrite**: decontextualization + profile-aware expansion + optional multi-query
+- **Diversity-aware ordering**: round-robin by section to avoid top-k all from same sub-topic
+
+### RAG Evaluation System
+
+Four-layer evaluation architecture in `backend/evaluation/`:
+
+| Layer | File | What | Cost |
+|-------|------|------|------|
+| L1 Health Check | `health_check.py` | Vector DB connectivity, index stats | <5ms |
+| L2 Retrieval | `collector.py` + `judge.py` | P@5, Recall@5, MRR, NDCG@5, Hit Rate | LLM Judge |
+| L3 Generation | `judge.py` | Faithfulness, Completeness, Citation Accuracy, Hallucination | LLM Judge |
+| L4 Golden Eval | `golden_dataset.py` | Full-pipeline eval on hand-labeled queries | LLM Judge |
+
+**Golden eval workflow:**
+1. `golden_queries.yaml` — 15 hand-crafted queries across concept/algorithm/comparison/practice categories, each with `expected_aspects` for completeness scoring
+2. `golden_dataset.py` — runs queries through RAG pipeline → generates answers → judges faithfulness/completeness
+3. Report written to `logs/golden_eval_*.md`
+
+Reference docs in `docs/design/rag/`: 优化效果报告.md, 生成层优化方案.md, RAG评估系统.md, RAG评估指标说明.md
+
+### Prompt Engineering Conventions
+
+All Agent system prompts live in `configs/prompts.yaml`. Template variables: config-level (`{min_recommendations}`) resolved by `config.py`; runtime (`{context}`, `{kp_name}`) filled by agents via `.format()`.
+
+**Hierarchy for rules** (from `docs/design/rag/系统提示词书写原则.md`):
+
+| Priority | Keyword | When to use |
+|----------|---------|-------------|
+| Highest | **NEVER** | Irreversible harm: fabrication, hallucination, false citations |
+| High | **IMPORTANT** | Must-do quality gates: cite sources, verify against references |
+| Medium | Do NOT | Default prohibition, exceptions allowed |
+| Low | Avoid | Preference, can be overridden |
+
+**Standard prompt structure** every generation agent follows:
+```
+# Role — what the agent IS and IS NOT
+# Rules — NEVER/IMPORTANT hierarchy, each with a reason
+# Pre-generation Check — mental checklist before output (not included in output)
+# Output — format specification
+```
+
+**Key conventions:**
+- Always use `role: "system"` for generation prompts (higher LLM adherence than `role: "user"`)
+- Every prohibition must explain *why* — prevents the LLM from rationalizing violations
+- `[n]` citation markers mandatory in all generated content; `💡 补充` prefix for knowledge beyond references
+- Empty context handling: declare "暂无参考资料" rather than silently fabricating
+- Anti-fabrication is the top priority — faithfulness beats completeness
 
 ### Frontend
 
@@ -73,6 +128,8 @@ HTML/CSS/JS frontend served via FastAPI StaticFiles at `/app`. Pages: `index`, `
 - **pytest-asyncio** with `asyncio_mode = auto` — no `@pytest.mark.asyncio` needed
 - All DB operations are async (`async with get_session() as session`)
 - Agent pattern: receive `AgentState` dict → call LLM → update state fields → return state
+- **Config is a module-level singleton**: `from backend.config import config`. Never instantiate a second Config object.
+- **Prompts are externalized**: never hardcode system prompts in agent `.py` files — all prompts live in `configs/prompts.yaml` and are accessed via `config.prompts["agents"][agent_name]["system_prompt"]`.
 
 ## Naming Conventions — ORM ↔ Schema Alignment
 

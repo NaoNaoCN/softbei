@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import argparse
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -106,20 +106,35 @@ async def run_golden_evaluation(
             )
             retrieved_texts = [c.text for c in chunks]
 
-            # 生成简单回答（用于评估生成质量）
-            # 这里不经过完整 Agent 管线，直接用 LLM 生成
+            # 生成回答 — 使用与 Agent 管线一致的 system prompt 结构
+            # 包含反幻觉指令，确保评估结果能反映 Agent 实际生成质量
             from backend.services.llm import chat_completion
 
-            context = "\n\n---\n\n".join(retrieved_texts[:5]) if retrieved_texts else "（无参考资料）"
+            context = "\n\n---\n\n".join(
+                f"[{j+1}] {text}" for j, text in enumerate(retrieved_texts[:5])
+            ) if retrieved_texts else "（暂无参考资料）"
+
             gen_prompt = (
-                f"你是学习助手。请根据以下参考资料回答问题。\n\n"
+                f"# Role\n"
+                f"你是教学资料撰写专家。你的唯一任务是：基于参考资料回答学生的问题。\n"
+                f"你**不是**该知识点的权威专家——你的回答必须来自参考资料，不得越界。\n\n"
+                f"# Rules（优先级从高到低）\n\n"
+                f"## NEVER — 绝对禁止\n"
+                f"1. **禁止编造事实**：不得写入参考资料中不存在的数据、公式、定义或结论。\n"
+                f"2. **禁止凭记忆补充**：即使你\"知道\"某个相关信息，如果参考资料中没有，就不能写入正文。\n"
+                f"3. **禁止跳过空引用检查**：如果参考资料为\"（暂无参考资料）\"，必须在开头声明。\n\n"
+                f"## IMPORTANT — 必须做到\n"
+                f"4. **引用追溯**：正文中来自参考资料的每一条关键陈述，标注来源编号 [n]。\n"
+                f"5. **覆盖诚实**：如果参考资料不足以完整回答，在末尾说明哪些方面未被覆盖。\n\n"
+                f"# Output\n"
+                f"使用 Markdown，直接回答问题。\n\n"
+                f"---\n"
                 f"参考资料：\n{context}\n\n"
-                f"问题：{gq.query}\n\n"
-                f"请提供准确、完整的回答，引用参考资料时标注编号。"
+                f"问题：{gq.query}"
             )
             generated = await chat_completion(
-                [{"role": "user", "content": gen_prompt}],
-                temperature=0.3,
+                [{"role": "system", "content": gen_prompt}],
+                temperature=0.1,
                 max_tokens=2000,
             )
 
@@ -522,7 +537,7 @@ def main():
         # 写入一份精简文件
         out_dir = Path(__file__).parent.parent.parent / "logs"
         out_dir.mkdir(parents=True, exist_ok=True)
-        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         report_file = out_dir / f"golden_eval_{ts}.md"
         report_file.write_text(md, encoding="utf-8")
         print(f"报告已保存到: {report_file}")

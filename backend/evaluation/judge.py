@@ -171,7 +171,7 @@ class RAGJudge:
         )
         try:
             raw = await chat_completion(
-                [{"role": "user", "content": prompt}],
+                [{"role": "system", "content": prompt}],
                 temperature=self.temperature,
                 max_tokens=200,
                 provider=self.provider,
@@ -244,12 +244,18 @@ class RAGJudge:
         )
         try:
             raw = await chat_completion(
-                [{"role": "user", "content": prompt}],
+                [{"role": "system", "content": prompt}],
                 temperature=self.temperature,
-                max_tokens=1500,
+                max_tokens=2500,
                 provider=self.provider,
             )
             result = safe_json_loads(raw)
+            # safe_json_loads 可能返回 dict 或 list，此处需要 dict
+            if isinstance(result, list):
+                logger.warning(f"[RAGJudge] faithfulness 返回了数组而非对象，取首个元素")
+                result = result[0] if result else {}
+            if not isinstance(result, dict):
+                raise ValueError(f"faithfulness judge 返回了非预期的类型: {type(result).__name__}")
             n_stmts = len(result.get("statements", []))
             n_unsupported = sum(1 for s in result.get("statements", []) if s.get("verdict") == "unsupported")
             logger.info(

@@ -41,7 +41,7 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
 
     try:
         draft = await chat_completion(
-            [{"role": "user", "content": prompt}],
+            [{"role": "system", "content": prompt}],
             temperature=app_config.agents.summary.temperature,
             max_tokens=app_config.agents.summary.max_tokens,
         )
