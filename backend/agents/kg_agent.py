@@ -5,7 +5,7 @@ KGAgent：从已导入文档自动构建知识图谱（KGNode + KGEdge）。
 
 from __future__ import annotations
 
-from loguru import logger  # noqa: F401
+from loguru import logger
 
 from langchain_core.runnables import RunnableConfig
 

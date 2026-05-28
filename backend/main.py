@@ -1139,7 +1139,7 @@ async def get_quiz_attempts(
             options = qi.options
             answer = qi.answer
             explanation = qi.explanation
-            question_type = qi.question_type.value if qi.question_type else None
+            question_type = qi.question_type if qi.question_type else None
             difficulty = None
         else:
             # 尝试通过 kp_id 查找同知识点的 quiz 资源，从其 content_json 中补充题目内容

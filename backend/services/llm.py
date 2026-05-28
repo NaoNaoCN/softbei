@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import AsyncGenerator, Optional
 
-from loguru import logger  # noqa: F401
+from loguru import logger
 
 from openai import AsyncOpenAI, RateLimitError, PermissionDeniedError
 from httpx import Timeout, ConnectTimeout, ReadTimeout

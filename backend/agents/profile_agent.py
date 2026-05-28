@@ -11,7 +11,7 @@ from langgraph.graph import END
 from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.config import config as app_config
+from backend.config import config as app_config, prompts as _prompts
 from backend.models.schemas import AgentState, StudentProfileIn, StudentProfileOut
 from backend.agents.utils import parse_json_llm_response
 from loguru import logger
@@ -19,72 +19,13 @@ from loguru import logger
 from backend.services import profile as profile_svc
 from backend.services.llm import chat_completion
 
-# 提取画像字段的 prompt
-_EXTRACT_PROMPT = """你是一个学生画像分析助手。
-从学生的消息中提取以下字段，以 JSON 格式返回，无法提取的字段设为 null：
-{
-  "major": "学生专业",
-  "learning_goal": "学习目标",
-  "cognitive_style": "visual|text|practice",
-  "daily_time_minutes": 整数,
-  "knowledge_mastered": ["已掌握知识点"],
-  "knowledge_weak": ["薄弱知识点"],
-  "error_prone": ["容易出错的知识点"],
-  "current_progress": "当前学习进度描述"
-}
-只返回 JSON，不要包含其他内容。"""
-
-# 判断消息是否包含资源请求意图的 prompt
-_INTENT_PROMPT = """判断学生消息是否包含"想要学习某个具体知识点或请求生成学习资源"的意图。
-只回答 yes 或 no。"""
-
-# 画像初始化阶段的追问 prompt
-_ONBOARDING_CLARIFY_PROMPT = """你是一个友好的学习助手，正在帮助新用户建立学习画像。
-当前已知画像信息：{known_fields}
-还缺少的关键信息：{missing_fields}
-
-请用自然、友好的语气，针对缺失信息提出 1-2 个问题，引导用户补充。
-不要列清单，像朋友聊天一样。"""
-
-# 有资源请求但画像不足时的追问 prompt
-_RESOURCE_CLARIFY_PROMPT = """用户想要学习"{topic}"，但我还需要了解更多信息才能生成个性化资源。
-当前已知画像：{known_fields}
-缺少的必要信息：{missing_fields}
-
-请用自然语气，在提到"我来帮你生成资料"的同时，追问缺失的信息。控制在 2-3 句话内。"""
-
-# 画像完整但用户无已上传教材时的引导 prompt
-_NO_DOCS_GUIDE_PROMPT = """你是一个友好的学习助手。用户刚完成了学习画像的建立。
-当前画像信息：{known_fields}
-用户的学习目标：{learning_goal}
-
-但用户还没有上传任何课程教材（PDF）。请：
-1. 先简要确认已记录的画像信息
-2. 建议用户到「资源库」页面上传相关课程教材 PDF，这样可以基于教材生成更精准的个性化资源
-3. 同时告知用户也可以直接请求生成资源，系统会用通用知识来生成
-
-语气友好自然，控制在 3-4 句话内。"""
-
-# 画像完整、用户只是自我介绍（无明确资源请求）时的确认 prompt
-_PROFILE_CONFIRM_PROMPT = """你是一个友好的学习助手。用户刚完成了学习画像的建立，但没有明确请求生成学习资源。
-当前画像信息：{known_fields}
-
-用户还没有上传任何课程教材。请：
-1. 简要确认已记录的画像信息（1-2句话概括）
-2. 建议用户到「资源库」页面上传课程教材 PDF，这样能生成更精准的个性化资源
-3. 告知用户也可以直接请求生成资源（如"帮我生成卷积的学习资料"），系统会用通用知识来生成
-
-语气友好自然，控制在 3-4 句话内。"""
-
-# 画像完整、用户只是自我介绍、已有文档时的确认 prompt
-_PROFILE_CONFIRM_PROMPT_WITH_DOCS = """你是一个友好的学习助手。用户刚完成了学习画像的建立，但没有明确请求生成学习资源。
-当前画像信息：{known_fields}
-
-请：
-1. 简要确认已记录的画像信息（1-2句话概括）
-2. 告知用户可以随时请求生成学习资源（如"帮我生成卷积的学习资料"），系统会基于已上传的教材生成个性化内容
-
-语气友好自然，控制在 2-3 句话内。"""
+_EXTRACT_PROMPT = _prompts.get("agents.profile.extract")
+_INTENT_PROMPT = _prompts.get("agents.profile.intent")
+_ONBOARDING_CLARIFY_PROMPT = _prompts.get("agents.profile.onboarding_clarify")
+_RESOURCE_CLARIFY_PROMPT = _prompts.get("agents.profile.resource_clarify")
+_NO_DOCS_GUIDE_PROMPT = _prompts.get("agents.profile.no_docs_guide")
+_PROFILE_CONFIRM_PROMPT = _prompts.get("agents.profile.profile_confirm")
+_PROFILE_CONFIRM_PROMPT_WITH_DOCS = _prompts.get("agents.profile.profile_confirm_with_docs")
 
 
 def _profile_to_known_fields(profile) -> dict:

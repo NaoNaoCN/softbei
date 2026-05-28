@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 
-from loguru import logger  # noqa: F401
+from loguru import logger
 
 from backend.config import config as app_config
 from backend.models.schemas import AgentState
@@ -17,28 +17,9 @@ from backend.services.llm import chat_completion
 from backend.db.crud import select as db_select
 from langchain_core.runnables import RunnableConfig
 
-SYSTEM_PROMPT = f"""你是一位智能学习顾问。
-根据学生的当前画像和已学知识点，从知识图谱中推荐 {app_config.agents.recommend.min_recommendations}-{app_config.agents.recommend.max_recommendations} 个下一步应学习的知识点。
+from backend.config import prompts as _prompts
 
-学生画像：
-{{profile}}
-
-已学知识点（已掌握）：{{mastered}}
-薄弱知识点：{{weak}}
-学习目标：{{goal}}
-
-可选知识点（来自知识图谱）：
-{{available_kps}}
-
-重要规则：
-- 你必须且只能从上面的"可选知识点"列表中选择推荐项
-- kp_id 必须使用列表中冒号前的 ID（如 "kp_abc123"），不得自行编造
-- kp_name 必须使用列表中冒号后的名称
-- 如果可选知识点为空或不可用，返回空数组 []
-
-以 JSON 数组返回，每项包含：
-{{{{"kp_id": "...", "kp_name": "...", "reason": "推荐原因"}}}}
-"""
+SYSTEM_PROMPT = _prompts.get("agents.recommend.system_prompt")
 
 
 async def run(state: AgentState, config: RunnableConfig) -> AgentState:

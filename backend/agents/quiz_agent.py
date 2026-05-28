@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 
-from loguru import logger  # noqa: F401
+from loguru import logger
 
 from backend.config import config as app_config
 from backend.models.schemas import AgentState, QuestionType
@@ -15,27 +15,9 @@ from backend.agents.utils import resolve_kp_name, retrieve_context, parse_json_l
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
 
-SYSTEM_PROMPT = """你是一位出题专家。
-请为以下知识点出 {count} 道题目，题型分布：
-- 单选题（single）：{single_count} 道
-- 多选题（multi）：{multi_count} 道
-- 填空题（fill）：{fill_count} 道
+from backend.config import prompts as _prompts
 
-以 JSON 数组返回，每道题格式：
-{{
-  "question_type": "single/multi/fill",
-  "difficulty": 1-5,
-  "stem": "题干",
-  "options": ["A. ...", "B. ..."],  // 填空题为 null
-  "answer": "A" 或 ["A","C"] 或 "答案文本",
-  "explanation": "解析"
-}}
-
-参考资料：
-{context}
-
-知识点：{kp_name}
-"""
+SYSTEM_PROMPT = _prompts.get("agents.quiz.system_prompt")
 
 
 def _get_question_counts(profile) -> tuple[int, int, int]:

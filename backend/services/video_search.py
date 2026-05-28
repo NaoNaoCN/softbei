@@ -57,7 +57,7 @@ def extract_search_keywords(text: str) -> str:
                  "帮我", "生成", "学习", "文档", "资料", "关于", "区别", "对比"}
     keywords = [w for w in keywords if len(w) >= 2 and w not in stopwords]
     if keywords:
-        print("视频提取关键词:", " ".join(keywords[:4]))
+        logger.debug("[VideoSearch] 提取关键词: {}", " ".join(keywords[:4]))
     return " ".join(keywords[:4]) if keywords else text[:20]
 
 

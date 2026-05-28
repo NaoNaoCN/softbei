@@ -6,14 +6,9 @@ RAG 评估报告生成器：聚合采集数据，生成日报/周报/Markdown �
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Optional
 
-from loguru import logger
-
-from backend.config import config
 from backend.evaluation.models import (
     RetrievalEvalRecord,
     GenerationEvalRecord,
@@ -26,7 +21,6 @@ from backend.evaluation.metrics import (
     ndcg_at_k,
     hit_rate,
     score_distribution,
-    avg_score,
 )
 
 
@@ -40,8 +34,13 @@ class RAGReporter:
         print(reporter.to_markdown(report))
     """
 
-    def __init__(self):
+    def __init__(self, output_dir: str | None = None):
         self._last_report: Optional[RAGEvalReport] = None
+        if output_dir is None:
+            from pathlib import Path as _Path
+            from backend.config import config as _cfg
+            output_dir = str(_Path(__file__).parent.parent / _cfg.logging.dir)
+        self._output_dir = output_dir
 
     # ----------------------------------------------------------
     # 报告生成
@@ -198,35 +197,6 @@ class RAGReporter:
         return self.generate_report(weekly, period_start=start, period_end=now)
 
     # ----------------------------------------------------------
-    # 对比报告
-    # ----------------------------------------------------------
-
-    def compare_reports(
-        self,
-        report_a: RAGEvalReport,
-        report_b: RAGEvalReport,
-    ) -> dict:
-        """对比两期报告，计算各项指标的 delta 值。"""
-        fields = [
-            "precision_at_5", "recall_at_5", "mrr_val", "ndcg_at_5",
-            "hit_rate_val", "score_p50",
-            "avg_faithfulness", "avg_hallucination_rate", "avg_concept_coverage",
-            "p50_retrieval_latency_ms", "p95_retrieval_latency_ms",
-            "p50_generation_latency_ms",
-        ]
-        comparison = {}
-        for f in fields:
-            val_a = getattr(report_a, f, 0.0) or 0.0
-            val_b = getattr(report_b, f, 0.0) or 0.0
-            comparison[f] = {
-                "a": val_a,
-                "b": val_b,
-                "delta": round(val_b - val_a, 4),
-                "delta_pct": round((val_b - val_a) / abs(val_a) * 100, 1) if val_a != 0 else 0.0,
-            }
-        return comparison
-
-    # ----------------------------------------------------------
     # 渲染
     # ----------------------------------------------------------
 
@@ -291,99 +261,47 @@ class RAGReporter:
         )
 
     # ----------------------------------------------------------
-    # 文件写入
+    # 文件落盘
     # ----------------------------------------------------------
 
-    @staticmethod
-    def _ensure_log_dir() -> Path:
-        """确保日志目录存在，返回 Path 对象。"""
-        log_dir = Path(config.logging.dir)
-        if not log_dir.is_absolute():
-            # 相对于项目根目录
-            log_dir = Path(__file__).parent.parent.parent / config.logging.dir
-        log_dir.mkdir(parents=True, exist_ok=True)
-        return log_dir
+    def save_to_disk(
+        self,
+        report: RAGEvalReport,
+        filename: str | None = None,
+    ) -> str:
+        """将报告写入日志目录，返回文件路径。"""
+        from pathlib import Path
 
-    @staticmethod
-    def write_result_to_log_dir(result: dict, label: str = "eval") -> str | None:
-        """
-        将单次 LLM-as-Judge 评估结果写入 logs/ 目录。
+        out_dir = Path(self._output_dir)
+        out_dir.mkdir(exist_ok=True)
 
-        生成两个文件（共用时间戳前缀）：
-        - logs/rag_{label}_{timestamp}.md   — 人类可读的 Markdown 报告
-        - logs/rag_{label}_{timestamp}.json — 机器可读的完整数据
+        if filename is None:
+            filename = f"rag_eval_report_{report.period_start.strftime('%Y-%m-%d')}.md"
 
-        :param result: 评估结果 dict（来自 RAGJudge.evaluate_full() 或类似结构）
-        :param label:  文件标签（如 "eval"、"daily"、"weekly"）
-        :return:       写入的 JSON 文件路径，失败返回 None
-        """
-        try:
-            log_dir = RAGReporter._ensure_log_dir()
-            ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-            base_name = f"rag_{label}_{ts}"
+        filepath = out_dir / filename
+        md_content = self.to_markdown(report)
+        filepath.write_text(md_content, encoding="utf-8")
+        return str(filepath)
 
-            # -- JSON（完整数据）--
-            json_path = log_dir / f"{base_name}.json"
-            serializable = _make_json_safe(result)
-            json_path.write_text(
-                json.dumps(serializable, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-
-            # -- Markdown（人类可读摘要）--
-            md_path = log_dir / f"{base_name}.md"
-            md_content = _result_to_markdown(result, label, ts)
-            md_path.write_text(md_content, encoding="utf-8")
-
-            logger.info(f"[RAGReporter] 评估报告已写入: {md_path}")
-            return str(json_path)
-        except Exception as e:
-            logger.warning(f"[RAGReporter] 写入评估报告失败: {e}")
+    def save_daily_report(
+        self,
+        records: list[GenerationEvalRecord],
+    ) -> str | None:
+        """生成日报并写入 logs/ 目录。无记录时返回 None。"""
+        if not records:
             return None
 
-    @staticmethod
-    def write_report_to_log_dir(report: RAGEvalReport, label: str = "report") -> str | None:
-        """
-        将 RAGEvalReport 写入 logs/ 目录。
-
-        :param report: RAGEvalReport 实例
-        :param label:  文件标签（如 "daily"、"weekly"）
-        :return:       写入的文件路径
-        """
-        try:
-            log_dir = RAGReporter._ensure_log_dir()
-            ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-            base_name = f"rag_{label}_{ts}"
-
-            md_path = log_dir / f"{base_name}.md"
-            reporter = RAGReporter()
-            md_path.write_text(reporter.to_markdown(report), encoding="utf-8")
-
-            json_path = log_dir / f"{base_name}.json"
-            json_path.write_text(
-                json.dumps(report.model_dump(), ensure_ascii=False, indent=2, default=str),
-                encoding="utf-8",
-            )
-
-            logger.info(f"[RAGReporter] 汇总报告已写入: {md_path}")
-            return str(md_path)
-        except Exception as e:
-            logger.warning(f"[RAGReporter] 写入汇总报告失败: {e}")
+        report = self.generate_daily_report(records)
+        if report.total_queries == 0:
             return None
 
-
-# ----------------------------------------------------------
-# 模块级便捷函数
-# ----------------------------------------------------------
-
-def write_eval_result(result: dict, label: str = "eval") -> str | None:
-    """将评估结果写入 logs/ 目录（无需实例化 RAGReporter）。"""
-    return RAGReporter.write_result_to_log_dir(result, label)
-
-
-def write_report(report: RAGEvalReport, label: str = "report") -> str | None:
-    """将 RAGEvalReport 写入 logs/ 目录（无需实例化 RAGReporter）。"""
-    return RAGReporter.write_report_to_log_dir(report, label)
+        filepath = self.save_to_disk(report)
+        from loguru import logger
+        logger.info(
+            "[RAGReporter] 日报已保存: {} ({} queries, Faith={:.3f})",
+            filepath, report.total_queries, report.avg_faithfulness,
+        )
+        return filepath
 
 
 # ----------------------------------------------------------
@@ -419,109 +337,3 @@ def _check_reference(value: float, ref_str: str) -> str:
     elif op in ("<", "<="):
         return "✅" if value <= threshold else "❌"
     return ""
-
-
-def _make_json_safe(obj):
-    """递归将不可序列化的对象转换为可 JSON 序列化的格式。"""
-    if isinstance(obj, dict):
-        return {k: _make_json_safe(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_make_json_safe(v) for v in obj]
-    if isinstance(obj, datetime):
-        return obj.isoformat()
-    if hasattr(obj, "value"):  # Enum
-        return obj.value
-    return obj
-
-
-def _result_to_markdown(result: dict, label: str, ts: str) -> str:
-    """将 evaluate_full() 结果渲染为 Markdown。"""
-    faith_score = result.get("faithfulness_score", 0) or 0
-    hallu_rate = result.get("hallucination_rate", 0) or 0
-    comp_score = result.get("completeness_score", 0) or 0
-    prec_at_5 = result.get("precision_at_5", 0) or 0
-    cit_prec = result.get("citation_precision")
-    eval_ms = result.get("evaluation_time_ms", 0) or 0
-
-    lines = [
-        f"# RAG 评估结果",
-        f"",
-        f"- **标签：** {label}",
-        f"- **时间：** {ts}",
-        f"- **知识点：** {result.get('kp_name', '-')}",
-        f"- **查询：** {result.get('query', '-')}",
-        f"",
-        f"## 汇总",
-        f"",
-        f"| 指标 | 值 | 参考 | 达标 |",
-        f"|------|-----|------|------|",
-        f"| Faithfulness | {faith_score:.3f} | > 0.70 | {_check_reference(faith_score, '> 0.70')} |",
-        f"| Hallucination Rate | {hallu_rate:.3f} | < 0.30 | {_check_reference(hallu_rate, '< 0.30')} |",
-        f"| Completeness | {comp_score:.3f} | > 0.60 | {_check_reference(comp_score, '> 0.60')} |",
-        f"| Precision@5 | {prec_at_5:.3f} | > 0.60 | {_check_reference(prec_at_5, '> 0.60')} |",
-    ]
-    if cit_prec is not None:
-        lines.append(f"| Citation Precision | {cit_prec:.3f} | > 0.70 | {_check_reference(cit_prec, '> 0.70')} |")
-    lines.extend([
-        f"| 评估耗时 | {eval_ms:.0f} ms | - | - |",
-        f"",
-    ])
-
-    # 检索相关性分布
-    labels_list = result.get("relevance_labels", [])
-    if labels_list:
-        n_high = sum(1 for s in labels_list if s == 2)
-        n_partial = sum(1 for s in labels_list if s == 1)
-        n_irrelevant = sum(1 for s in labels_list if s == 0)
-        lines.extend([
-            f"## 检索相关性分布",
-            f"",
-            f"| 等级 | 数量 |",
-            f"|------|------|",
-            f"| 高度相关 (2) | {n_high} |",
-            f"| 部分相关 (1) | {n_partial} |",
-            f"| 无关 (0) | {n_irrelevant} |",
-            f"",
-        ])
-
-    # Faithfulness 详情
-    statements = result.get("faithfulness_statements", [])
-    if statements:
-        lines.extend([
-            f"## 忠实度逐句分析",
-            f"",
-        ])
-        for s in statements[:20]:  # 最多显示 20 条
-            icon = "✅" if s.get("verdict") == "supported" else "❌"
-            lines.append(f"- {icon} {s.get('text', '')[:120]}")
-            if s.get("verdict") == "unsupported" and s.get("evidence"):
-                lines.append(f"  - 证据: {s['evidence'][:120]}")
-        lines.append("")
-
-    # Completeness 详情
-    aspects = result.get("completeness_aspects", [])
-    if aspects:
-        lines.extend([
-            f"## 完整度分析",
-            f"",
-            f"| 方面 | 覆盖 |",
-            f"|------|------|",
-        ])
-        for a in aspects:
-            cov = a.get("coverage", "?")
-            emoji = {"covered": "✅", "partial": "⚠️", "missing": "❌"}.get(cov, "")
-            lines.append(f"| {emoji} {a.get('aspect', '')[:80]} | {cov} |")
-        lines.append("")
-
-    # 问题列表
-    issues = result.get("faithfulness_issues", [])
-    if issues:
-        lines.extend([
-            f"## 发现的问题",
-            f"",
-        ])
-        for i, issue in enumerate(issues, 1):
-            lines.append(f"{i}. {issue}")
-        lines.append("")
-
-    return "\n".join(lines)

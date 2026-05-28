@@ -13,7 +13,6 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
-    Enum,
     Float,
     ForeignKey,
     Index,
@@ -23,17 +22,10 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db.database import Base
-from backend.models.schemas import (
-    CognitiveStyle,
-    KGRelation,
-    QuestionType,
-    ResourceType,
-    TaskStatus,
-)
 from backend.utils.snowflake import generate_id, string_to_id
 
 
@@ -67,9 +59,7 @@ class StudentProfile(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), unique=True, nullable=False)
     major: Mapped[str | None] = mapped_column(String(128))
     learning_goal: Mapped[str | None] = mapped_column(Text)
-    cognitive_style: Mapped[str | None] = mapped_column(
-        Enum(CognitiveStyle, values_callable=lambda e: [m.value for m in e])
-    )
+    cognitive_style: Mapped[str | None] = mapped_column(String(32))
     daily_time_minutes: Mapped[int | None] = mapped_column(Integer)
     knowledge_mastered: Mapped[list | None] = mapped_column(JSON)
     knowledge_weak: Mapped[list | None] = mapped_column(JSON)
@@ -153,23 +143,23 @@ class DocumentChunk(Base):
     doc_id: Mapped[str] = mapped_column(String(128), nullable=False)
     collection_name: Mapped[str] = mapped_column(String(64), default="knowledge_base", index=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding = mapped_column(Vector(1024), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
     source: Mapped[str | None] = mapped_column(String(512))
     page: Mapped[int | None] = mapped_column(Integer)
     section: Mapped[str | None] = mapped_column(String(256))
     user_id: Mapped[str | None] = mapped_column(String(64))
     metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB, default=dict)
-    content_hash: Mapped[str | None] = mapped_column(String(32), nullable=True)
     parent_chunk_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     is_parent: Mapped[bool] = mapped_column(Boolean, default=False)
+    text_search: Mapped[str | None] = mapped_column(TSVECTOR, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (
         Index("ix_document_chunk_doc_id", "doc_id"),
         Index("ix_document_chunk_user_id", "user_id"),
-        Index("ix_document_chunk_doc_id_hash", "doc_id", "content_hash"),
         Index("ix_document_chunk_parent", "parent_chunk_id"),
         Index("ix_document_chunk_is_parent", "is_parent"),
+        Index("ix_document_chunk_text_search", "text_search", postgresql_using="gin"),
     )
 
 
@@ -208,10 +198,7 @@ class KGEdge(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
     source_id: Mapped[str] = mapped_column(ForeignKey("kg_node.id"), nullable=False)
     target_id: Mapped[str] = mapped_column(ForeignKey("kg_node.id"), nullable=False)
-    relation: Mapped[str] = mapped_column(
-        Enum(KGRelation, values_callable=lambda e: [m.value for m in e]),
-        nullable=False,
-    )
+    relation: Mapped[str] = mapped_column(String(32), nullable=False)
 
     source_node: Mapped["KGNode"] = relationship(back_populates="out_edges", foreign_keys=[source_id])
     target_node: Mapped["KGNode"] = relationship(back_populates="in_edges", foreign_keys=[target_id])
@@ -233,10 +220,7 @@ class ResourceMeta(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
     kp_id: Mapped[str] = mapped_column(String(256), nullable=False)
-    resource_type: Mapped[str] = mapped_column(
-        Enum(ResourceType, values_callable=lambda e: [m.value for m in e]),
-        nullable=False,
-    )
+    resource_type: Mapped[str] = mapped_column(String(32), nullable=False)
     title: Mapped[str | None] = mapped_column(String(256))
     content: Mapped[str | None] = mapped_column(Text)
     content_json: Mapped[dict | None] = mapped_column(JSON)   # 思维导图等结构化内容，与content字段互斥使用
@@ -257,11 +241,7 @@ class GenerationBatch(Base):
         BigInteger, ForeignKey("user.id"), nullable=False, index=True,
     )
     kp_id: Mapped[str] = mapped_column(String(256), nullable=False)
-    status: Mapped[str] = mapped_column(
-        Enum(TaskStatus, values_callable=lambda e: [m.value for m in e]),
-        default=TaskStatus.pending,
-        nullable=False,
-    )
+    status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
     progress: Mapped[int] = mapped_column(Integer, default=0)
     resource_types: Mapped[list | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -278,11 +258,7 @@ class GenerationTask(Base):
     batch_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("generation_batch.id"), nullable=True, index=True,
     )
-    status: Mapped[str] = mapped_column(
-        Enum(TaskStatus, values_callable=lambda e: [m.value for m in e]),
-        default=TaskStatus.pending,
-        nullable=False,
-    )
+    status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
     progress: Mapped[int] = mapped_column(Integer, default=0)   # 0-100
     error_message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -306,11 +282,7 @@ class KGBuildTask(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
     doc_id: Mapped[str] = mapped_column(String(128), nullable=False)
     user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
-    status: Mapped[str] = mapped_column(
-        Enum(TaskStatus, values_callable=lambda e: [m.value for m in e]),
-        default=TaskStatus.pending,
-        nullable=False,
-    )
+    status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
     progress: Mapped[int] = mapped_column(Integer, default=0)
     stage: Mapped[str | None] = mapped_column(String(64))
     nodes_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -332,10 +304,7 @@ class QuizItem(Base):
         BigInteger, ForeignKey("resource_meta.id"), nullable=False, index=True,
     )
     kp_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    question_type: Mapped[str] = mapped_column(
-        Enum(QuestionType, values_callable=lambda e: [m.value for m in e]),
-        nullable=False,
-    )
+    question_type: Mapped[str] = mapped_column(String(16), nullable=False)
     stem: Mapped[str] = mapped_column(Text, nullable=False)
     options: Mapped[list | None] = mapped_column(JSON)          # 选择题选项
     answer: Mapped[str] = mapped_column(Text, nullable=False)   # 标准答案
@@ -424,3 +393,7 @@ class LearningRecord(Base):
 
     user: Mapped["User"] = relationship(back_populates="learning_records")
     resource: Mapped["ResourceMeta | None"] = relationship(back_populates="learning_records")
+
+
+
+

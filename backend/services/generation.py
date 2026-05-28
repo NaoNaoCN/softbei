@@ -11,7 +11,7 @@ import traceback
 from typing import Any
 
 import asyncio
-from loguru import logger  # noqa: F401
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agents.graph import get_graph
@@ -46,7 +46,11 @@ async def run_generation(
     from backend.services import pathway as pathway_svc
 
     req = GenerateRequest(**request)
-    logger.info(f"[run_generation] started task_id={task_id} kp_id={req.kp_id} type={req.resource_type}")
+    logger.info("[run_generation] started task_id={} kp_id={} type={}", task_id, req.kp_id, req.resource_type)
+
+    # 为后台任务绑定 trace_id（非 HTTP 上下文，需手动设置）
+    from backend.middleware.logging_middleware import generate_trace_id, trace_id_var
+    trace_id_var.set(generate_trace_id())
 
     try:
         async with _session_factory() as db:
@@ -85,6 +89,17 @@ async def run_generation(
                     {"status": TaskStatus.failed.value, "progress": 0, "error_message": str(e)},
                 )
                 return
+
+            # -- RAG 评估采集：与 graph.invoke() 中的钩子保持一致 --
+            try:
+                from backend.agents.graph import (
+                    _collect_generation_eval,
+                    _maybe_trigger_async_judge,
+                )
+                _collect_generation_eval(state, session_id)
+                _maybe_trigger_async_judge(state, session_id)
+            except Exception:
+                pass  # 评估采集失败不应影响生成主流程
 
             # -- 阶段 2：内容持久化 --
             await update_by_id(db, GenerationTask, task_id, {"progress": 80})
@@ -165,10 +180,7 @@ async def run_generation(
                 logger.warning("[auto_pathway] failed to auto-create pathway: %s", e)
 
     except Exception as exc:
-        import sys
-        import traceback as tb
-        tb.print_exc()
-        logger.error("[run_generation] unexpected error: %s | %r", exc, exc)
+        logger.exception("[run_generation] unexpected error: {}", exc)
 
 
 def _parse_code_block(draft: str) -> tuple[str, str]:

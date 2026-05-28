@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
-from loguru import logger  # noqa: F401
+from loguru import logger
 
 from sqlalchemy.ext.asyncio import AsyncSession
 

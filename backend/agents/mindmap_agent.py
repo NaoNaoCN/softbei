@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 
-from loguru import logger  # noqa: F401
+from loguru import logger
 
 from backend.config import config as app_config
 from backend.models.schemas import AgentState
@@ -15,26 +15,9 @@ from backend.agents.utils import resolve_kp_name, retrieve_context
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
 
-SYSTEM_PROMPT = """你是一位思维导图设计专家。
-请根据知识点和参考资料，生成一份适合 ECharts tree 图表的 JSON 数据。
-格式要求（严格 JSON，不含任何 Markdown 标记）：
-{{
-  "name": "知识点名称",
-  "children": [
-    {{
-      "name": "子概念1",
-      "children": [...]
-    }},
-    ...
-  ]
-}}
+from backend.config import prompts as _prompts
 
-参考资料：
-{context}
-
-知识点：{kp_name}
-层级深度：不超过 {max_depth} 层，每节点子项不超过 {max_children} 个。
-"""
+SYSTEM_PROMPT = _prompts.get("agents.mindmap.system_prompt")
 
 
 async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:

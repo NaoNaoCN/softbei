@@ -10,7 +10,7 @@ import hashlib
 import json
 import re
 
-from loguru import logger  # noqa: F401
+from loguru import logger
 from collections import defaultdict
 from typing import Any
 
@@ -21,47 +21,15 @@ from backend.db.models import KGEdge, KGNode
 from backend.db.vector import get_documents_by_doc_id
 from backend.models.schemas import KGNodeType, KGRelation
 from backend.services.llm import chat_completion
-from backend.config import config
+from backend.config import config, prompts as _prompts
 
 # ----------------------------------------------------------
 # Prompts
 # ----------------------------------------------------------
 
-NODE_EXTRACT_PROMPT = """你是一位知识图谱构建专家。请从以下教材文本中提取知识点节点。
+NODE_EXTRACT_PROMPT = _prompts.get("kg_builder.node_extract")
 
-要求：
-- 提取所有出现的知识概念，按层级分类
-- type 必须是以下之一：Chapter, KnowledgePoint, SubPoint, Concept（不要使用 Course）
-- 节点命名规则：
-  - 必须去除章节编号（如"第7章"、"7.1"、"10.1.2"等前缀），只保留纯粹的知识点名称
-  - 示例："10.1 注意力机制" → "注意力机制"，"第3章 线性回归" → "线性回归"，"7.1.2 小批量随机梯度下降" → "小批量随机梯度下降"
-- 每个节点包含 name（简短名称，无编号）、type、description（一句话描述）
-- 返回 JSON 数组格式
-
-文本内容：
-{text}
-
-请返回 JSON 数组，格式如下（只返回 JSON，不要其他内容）：
-[{{"name": "...", "type": "...", "description": "..."}}]"""
-
-EDGE_EXTRACT_PROMPT = """你是一位知识图谱构建专家。请根据以下知识点列表，推断它们之间的关系。
-
-知识点列表：
-{nodes_text}
-
-关系类型说明：
-- IS_PART_OF: A 是 B 的组成部分（章节属于课程，知识点属于章节）
-- REQUIRES: A 的学习需要先掌握 B（前置依赖）
-- RELATED_TO: A 和 B 有关联但无层级或依赖关系
-- CONTAINS: A 包含 B（与 IS_PART_OF 方向相反）
-
-要求：
-- source 和 target 必须是上面列表中的知识点名称（精确匹配）
-- relation 必须是 IS_PART_OF / REQUIRES / RELATED_TO / CONTAINS 之一
-- 只返回 JSON 数组
-
-请返回 JSON 数组：
-[{{"source": "...", "target": "...", "relation": "..."}}]"""
+EDGE_EXTRACT_PROMPT = _prompts.get("kg_builder.edge_extract")
 
 # ---------- TOC 路径专用 Prompt ----------
 
@@ -102,22 +70,7 @@ def _build_toc_node_prompt(section_name: str, text: str, llm_types: list[str]) -
 请返回 JSON 数组（只返回 JSON，不要其他内容）：
 [{{"name": "...", "type": "...", "description": "..."}}]"""
 
-EDGE_EXTRACT_CROSS_PROMPT = """你是一位知识图谱构建专家。以下知识点来自不同章节，层级关系（IS_PART_OF / CONTAINS）已自动生成。
-
-请只推断以下两种跨章节关系：
-- REQUIRES: A 的学习需要先掌握 B（前置依赖）
-- RELATED_TO: A 和 B 有关联但无层级或依赖关系
-
-知识点列表：
-{nodes_text}
-
-要求：
-- source 和 target 必须是上面列表中的知识点名称（精确匹配）
-- relation 只能是 REQUIRES 或 RELATED_TO
-- 只返回 JSON 数组
-
-请返回 JSON 数组：
-[{{"source": "...", "target": "...", "relation": "..."}}]"""
+EDGE_EXTRACT_CROSS_PROMPT = _prompts.get("kg_builder.edge_extract_cross")
 
 
 # ----------------------------------------------------------

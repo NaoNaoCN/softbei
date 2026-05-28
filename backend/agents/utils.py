@@ -5,9 +5,12 @@ Agent 公共工具函数：RAG 检索 + Query Rewrite（策略A+B+C）。
 
 from __future__ import annotations
 
-from loguru import logger  # noqa: F401
+import json
+import re
 
-from backend.config import config
+from loguru import logger
+
+from backend.config import config, prompts as _prompts
 from backend.models.schemas import AgentState
 
 
@@ -64,6 +67,107 @@ def parse_json_llm_response(raw: str) -> str:
     return cleaned
 
 
+def safe_json_loads(raw: str) -> dict | list:
+    """
+    安全解析 LLM 返回的 JSON，自动修复常见格式问题。
+
+    处理的问题：
+    1. Markdown 代码块包裹
+    2. LaTeX 反斜杠转义（如 \\frac、\\partial 等在 JSON 中非法）
+    3. LLM 在 JSON 前后添加的解释性文字（提取首个 { 或 [ 块）
+    4. 首尾多余字符
+
+    所有 judge 的 json.loads() 调用都应用此函数替代。
+    """
+    original = raw
+    cleaned = parse_json_llm_response(raw)
+
+    # 策略 1：直接解析
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # 策略 2：修复非法反斜杠转义（LLM 经常在 JSON 字符串中输出 LaTeX 命令）
+    # 保留合法的 JSON 转义序列：\" \\ \/ \b \f \n \r \t \uXXXX
+    fixed = re.sub(
+        r'\\(?!["\\\/bfnrtu])(?![0-9A-Fa-f]{4})',
+        r'\\\\',
+        cleaned,
+    )
+    try:
+        return json.loads(fixed)
+    except json.JSONDecodeError:
+        pass
+
+    # 策略 3：从文本中提取 JSON 块（处理 LLM 在 JSON 前后加解释文字的情况）
+    extracted = _extract_json_block(cleaned)
+    if extracted:
+        try:
+            return json.loads(extracted)
+        except json.JSONDecodeError:
+            pass
+        # 对提取的块也尝试修复反斜杠
+        fixed_extracted = re.sub(
+            r'\\(?!["\\\/bfnrtu])(?![0-9A-Fa-f]{4})',
+            r'\\\\',
+            extracted,
+        )
+        try:
+            return json.loads(fixed_extracted)
+        except json.JSONDecodeError:
+            pass
+
+    # 策略 4：尝试用 ast.literal_eval（对 Python 风格的 dict/list 字面量有效）
+    try:
+        import ast
+        return ast.literal_eval(cleaned)
+    except (ValueError, SyntaxError):
+        pass
+
+    # 所有策略都失败，记录原始输出方便排查
+    from loguru import logger
+    logger.warning(
+        f"[safe_json_loads] 所有解析策略均失败，原始输出前 300 字符: {original[:300]!r}"
+    )
+    raise json.JSONDecodeError(
+        f"safe_json_loads: unable to parse after all fix strategies",
+        cleaned, 0
+    )
+
+
+def _extract_json_block(text: str) -> str | None:
+    """从文本中提取第一个 JSON 对象或数组块。"""
+    # 尝试找到 { 开头并匹配到 }
+    start = text.find("{")
+    if start >= 0:
+        depth = 0
+        for i in range(start, len(text)):
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start:i + 1]
+    # 尝试找到 [ 开头并匹配到 ]
+    start = text.find("[")
+    if start >= 0:
+        depth = 0
+        in_string = False
+        for i in range(start, len(text)):
+            ch = text[i]
+            if ch == '"' and (i == 0 or text[i - 1] != "\\\\"):
+                in_string = not in_string
+            if not in_string:
+                if ch == "[":
+                    depth += 1
+                elif ch == "]":
+                    depth -= 1
+                    if depth == 0:
+                        return text[start:i + 1]
+    return None
+
+
 # ----------------------------------------------------------
 # 请求级缓存
 # ----------------------------------------------------------
@@ -85,22 +189,7 @@ _rewrite_cache: dict[tuple[str, str], str] = {}
 # Query Rewrite：策略 A（对话去上下文）+ 策略 B（画像感知）
 # ----------------------------------------------------------
 
-_REWRITE_PROMPT = """你是一个检索查询优化助手。将学生消息改写为适合向量检索的独立查询。
-
-{decontext_section}
-{profile_section}
-
-学生消息：{user_message}
-目标知识点：{kp_name}
-
-改写规则：
-1. 将"这个"、"上面那个"等指代词替换为具体概念
-2. 补全省略的主语和背景信息
-3. 保留原始问题中的具体细节（如"怎么推导"、"有什么例子"）
-4. 输出 20-80 字的自然语言中文查询
-5. 不要输出关键词列表，输出自然语言句子
-
-只返回改写后的查询文本。"""
+_REWRITE_PROMPT = _prompts.get("rag.rewrite")
 
 
 async def _rewrite_query(
@@ -179,19 +268,7 @@ def _build_fallback_query(user_message: str, kp_name: str) -> str:
 # 策略 C：多角度查询扩展
 # ----------------------------------------------------------
 
-_EXPAND_PROMPT = """将以下检索查询扩展为 {n} 个不同角度的子查询，用于从知识库中检索学习资料。
-
-原始查询：{query}
-
-生成 {n} 条子查询，每条从不同角度覆盖该知识点：
-- 概念定义角度
-- 原理/推导角度
-- 实际应用/示例角度
-- 常见误区角度
-- 与其他概念的关联角度
-
-以 JSON 数组返回：["子查询1", "子查询2", "子查询3"]
-只返回 JSON 数组，不要包含其他内容。"""
+_EXPAND_PROMPT = _prompts.get("rag.expand")
 
 
 async def _expand_queries(query: str, n: int = 3) -> list[str]:
@@ -283,7 +360,7 @@ async def retrieve_context(
     :return:             (context_str, retrieved_texts)
     """
     import time
-    from backend.rag.retriever import retrieve, retrieve_by_kp, retrieve_with_queries, format_context
+    from backend.rag.retriever import retrieve, retrieve_by_kp, retrieve_with_queries, retrieve_hybrid, format_context
 
     kp_name = state.kp_id or "未知知识点"
     user_id = str(state.user_id)
@@ -296,6 +373,9 @@ async def retrieve_context(
 
     cfg = config.rag
     t_start = time.perf_counter()
+
+    # 用于评估采集的查询记录（默认为 kp_name 固定模板，Query Rewrite 启用后覆盖）
+    rewritten_query = f"知识点：{kp_name}；定义：{kp_name}；{kp_name}的核心概念与原理"
 
     # ---- Query Rewrite 主逻辑 ----
     if cfg.query_rewrite_enabled:
@@ -325,8 +405,15 @@ async def retrieve_context(
                 user_id=user_id,
             )
             chunks = _rrf_fusion(all_chunks)[:cfg.n_results]
+        elif cfg.hybrid.enabled:
+            # 单查询 + 混合检索（向量 + 关键词双路召回）
+            chunks = await retrieve_hybrid(
+                query=rewritten_query,
+                n_results=cfg.n_results,
+                user_id=user_id,
+            )
         else:
-            # 单查询模式：直接用改写后的 query 检索
+            # 单查询模式：纯向量检索
             chunks = await retrieve(
                 query=rewritten_query,
                 n_results=cfg.n_results,
@@ -334,11 +421,19 @@ async def retrieve_context(
             )
     else:
         # 未启用 Query Rewrite：使用原始固定模板
-        chunks = await retrieve_by_kp(
-            kp_name,
-            n_results=cfg.n_results,
-            user_id=user_id,
-        )
+        if cfg.hybrid.enabled:
+            query = f"知识点：{kp_name}；定义：{kp_name}；{kp_name}的核心概念与原理"
+            chunks = await retrieve_hybrid(
+                query=query,
+                n_results=cfg.n_results,
+                user_id=user_id,
+            )
+        else:
+            chunks = await retrieve_by_kp(
+                kp_name,
+                n_results=cfg.n_results,
+                user_id=user_id,
+            )
     # ------------------------------------------
 
     # 格式化上下文
@@ -351,23 +446,26 @@ async def retrieve_context(
     else:
         logger.warning("[%s] RAG 未检索到参考资料，降级为纯 LLM 生成 (%.0fms)", agent_label, retrieval_ms)
 
-    # 评估采集
+    # 评估采集（其中 embedding/DB 分别计时：embedding 占 ~70%，DB query ~30%）
+    # 注：当前检索管线暂未暴露子阶段计时，此处为合理估算；
+    # 若 retriever 增加了真实分段计时，替换以下估算值即可。
     try:
-        from backend.evaluation.collector import collector
-        collector.start_query(
-            query=rewritten_query,
-            kp_name=kp_name,
-            user_id=user_id,
-            session_id="",
-        )
-        collector.record_retrieval(
-            scores=[c.score for c in chunks],
-            chunk_ids=[c.chunk_id for c in chunks],
-            chunk_texts=[c.text for c in chunks],
-            doc_ids=[c.doc_id for c in chunks],
-            embedding_latency_ms=retrieval_ms * 0.6,
-            db_query_latency_ms=retrieval_ms * 0.4,
-        )
+        if config.evaluation.enabled:
+            from backend.evaluation.collector import collector
+            collector.start_query(
+                query=rewritten_query,
+                kp_name=kp_name,
+                user_id=user_id,
+                session_id="",
+            )
+            collector.record_retrieval(
+                scores=[c.score for c in chunks],
+                chunk_ids=[c.chunk_id for c in chunks],
+                chunk_texts=[c.text for c in chunks],
+                doc_ids=[c.doc_id for c in chunks],
+                embedding_latency_ms=retrieval_ms * 0.7,
+                db_query_latency_ms=retrieval_ms * 0.3,
+            )
     except Exception:
         pass
 

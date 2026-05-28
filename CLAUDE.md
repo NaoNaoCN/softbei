@@ -97,3 +97,50 @@ Full rules and checklist: [`docs/DATA_MODEL_CONVENTIONS.md`](docs/DATA_MODEL_CON
 3. No `model_validator` used for field renaming
 4. `main.py` manual schema construction references ORM field names directly
 5. Frontend `.get("field_name")` keys match actual API response fields
+
+## Logging Conventions
+
+**Framework:** loguru (`from loguru import logger`). Configuration in `backend/logging_config.py`.
+
+### Log levels
+
+| Level | When to use | Example |
+|-------|------------|---------|
+| `TRACE` | Extreme detail (function args, step-by-step return values) | `logger.trace("query_vector shape={}", vec.shape)` |
+| `DEBUG` | Developer debugging info | `logger.debug("[DocAgent] LLM prompt length={}", len(prompt))` |
+| `INFO` | Key business process milestones | `logger.info("[DocAgent] doc generated, kp={}, len={}", kp, n)` |
+| `SUCCESS` | Operation completed successfully | `logger.success("[Generation] batch {} done, {}s", id, t)` |
+| `WARNING` | Recoverable errors, degradation | `logger.warning("[LLM] retry {} due to {}", n, reason)` |
+| `ERROR` | Unrecoverable errors needing attention | `logger.error("[Database] connection pool exhausted")` |
+| `CRITICAL` | System-level failures | `logger.critical("[App] startup failed, port {} in use", p)` |
+
+### Message format
+
+Use **lazy evaluation** with `{}` placeholders. Do NOT use f-strings:
+
+```python
+# ✅ Correct — deferred formatting, runs only if level is reached
+logger.info("[DocAgent] kp={}, draft_len={}", kp_name, len(draft))
+
+# ❌ Wrong — f-string always evaluated
+logger.info(f"[DocAgent] kp={kp_name}")
+```
+
+### Agent prefix
+
+All agent log messages use a `[AgentName]` prefix for grep-ability.
+
+### Exception logging
+
+Use `logger.exception()` (auto-includes traceback) instead of `logger.error()` for exceptions:
+
+```python
+try:
+    ...
+except Exception as e:
+    logger.exception("[AgentName] operation failed: {}", e)
+```
+
+### trace_id
+
+A `trace_id` is automatically injected into every log record's `extra` via the patcher in `logging_config.py`. Do NOT manually add `[trace_id]` in log messages — it already appears in the format string.

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 
-from loguru import logger  # noqa: F401
+from loguru import logger
 
 from backend.config import config as app_config
 from backend.models.schemas import AgentState
@@ -15,26 +15,9 @@ from backend.agents.utils import parse_json_llm_response
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
 
-SYSTEM_PROMPT = """你是一位内容质量审核专家。
-请对以下 AI 生成内容进行审核：
+from backend.config import prompts as _prompts
 
-【参考资料（来源真实）】
-{context}
-
-【待审核内容摘要（前500字）】
-{draft_preview}
-
-请检查：
-1. 内容是否与参考资料基本一致（无严重捏造事实）
-2. 是否存在明显错误或误导性表达
-3. 内容是否适合学习场景
-
-以 JSON 返回（不要包含修正后的内容，只返回审核结论）：
-{{
-  "passed": true/false,
-  "issues": ["问题1", "问题2"]
-}}
-"""
+SYSTEM_PROMPT = _prompts.get("agents.safety.system_prompt")
 
 
 async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:

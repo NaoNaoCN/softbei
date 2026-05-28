@@ -20,17 +20,9 @@ from backend.services.video_search import (
 from langchain_core.runnables import RunnableConfig
 
 
-SYSTEM_PROMPT = """你是一个学习辅导助手。学生正在对之前的对话内容进行追问或请求澄清。
+from backend.config import prompts as _prompts
 
-你的任务：
-- 基于对话历史，针对学生的追问给出简短、准确的回答
-- 不要重新生成完整的学习文档或资源
-- 回答要有针对性，直接解答学生的疑问
-- 如果对话历史中有相关内容，引用并展开解释
-- 保持回答简洁明了，像一个耐心的老师在回答学生的课堂提问
-
-学生画像信息：
-{profile_ctx}"""
+SYSTEM_PROMPT = _prompts.get("agents.clarify.system_prompt")
 
 
 async def run(state: AgentState, config: RunnableConfig) -> AgentState:
@@ -61,9 +53,10 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     try:
         # 构建带上下文的视频搜索词：历史主题 + 当前提问关键词
         topic = extract_topic_from_history(state.chat_history)
-        print("提取的对话主题:", topic)
         user_kw = extract_search_keywords(state.user_message)
-        print("提取的用户关键词:", user_kw)
+
+        from loguru import logger
+        logger.debug("[ClarifyAgent] 对话主题: {}, 用户关键词: {}", topic, user_kw)
         # 拼接后限制总词数，避免搜索词过长
         combined_parts = (topic.split() + user_kw.split())[:5]
         video_query = " ".join(combined_parts)
@@ -80,8 +73,8 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
             "metadata": {**state.metadata, "video_refs": [v.model_dump() for v in videos]},
         })
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"[ClarifyAgent] LLM 调用失败: {e}")
+        from loguru import logger
+        logger.warning("[ClarifyAgent] LLM 调用失败: {}", str(e))
         state = state.model_copy(update={
             "final_content": "抱歉，我暂时无法回答这个问题，请稍后再试。",
             "error": str(e),

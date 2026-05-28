@@ -215,18 +215,29 @@ async def stream_invoke(user_id: int, session_id: int, message: str, db: AsyncSe
 def _collect_generation_eval(state: AgentState, session_id: int) -> None:
     """从 AgentState 中采集生成评估数据。"""
     try:
+        from backend.config import config
+        if not config.evaluation.enabled:
+            return
+
         from backend.evaluation.collector import collector
 
         agent_type = state.resource_type.value if state.resource_type else ""
         draft_content = state.draft_content or ""
         safety_issues = state.metadata.get("safety_issues", []) if state.metadata else []
 
+        # 读取各 Agent 记录的生成耗时（由 agent 写入 state.metadata）
+        gen_latency = state.metadata.get("generation_latency_ms", 0.0) if state.metadata else 0.0
+
+        # 读取 A/B 实验分组
+        experiment_group = state.metadata.get("experiment_group") if state.metadata else None
+
         collector.record_generation(
             agent_type=agent_type,
             draft_length=len(draft_content),
-            generation_latency_ms=0.0,  # 需要各 Agent 自行计时后写入 state
+            generation_latency_ms=gen_latency,
             safety_passed=state.safety_passed,
             safety_issues_count=len(safety_issues),
+            experiment_group=experiment_group,
         )
     except Exception:
         pass  # 评估采集失败不应影响主流程
@@ -238,6 +249,10 @@ def _maybe_trigger_async_judge(state: AgentState, session_id: int) -> None:
     import re
 
     try:
+        from backend.config import config
+        if not config.evaluation.enabled:
+            return
+
         from backend.evaluation.collector import collector
         from backend.evaluation.judge import get_judge
         from backend.rag.retriever import RetrievedChunk
@@ -276,11 +291,13 @@ def _maybe_trigger_async_judge(state: AgentState, session_id: int) -> None:
         async def _run_judge():
             try:
                 judge = get_judge()
+                experiment_group = state.metadata.get("experiment_group") if state.metadata else None
                 result = await judge.evaluate_full(
                     query=query,
                     kp_name=kp_name,
                     retrieved_chunks=chunks,
                     generated_content=draft,
+                    experiment_group=experiment_group,
                 )
                 # 将评估结果写回 collector 的当前生成记录
                 gen_record = collector._current_generation
@@ -299,6 +316,14 @@ def _maybe_trigger_async_judge(state: AgentState, session_id: int) -> None:
                     f"[Eval] async judge complete: faithfulness={result.get('faithfulness_score', 0):.2f}, "
                     f"completeness={result.get('completeness_score', 0):.2f}"
                 )
+
+                # 自动更新日报文件
+                try:
+                    from backend.evaluation.reporter import RAGReporter
+                    reporter = RAGReporter()
+                    reporter.save_daily_report(collector.get_recent_records(500))
+                except Exception:
+                    pass
             except Exception as e:
                 from loguru import logger
                 logger.warning(f"[Eval] async judge failed: {e}")

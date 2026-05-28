@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from loguru import logger  # noqa: F401
+from loguru import logger
 
 import pymupdf4llm           # PDF → Markdown
 import mammoth               # DOCX → Markdown
@@ -361,7 +361,7 @@ def split_text(
                             end = nl + 1
             else:
                 # 不在表格内，找句子边界
-                lookback = min(int(chunk_size * 0.2), end - start)
+                lookback = min(int(chunk_size * config.rag.split_sentence_lookback_ratio), end - start)
                 match = None
                 for m in sentence_endings.finditer(protected_text, end - lookback, end):
                     match = m
@@ -560,7 +560,7 @@ def _split_into_parents(
         if end < len(protected):
             # 在 parent_max_chars 附近找安全的切分点:
             # 优先级: \\n\\n (段落边界) > \\n (行尾) > 句子边界 > 硬截断
-            lookback = min(400, end - start)
+            lookback = min(config.rag.parent_chunking.parent_split_lookback, end - start)
             search_start = max(start, end - lookback)
 
             best = -1

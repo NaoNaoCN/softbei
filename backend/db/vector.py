@@ -19,8 +19,7 @@ from backend.db.database import get_engine
 
 COLLECTION_NAME: str = config.vector_db.collection
 
-# HNSW ef_search：控制检索精度与速度的平衡，100 是高精度设定
-_HNSW_EF_SEARCH: int = 100
+# HNSW ef_search：控制检索精度与速度的平衡，由 config.vector_db.hnsw_ef_search 控制
 
 
 def _format_vector(embedding: list[float]) -> str:
@@ -123,20 +122,20 @@ def _convert_metadata_to_columns(meta: dict) -> dict:
     """将 metadata dict 转换为列值。"""
     import json
 
-    # 提取 extra metadata（排除固定列字段 + 父子切割字段）
+    # 提取 extra metadata（排除固定列字段 + 父子切割字段 + tsvector 字段）
     extra_meta = {
         k: v for k, v in meta.items()
         if k not in ("source", "page", "section", "user_id", "doc_id", "chunk_id",
-                      "content_hash", "parent_chunk_id", "is_parent")
+                      "parent_chunk_id", "is_parent", "text_search")
     }
     return {
         "source": meta.get("source", ""),
         "page": int(meta["page"]) if meta.get("page") and str(meta["page"]).isdigit() else None,
         "section": meta.get("section", ""),
         "user_id": meta.get("user_id", ""),
-        "content_hash": meta.get("content_hash", ""),
         "parent_chunk_id": meta.get("parent_chunk_id", ""),
         "is_parent": bool(meta.get("is_parent", False)),
+        "text_search": meta.get("text_search", ""),
         "metadata_": json.dumps(extra_meta, ensure_ascii=False) if extra_meta else None,
     }
 
@@ -161,7 +160,7 @@ async def upsert_documents(
     columns = [
         "id", "chunk_id", "doc_id", "collection_name", "text",
         "embedding", "source", "page", "section", "user_id",
-        "content_hash", "parent_chunk_id", "is_parent", "metadata", "created_at",
+        "parent_chunk_id", "is_parent", "text_search", "metadata", "created_at",
     ]
     value_rows: list[str] = []
     params: dict = {}
@@ -179,8 +178,9 @@ async def upsert_documents(
             f":text_{i}",
             f"CAST(:emb_{i} AS vector)" if emb_str else "NULL",
             f":source_{i}", f":page_{i}",
-            f":section_{i}", f":user_id_{i}", f":content_hash_{i}",
+            f":section_{i}", f":user_id_{i}",
             f":parent_chunk_id_{i}", f":is_parent_{i}",
+            f"to_tsvector('simple', :text_search_{i})" if cols.get("text_search") else "NULL",
             f":metadata__{i}", "NOW()",
         ])
         value_rows.append(f"({row_placeholders})")
@@ -194,11 +194,13 @@ async def upsert_documents(
             f"page_{i}": cols["page"],
             f"section_{i}": cols["section"],
             f"user_id_{i}": cols["user_id"],
-            f"content_hash_{i}": cols["content_hash"],
             f"parent_chunk_id_{i}": cols["parent_chunk_id"],
             f"is_parent_{i}": cols["is_parent"],
             f"metadata__{i}": cols["metadata_"],
         })
+        text_search_val = cols.get("text_search", "")
+        if text_search_val:
+            params[f"text_search_{i}"] = text_search_val
         if emb_str:
             params[f"emb_{i}"] = emb_str
 
@@ -212,9 +214,9 @@ async def upsert_documents(
             page = EXCLUDED.page,
             section = EXCLUDED.section,
             user_id = EXCLUDED.user_id,
-            content_hash = EXCLUDED.content_hash,
             parent_chunk_id = EXCLUDED.parent_chunk_id,
             is_parent = EXCLUDED.is_parent,
+            text_search = EXCLUDED.text_search,
             metadata = EXCLUDED.metadata
     """
 
@@ -304,7 +306,7 @@ async def query_documents(
 
     async with engine.connect() as conn:
         # 设置 HNSW ef_search 控制检索精度/速度平衡
-        await conn.execute(text(f"SET LOCAL hnsw.ef_search = {_HNSW_EF_SEARCH}"))
+        await conn.execute(text(f"SET LOCAL hnsw.ef_search = {config.vector_db.hnsw_ef_search}"))
         result = await conn.execute(text(sql), {**params, "n_results": n_results})
         rows = result.fetchall()
 
@@ -366,34 +368,6 @@ async def delete_by_doc_id(doc_id: str, collection_name: Optional[str] = None) -
         logger.info(f"[VectorDB] 删除 doc_id={doc_id} 的 {deleted} 个向量块")
 
 
-async def get_chunk_hashes_by_doc_id(
-    doc_id: str,
-    collection_name: Optional[str] = None,
-) -> dict[str, Optional[str]]:
-    """
-    获取某个 doc_id 的所有 chunk 的 (chunk_id → content_hash) 映射。
-
-    content_hash 可能为 NULL（legacy 数据，在 content_hash 列新增之前入库的 chunk）。
-    调用方应将 NULL 视为"需要重新嵌入"，即 NULL != any_new_hash → changed。
-
-    :param doc_id:          文档 ID
-    :param collection_name: 可选集合过滤
-    :return:                {chunk_id: content_hash_or_None}
-    """
-    engine = get_engine()
-    col = collection_name or COLLECTION_NAME
-    async with engine.connect() as conn:
-        result = await conn.execute(
-            text(
-                "SELECT chunk_id, content_hash FROM document_chunk "
-                "WHERE doc_id = :doc_id AND collection_name = :cn"
-            ),
-            {"doc_id": doc_id, "cn": col},
-        )
-        rows = result.fetchall()
-    return {row[0]: row[1] for row in rows}
-
-
 async def get_parent_texts(
     parent_ids: list[str],
     collection_name: Optional[str] = None,
@@ -449,6 +423,115 @@ async def get_documents_by_doc_id(doc_id: str, collection_name: Optional[str] = 
         metadatas.append(meta)
 
     return {"documents": documents, "metadatas": metadatas}
+
+
+async def query_keyword(
+    keywords: list[str],
+    n_results: int = 5,
+    where: dict | None = None,
+    collection_name: str | None = None,
+) -> dict:
+    """
+    关键词全文检索：基于 PostgreSQL tsvector/tsquery + jieba 分词。
+
+    查询关键词（已由上层 jieba 分词并过滤停用词）以 & (AND) 连接构成
+    tsquery，使用 ts_rank() 作为相关性评分，按 rank DESC 排序返回 top-N。
+
+    只检索 text_search IS NOT NULL 的行（legacy 数据未回填 tsvector 的被排除）。
+
+    :param keywords:        jieba 分词后的关键词列表
+    :param n_results:       返回条数
+    :param where:           额外过滤条件
+    :param collection_name: 集合名
+    :return:                与 query_documents() 相同格式的结果 dict
+    """
+    if not keywords:
+        return {"ids": [[]], "documents": [[]], "distances": [[]], "metadatas": [[]]}
+
+    col = collection_name or COLLECTION_NAME
+    engine = get_engine()
+
+    conditions = [
+        "collection_name = :cn",
+        "is_parent = FALSE",
+        "text_search IS NOT NULL",
+    ]
+    params: dict = {"cn": col}
+
+    # 构建 tsquery：用 & (AND) 连接所有关键词，'simple' 配置不做 stemming/stopword
+    tsquery_parts: list[str] = []
+    for kw in keywords:
+        safe_kw = kw.replace("\\", "\\\\").replace("'", "\\'")
+        tsquery_parts.append(safe_kw)
+    tsquery_str = " & ".join(tsquery_parts)
+    params["tsquery"] = tsquery_str
+
+    conditions.append("text_search @@ to_tsquery('simple', :tsquery)")
+
+    where_clause, where_params = _build_where_clause(where)
+    if where_clause:
+        conditions.append(where_clause)
+        params.update(where_params)
+
+    sql = f"""
+        SELECT
+            chunk_id,
+            text,
+            doc_id,
+            ts_rank(text_search, to_tsquery('simple', :tsquery)) AS rank,
+            source,
+            page,
+            section,
+            user_id,
+            metadata,
+            parent_chunk_id,
+            is_parent
+        FROM document_chunk
+        WHERE {' AND '.join(conditions)}
+        ORDER BY rank DESC
+        LIMIT :n_results
+    """
+
+    async with engine.connect() as conn:
+        result = await conn.execute(text(sql), {**params, "n_results": n_results})
+        rows = result.fetchall()
+
+    ids_list = []
+    documents_list = []
+    distances_list = []
+    metadatas_list = []
+
+    if not rows:
+        return {"ids": [[]], "documents": [[]], "distances": [[]], "metadatas": [[]]}
+
+    for row in rows:
+        ids_list.append(row[0])
+        documents_list.append(row[1])
+        # ts_rank → "距离"（越低越好）：rank 越高，距离越小
+        rank = float(row[3]) if row[3] is not None else 0.0
+        distances_list.append(1.0 - rank)
+        meta = {
+            "doc_id": row[2] or "",
+            "source": row[4] or "",
+            "page": int(row[5]) if row[5] is not None else None,
+            "section": row[6] or "",
+            "user_id": row[7] or "",
+        }
+        raw_metadata = row[8] if len(row) > 8 else None
+        if raw_metadata and isinstance(raw_metadata, dict):
+            meta.update(raw_metadata)
+        if len(row) > 9 and row[9]:
+            meta["parent_chunk_id"] = row[9]
+        if len(row) > 10:
+            meta["is_parent"] = row[10]
+        metadatas_list.append(meta)
+
+    return {
+        "ids": [ids_list],
+        "documents": [documents_list],
+        "distances": [distances_list],
+        "metadatas": [metadatas_list],
+    }
 
 
 async def health_check() -> bool:

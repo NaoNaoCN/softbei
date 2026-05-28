@@ -13,41 +13,15 @@ from backend.agents.utils import parse_json_llm_response
 from backend.services import profile as profile_svc
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
-from loguru import logger  # noqa: F401
+from loguru import logger
 
 
-SYSTEM_PROMPT = """你是一个学习计划分析助手。
-根据学生的问题和画像，判断：
-1. 学生想要生成什么类型的学习资源：
-   - doc: 学习文档（默认，当学生想学习某个知识点时）
-   - mindmap: 思维导图（当学生想要知识结构概览时）
-   - quiz: 测验题目（当学生想测试自己时）
-   - code: 代码示例（当学生想看代码实现时）
-   - summary: 知识总结（当学生想要复习总结时）
-   - kg: 知识图谱构建（当学生想构建知识图谱、分析知识结构时）
-2. 目标知识点名称（从学生消息中提取）
-3. 如果学生明确要求多种资源（如"帮我生成文档和测验"），将主资源放在 resource_type，其余放在 extra_types 数组中
+from backend.config import prompts as _prompts
 
-{kp_list_section}
-
-以 JSON 格式返回：{{"resource_type": "doc", "kp_id": "知识点名称", "extra_types": []}}
-resource_type 不能为 null，如果无法判断具体类型，默认使用 "doc"。
-kp_id 使用学生提到的知识点名称，如"多层感知机"、"反向传播"等。
-extra_types 仅当学生明确要求多种资源时才填写，否则为空数组。例如学生说"生成文档和测验题"，则 resource_type="doc", extra_types=["quiz"]。
-只返回 JSON，不要包含其他内容。"""
+SYSTEM_PROMPT = _prompts.get("agents.planner.system_prompt")
 
 
-_INTENT_CLASSIFY_PROMPT = """判断学生的消息属于哪种类型：
-1. "generate" — 学生想要生成新的学习资源（学习某个知识点、生成文档/思维导图/测验/代码/总结/知识图谱）
-2. "clarify" — 学生在对之前的对话内容进行追问、请求解释、要求展开某个部分、询问细节
-
-判断依据：
-- 如果消息中包含"你提到的"、"上面的"、"刚才的"、"第X部分"、"详细解释"、"展开说说"等指代之前回答的表述 → clarify
-- 如果消息是一个新的知识点学习请求或资源生成请求 → generate
-- 如果不确定，默认 generate
-
-只返回 JSON：{{"intent": "generate"}} 或 {{"intent": "clarify"}}
-不要包含其他内容。"""
+_INTENT_CLASSIFY_PROMPT = _prompts.get("agents.planner.intent_classify")
 
 
 async def run(state: AgentState, config: RunnableConfig) -> AgentState:
@@ -216,24 +190,7 @@ def route_by_resource_type(state: AgentState) -> str:
     return "recommend_agent"  # 默认推荐
 
 
-SMART_PLAN_PROMPT = """你是一个学习资源规划助手。根据学生画像和目标知识点，推荐最适合的 2-3 种资源类型组合。
-
-可选资源类型：
-- doc: 学习文档（适合初学、系统学习）
-- mindmap: 思维导图（适合梳理知识结构、复习）
-- quiz: 测验题目（适合检验掌握程度、备考）
-- code: 代码示例（适合编程类知识点）
-- summary: 知识总结（适合快速回顾、考前复习）
-
-规则：
-- 根据学生的认知风格、学习目标、薄弱点来推荐
-- 编程相关知识点优先推荐 code
-- 薄弱知识点优先推荐 quiz + doc
-- 复习阶段优先推荐 summary + mindmap
-- 返回 2-3 种最合适的类型
-
-以 JSON 数组格式返回，如：["doc", "quiz", "code"]
-只返回 JSON 数组，不要包含其他内容。"""
+SMART_PLAN_PROMPT = _prompts.get("agents.planner.smart_plan")
 
 
 async def plan_resource_types(

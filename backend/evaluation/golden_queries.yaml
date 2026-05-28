@@ -1,0 +1,140 @@
+# 黄金测试集 — RAG 评估 Layer 3
+# 精选查询覆盖不同知识点的典型场景，用于回归检测。
+# 每条查询需指定最低期望分数，评估结果低于阈值时触发告警。
+#
+# 字段说明：
+#   id:              唯一标识
+#   kp_name:          知识点名称
+#   query:            查询文本
+#   expected_aspects: 应覆盖的知识点方面（用于完整度 Judge）
+#   min_faithfulness: 最低忠实度期望（0.0-1.0）
+#   min_completeness: 最低完整度期望（0.0-1.0）
+#   tags:             分类标签
+
+queries:
+  - id: "gradient_descent_definition"
+    kp_name: "梯度下降"
+    query: "什么是梯度下降？它的基本原理是什么？"
+    expected_aspects:
+      - "梯度下降的定义"
+      - "梯度的数学含义"
+      - "学习率的作用"
+      - "迭代更新的公式"
+      - "收敛条件"
+    min_faithfulness: 0.7
+    min_completeness: 0.6
+    tags: ["definition", "mathematics"]
+
+  - id: "backpropagation"
+    kp_name: "反向传播"
+    query: "反向传播算法是如何工作的？请解释其计算过程。"
+    expected_aspects:
+      - "反向传播的定义和目的"
+      - "链式法则的应用"
+      - "前向传播与反向传播的关系"
+      - "梯度计算的步骤"
+      - "与梯度下降的关系"
+    min_faithfulness: 0.7
+    min_completeness: 0.6
+    tags: ["algorithm", "mathematics"]
+
+  - id: "overfitting"
+    kp_name: "过拟合"
+    query: "什么是过拟合？如何解决过拟合问题？"
+    expected_aspects:
+      - "过拟合的定义"
+      - "过拟合的表现"
+      - "导致过拟合的原因"
+      - "正则化方法"
+      - "早停、dropout等方法"
+    min_faithfulness: 0.7
+    min_completeness: 0.6
+    tags: ["concept", "practice"]
+
+  - id: "activation_function"
+    kp_name: "激活函数"
+    query: "神经网络中常见的激活函数有哪些？各有什么优缺点？"
+    expected_aspects:
+      - "激活函数的作用"
+      - "Sigmoid 及其优缺点"
+      - "ReLU 及其优缺点"
+      - "Tanh 及其优缺点"
+      - "如何选择激活函数"
+    min_faithfulness: 0.7
+    min_completeness: 0.6
+    tags: ["concept", "comparison"]
+
+  - id: "cnn_basics"
+    kp_name: "卷积神经网络"
+    query: "卷积神经网络（CNN）的核心组件有哪些？各自的作用是什么？"
+    expected_aspects:
+      - "卷积层的作用"
+      - "池化层的作用"
+      - "全连接层的作用"
+      - "卷积核/滤波器的概念"
+      - "CNN 的典型架构"
+    min_faithfulness: 0.7
+    min_completeness: 0.6
+    tags: ["architecture", "deep_learning"]
+
+  - id: "loss_function"
+    kp_name: "损失函数"
+    query: "常用的损失函数有哪些？分别适用于什么场景？"
+    expected_aspects:
+      - "均方误差（MSE）"
+      - "交叉熵损失"
+      - "分类与回归的不同选择"
+      - "损失函数与激活函数的关系"
+    min_faithfulness: 0.7
+    min_completeness: 0.5
+    tags: ["mathematics", "practice"]
+
+  - id: "transformer_attention"
+    kp_name: "Transformer注意力机制"
+    query: "请解释Transformer中的自注意力（Self-Attention）机制。"
+    expected_aspects:
+      - "自注意力的基本概念"
+      - "Q、K、V 的含义"
+      - "注意力分数的计算"
+      - "多头注意力的作用"
+      - "位置编码"
+    min_faithfulness: 0.7
+    min_completeness: 0.6
+    tags: ["architecture", "deep_learning"]
+
+  - id: "batch_normalization"
+    kp_name: "批归一化"
+    query: "Batch Normalization 的原理是什么？为什么它能加速训练？"
+    expected_aspects:
+      - "BN 的计算过程"
+      - "BN 解决内部协变量偏移"
+      - "BN 对学习率的影响"
+      - "BN 的训练与推理差异"
+    min_faithfulness: 0.7
+    min_completeness: 0.5
+    tags: ["technique", "deep_learning"]
+
+  - id: "sgd_variants"
+    kp_name: "优化器"
+    query: "SGD、Momentum、Adam 这些优化器有什么区别？如何选择？"
+    expected_aspects:
+      - "SGD 的基本原理"
+      - "Momentum 的改进"
+      - "Adam 的自适应学习率"
+      - "各优化器的适用场景"
+      - "学习率调度"
+    min_faithfulness: 0.7
+    min_completeness: 0.6
+    tags: ["comparison", "practice"]
+
+  - id: "data_augmentation"
+    kp_name: "数据增强"
+    query: "深度学习中有哪些常用的数据增强方法？"
+    expected_aspects:
+      - "数据增强的目的"
+      - "图像数据增强方法"
+      - "文本数据增强方法"
+      - "数据增强的注意事项"
+    min_faithfulness: 0.7
+    min_completeness: 0.5
+    tags: ["technique", "practice"]

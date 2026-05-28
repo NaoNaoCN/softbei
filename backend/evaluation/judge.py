@@ -11,7 +11,6 @@ LLM-as-Judge 评估器：用 LLM 评估 RAG 检索和生成质量。
 
 from __future__ import annotations
 
-import json
 import re
 import time
 from datetime import datetime
@@ -20,7 +19,7 @@ from typing import Optional
 from loguru import logger
 
 from backend.config import config
-from backend.agents.utils import parse_json_llm_response
+from backend.agents.utils import safe_json_loads
 from backend.services.llm import chat_completion
 from backend.evaluation.metrics import precision_at_k
 
@@ -177,8 +176,7 @@ class RAGJudge:
                 max_tokens=200,
                 provider=self.provider,
             )
-            cleaned = parse_json_llm_response(raw)
-            result = json.loads(cleaned)
+            result = safe_json_loads(raw)
             result["score"] = int(result.get("score", 0))
             logger.debug(f"[RAGJudge] chunk_relevance score={result['score']} reason={result.get('reason', '')[:80]}")
             return result
@@ -251,8 +249,7 @@ class RAGJudge:
                 max_tokens=1500,
                 provider=self.provider,
             )
-            cleaned = parse_json_llm_response(raw)
-            result = json.loads(cleaned)
+            result = safe_json_loads(raw)
             n_stmts = len(result.get("statements", []))
             n_unsupported = sum(1 for s in result.get("statements", []) if s.get("verdict") == "unsupported")
             logger.info(
@@ -278,8 +275,7 @@ class RAGJudge:
                 max_tokens=500,
                 provider=self.provider,
             )
-            cleaned = parse_json_llm_response(raw)
-            result = json.loads(cleaned)
+            result = safe_json_loads(raw)
             return result.get("aspects", [])
         except Exception as e:
             logger.warning(f"[RAGJudge] 生成 expected_aspects 失败: {e}")
@@ -322,8 +318,7 @@ class RAGJudge:
                 max_tokens=1000,
                 provider=self.provider,
             )
-            cleaned = parse_json_llm_response(raw)
-            result = json.loads(cleaned)
+            result = safe_json_loads(raw)
             n_covered = sum(
                 1 for a in result.get("aspects", [])
                 if a.get("coverage") == "covered"
@@ -367,8 +362,7 @@ class RAGJudge:
                 max_tokens=300,
                 provider=self.provider,
             )
-            cleaned = parse_json_llm_response(raw)
-            result = json.loads(cleaned)
+            result = safe_json_loads(raw)
             logger.debug(
                 f"[RAGJudge] citation_accuracy ref=[{ref_index}] "
                 f"verdict={result.get('verdict', '?')}"
@@ -447,6 +441,8 @@ class RAGJudge:
         retrieved_chunks: list,
         generated_content: str,
         include_citation_check: bool = True,
+        experiment_group: str | None = None,
+        cross_validate: bool | None = None,
     ) -> dict:
         """
         执行完整的四维度 LLM-as-Judge 评估。
@@ -456,6 +452,8 @@ class RAGJudge:
         :param retrieved_chunks:       RetrievedChunk 列表
         :param generated_content:      LLM 生成答案
         :param include_citation_check: 是否包含引用准确性评估
+        :param experiment_group:       A/B 实验分组标签
+        :param cross_validate:         是否启用多 LLM 交叉验证，None=使用 config 设置
         :return:                       完整评估结果 dict
         """
         t_start = time.perf_counter()
@@ -499,6 +497,29 @@ class RAGJudge:
             else 0.0
         )
 
+        # 多 LLM 交叉验证（可选，开发阶段调试用）
+        cross_validated = False
+        cross_validation_disagreement = False
+        cv_providers = None
+        if cross_validate is None:
+            cross_validate = config.evaluation.cross_validation.enabled
+        if cross_validate:
+            cv_providers = config.evaluation.cross_validation.providers
+            if len(cv_providers) >= 2:
+                cv_result = await self._cross_validate(
+                    query, kp_name, retrieved_chunks, generated_content,
+                    primary_provider=self.provider,
+                    secondary_provider=cv_providers[1] if cv_providers[1] != self.provider else cv_providers[0],
+                    primary_faithfulness=faithfulness_score,
+                    primary_completeness=completeness_result.get("completeness", 0.0),
+                )
+                cross_validated = True
+                cross_validation_disagreement = cv_result.get("disagreement", False)
+                if cross_validation_disagreement:
+                    logger.warning(
+                        f"[RAGJudge] 交叉验证不一致！primary vs secondary 评分差异显著"
+                    )
+
         elapsed_ms = (time.perf_counter() - t_start) * 1000
 
         result = {
@@ -519,7 +540,11 @@ class RAGJudge:
             # Judge 4: 引用准确性
             "citation_precision": citation_result.get("citation_precision") if citation_result else None,
             "citations": citation_result.get("citations", []) if citation_result else [],
+            # 多 LLM 交叉验证
+            "cross_validated": cross_validated,
+            "cross_validation_disagreement": cross_validation_disagreement,
             # 元数据
+            "experiment_group": experiment_group,
             "evaluation_time_ms": round(elapsed_ms, 1),
         }
 
@@ -535,14 +560,6 @@ class RAGJudge:
 
         logger.info(f"[RAGJudge] 评估完成: {', '.join(summary_parts)}")
 
-        # 将评估结果写入 logs/ 目录
-        try:
-            from backend.evaluation.reporter import write_eval_result
-            result["timestamp"] = datetime.utcnow().isoformat()
-            _file_path = write_eval_result(result, label=kp_name[:30] or "eval")
-        except Exception:
-            pass  # 写入失败不影响主流程
-
         # 如果幻觉率高，发出醒目告警
         if hallucination > 0.3:
             logger.warning(
@@ -556,6 +573,81 @@ class RAGJudge:
             )
 
         return result
+
+    # ----------------------------------------------------------
+    # 多 LLM 交叉验证
+    # ----------------------------------------------------------
+
+    async def _cross_validate(
+        self,
+        query: str,
+        kp_name: str,
+        retrieved_chunks: list,
+        generated_content: str,
+        primary_provider: str,
+        secondary_provider: str,
+        primary_faithfulness: float,
+        primary_completeness: float,
+    ) -> dict:
+        """
+        用第二个 LLM 对关键维度（忠实度 + 完整度）重新打分，检测评分偏差。
+
+        当两个 LLM 的忠实度或完整度评分相差 >0.3 时，标记为 disagreement。
+        """
+        logger.info(
+            f"[RAGJudge] 交叉验证: primary={primary_provider}, secondary={secondary_provider}"
+        )
+        try:
+            retrieved_texts = [
+                c.text if hasattr(c, "text") else str(c)
+                for c in retrieved_chunks
+            ]
+
+            # 仅用第二个 provider 重新评估忠实度和完整度（最大开销项）
+            original_provider = self.provider
+            self.provider = secondary_provider
+
+            import asyncio
+            try:
+                cv_faithfulness_task = asyncio.create_task(
+                    self.judge_faithfulness(retrieved_texts, generated_content)
+                )
+                cv_completeness_task = asyncio.create_task(
+                    self.judge_completeness(kp_name, generated_content)
+                )
+                cv_faithfulness, cv_completeness = await asyncio.gather(
+                    cv_faithfulness_task, cv_completeness_task,
+                )
+            finally:
+                self.provider = original_provider
+
+            cv_faith = cv_faithfulness.get("faithfulness", 0.0)
+            cv_comp = cv_completeness.get("completeness", 0.0)
+
+            disagreement = (
+                abs(primary_faithfulness - cv_faith) > 0.3
+                or abs(primary_completeness - cv_comp) > 0.3
+            )
+
+            logger.info(
+                f"[RAGJudge] 交叉验证结果: "
+                f"faithfulness primary={primary_faithfulness:.2f} vs secondary={cv_faith:.2f} "
+                f"(delta={abs(primary_faithfulness - cv_faith):.2f}), "
+                f"completeness primary={primary_completeness:.2f} vs secondary={cv_comp:.2f} "
+                f"(delta={abs(primary_completeness - cv_comp):.2f}), "
+                f"disagreement={disagreement}"
+            )
+
+            return {
+                "primary_provider": primary_provider,
+                "secondary_provider": secondary_provider,
+                "faithfulness_secondary": cv_faith,
+                "completeness_secondary": cv_comp,
+                "disagreement": disagreement,
+            }
+        except Exception as e:
+            logger.warning(f"[RAGJudge] 交叉验证失败: {e}")
+            return {"disagreement": False}
 
 
 # 模块级单例

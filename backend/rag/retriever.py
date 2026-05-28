@@ -8,9 +8,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
-from loguru import logger  # noqa: F401
+from loguru import logger
 
-from backend.db.vector import query_documents
+from backend.db.vector import query_documents, query_keyword
 from backend.services.llm import get_embedding
 
 # ----------------------------------------------------------
@@ -79,8 +79,8 @@ async def retrieve(
         else:
             effective_where = user_filter
 
-    # 预取更多候选（3x），用于后续 re-rank 精排
-    prefetch_count = max(_n_results * 3, 15)
+    # 预取更多候选，用于后续 re-rank 精排
+    prefetch_count = max(_n_results * _cfg.rag.prefetch_multiplier, _cfg.rag.prefetch_min)
     raw = await query_documents(
         query_embedding=embedding,
         n_results=prefetch_count,
@@ -161,6 +161,250 @@ async def retrieve_with_queries(
     return list(results)
 
 
+# ----------------------------------------------------------
+# 路径 A：关键词召回（jieba 分词 + PostgreSQL ILIKE）
+# ----------------------------------------------------------
+
+# jieba 通用停用词表
+_KEYWORD_STOP_WORDS: set[str] = {
+    "的", "了", "是", "在", "和", "就", "都", "而", "及", "与",
+    "着", "或", "一个", "没有", "我们", "你们", "他们", "它们",
+    "这个", "那个", "哪些", "哪", "什么", "怎么", "如何", "为什么",
+    "可以", "能够", "应该", "需要", "会", "将", "要", "也", "还",
+    "更", "最", "很", "非常", "比较", "不", "之", "其", "以", "从",
+    "到", "对", "把", "被", "让", "向", "由", "于", "因", "为",
+    "a", "an", "the", "is", "are", "was", "were", "be", "been",
+    "being", "have", "has", "had", "do", "does", "did", "will",
+    "would", "could", "should", "may", "might", "can", "shall",
+    "to", "of", "in", "for", "on", "with", "at", "by", "from",
+    "it", "its", "this", "that", "these", "those", "or", "and",
+    "but", "not", "no", "if", "so", "as", "than", "then", "just",
+}
+
+
+def _tokenize_keywords(query: str) -> list[str]:
+    """使用 jieba 精确模式分词，过滤停用词和单字。"""
+    import jieba
+
+    from backend.config import config
+
+    words = jieba.lcut(query, cut_all=False)
+    keywords: list[str] = []
+    for w in words:
+        w = w.strip()
+        if not w or len(w) < config.rag.keyword_min_length:
+            continue
+        if w.lower() in _KEYWORD_STOP_WORDS:
+            continue
+        keywords.append(w)
+    return keywords
+
+
+async def retrieve_keyword(
+    query: str,
+    n_results: int | None = None,
+    where: Optional[dict] = None,
+    collection_name: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> list[RetrievedChunk]:
+    """
+    关键词检索：使用 jieba 分词后在 document_chunk.text 中做 ILIKE 匹配。
+
+    与向量检索互补——向量擅长语义泛化，关键词擅长精确命中专有名词和代码片段。
+
+    :param query:           用户查询字符串
+    :param n_results:       返回条数
+    :param where:           额外过滤条件
+    :param collection_name: 集合名
+    :param user_id:         用户 ID（用于隔离）
+    :return:                RetrievedChunk 列表（按匹配关键词数量降序）
+    """
+    from backend.config import config as _cfg
+
+    _n_results = n_results if n_results is not None else _cfg.rag.n_results
+
+    keywords = _tokenize_keywords(query)
+    if not keywords:
+        logger.info("[RAG] jieba 分词后无有效关键词，关键词召回返回空")
+        return []
+
+    logger.info(f"[RAG] 关键词召回: jieba 分词 → {len(keywords)} 个关键词: {keywords[:10]}")
+
+    # 构建用户隔离过滤条件
+    effective_where = where
+    if user_id:
+        user_filter = {"$or": [{"user_id": user_id}, {"user_id": ""}]}
+        if effective_where:
+            effective_where = {"$and": [effective_where, user_filter]}
+        else:
+            effective_where = user_filter
+
+    raw = await query_keyword(
+        keywords=keywords,
+        n_results=_n_results,
+        where=effective_where,
+        collection_name=collection_name,
+    )
+
+    # 关键词检索分数阈值由 config 控制
+    chunks = _parse_results(raw, score_threshold=_cfg.rag.keyword_score_threshold)
+    logger.info(f"[RAG] 关键词召回: {len(chunks)} 条结果")
+    return chunks
+
+
+# ----------------------------------------------------------
+# 混合检索（多路召回 + RRF 融合）
+# ----------------------------------------------------------
+
+def _rrf_fusion_cross_path(
+    path_results: dict[str, list[RetrievedChunk]],
+    k: int = 60,
+    weights: Optional[dict[str, float]] = None,
+) -> list[RetrievedChunk]:
+    """
+    跨召回路径的 RRF（Reciprocal Rank Fusion）合并。
+
+    各路分数量纲天然不可比（余弦相似度 vs 关键词匹配数），RRF 只看排名，
+    避免了归一化问题。
+
+    :param path_results: {"vector": [...], "keyword": [...]}
+    :param k:            RRF 平滑常数
+    :param weights:      各路权重，如 {"vector": 1.0, "keyword": 1.0}
+    :return:             合并去重后的 RetrievedChunk 列表（按 RRF 分降序）
+    """
+    if weights is None:
+        weights = {}
+
+    fused: dict[str, tuple[RetrievedChunk, float]] = {}
+
+    for path_name, ranked_list in path_results.items():
+        w = weights.get(path_name, 1.0)
+        for rank, chunk in enumerate(ranked_list, 1):
+            rrf_score = w / (k + rank)
+            if chunk.chunk_id in fused:
+                existing_chunk, existing_score = fused[chunk.chunk_id]
+                # 保留原始分数更高的 chunk 对象，累加 RRF 分
+                if chunk.score > existing_chunk.score:
+                    fused[chunk.chunk_id] = (chunk, existing_score + rrf_score)
+                else:
+                    fused[chunk.chunk_id] = (existing_chunk, existing_score + rrf_score)
+            else:
+                fused[chunk.chunk_id] = (chunk, rrf_score)
+
+    sorted_results = sorted(fused.values(), key=lambda x: x[1], reverse=True)
+    return [chunk for chunk, _ in sorted_results]
+
+
+async def retrieve_hybrid(
+    query: str,
+    n_results: int | None = None,
+    score_threshold: float | None = None,
+    where: Optional[dict] = None,
+    collection_name: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> list[RetrievedChunk]:
+    """
+    混合检索：并行执行向量召回 + 关键词召回，RRF 合并后返回 Top-K。
+
+    通过 config.rag.hybrid.paths 控制启用的召回路，
+    通过 config.rag.hybrid.enabled 控制总开关。
+
+    预取 3x 候选供 RRF + re-rank 精排使用。
+
+    :param query:           用户查询字符串
+    :param n_results:       最终返回条数
+    :param score_threshold: 向量召回的余弦相似度阈值
+    :param where:           额外过滤条件
+    :param collection_name: 集合名
+    :param user_id:         用户 ID（用于隔离）
+    :return:                合并去重后的 RetrievedChunk 列表
+    """
+    import asyncio
+
+    from backend.config import config as _cfg
+
+    _n_results = n_results if n_results is not None else _cfg.rag.n_results
+    _score_threshold = score_threshold if score_threshold is not None else _cfg.rag.score_threshold
+    hybrid_cfg = _cfg.rag.hybrid
+    paths = hybrid_cfg.paths
+
+    prefetch_count = max(_n_results * _cfg.rag.prefetch_multiplier, _cfg.rag.prefetch_min)
+
+    async def _vector_path() -> tuple[str, list[RetrievedChunk]]:
+        if "vector" not in paths:
+            return ("vector", [])
+        try:
+            chunks = await retrieve(
+                query=query,
+                n_results=prefetch_count,
+                score_threshold=_score_threshold,
+                where=where,
+                collection_name=collection_name,
+                user_id=user_id,
+            )
+            return ("vector", chunks)
+        except Exception as e:
+            logger.warning(f"[RAG] 向量召回路异常: {e}")
+            return ("vector", [])
+
+    async def _keyword_path() -> tuple[str, list[RetrievedChunk]]:
+        if "keyword" not in paths:
+            return ("keyword", [])
+        try:
+            chunks = await retrieve_keyword(
+                query=query,
+                n_results=prefetch_count,
+                where=where,
+                collection_name=collection_name,
+                user_id=user_id,
+            )
+            return ("keyword", chunks)
+        except Exception as e:
+            logger.warning(f"[RAG] 关键词召回路异常: {e}")
+            return ("keyword", [])
+
+    # 并行执行各路召回
+    tasks = [_vector_path(), _keyword_path()]
+    path_results: dict[str, list[RetrievedChunk]] = {}
+    results = await asyncio.gather(*tasks)
+    for path_name, chunks in results:
+        path_results[path_name] = chunks
+
+    # 统计各路召回数量
+    counts = ", ".join(f"{k}={len(v)}" for k, v in path_results.items())
+    logger.info(f"[RAG] 混合检索各路召回: {counts}")
+
+    # RRF 跨路融合
+    merged = _rrf_fusion_cross_path(
+        path_results,
+        k=hybrid_cfg.rrf_k,
+        weights={
+            "vector": hybrid_cfg.vector_weight,
+            "keyword": hybrid_cfg.keyword_weight,
+        },
+    )
+
+    # Re-rank + 父块回填 + 截断
+    if merged:
+        merged = _rerank_by_keyword_overlap(query, merged)
+        merged = await _resolve_parent_chunks(merged)
+        merged = merged[:_n_results]
+
+    if not merged:
+        logger.info(f"[RAG] 混合检索无结果，query={query[:60]!r}")
+    else:
+        logger.info(
+            f"[RAG] 混合检索完成: {len(merged)} 条, "
+            f"最高分={merged[0].score:.3f}, 最低分={merged[-1].score:.3f}"
+        )
+    return merged
+
+
+# ----------------------------------------------------------
+# 上下文格式化
+# ----------------------------------------------------------
+
+
 def format_context(chunks: list[RetrievedChunk], max_tokens: int | None = None) -> str:
     """
     将检索结果格式化为 LLM prompt 上下文字符串，附带来源引用编号。
@@ -218,11 +462,13 @@ def format_context(chunks: list[RetrievedChunk], max_tokens: int | None = None) 
 # ----------------------------------------------------------
 
 def _estimate_tokens(text: str) -> int:
-    """按语言比例估算 token 数。中文 ~1.5 chars/token，英文 ~4 chars/token。"""
+    """按语言比例估算 token 数。"""
     import re
+
+    from backend.config import config
     cn_chars = len(re.findall(r'[\u4e00-\u9fff]', text))
     en_chars = len(text) - cn_chars
-    return int(cn_chars / 1.5 + en_chars / 4.0)
+    return int(cn_chars / config.chat.token_estimation.cn_chars_per_token + en_chars / config.chat.token_estimation.en_chars_per_token)
 
 
 async def _resolve_parent_chunks(
@@ -303,22 +549,30 @@ async def _get_parent_texts_batch(parent_ids: list[str]) -> dict[str, str]:
 
 def _rerank_by_keyword_overlap(query: str, chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
     """
-    轻量级 re-rank：基于查询关键词与文档文本的重叠度对 cosine 分加权。
+    轻量级 re-rank：基于查询关键词与文档文本的重叠度对原始分数加权。
+
+    使用 jieba 分词（与关键词召回路保持一致），过滤停用词和单字后，
+    统计每个 chunk 命中 query 关键词的数量，按重叠比例加分。
+
     不引入额外模型依赖，计算成本极低。
     """
-    # 提取查询关键词（2字及以上中文字 + 3字及以上英文词）
-    import re
-    keywords = set(re.findall(r'[\u4e00-\u9fff]{2,}', query))
-    keywords |= set(w.lower() for w in re.findall(r'[a-zA-Z]{2,}', query))
+    from backend.config import config
+
+    # 使用 jieba 分词提取关键词（与关键词召回路共用分词逻辑）
+    keywords = _tokenize_keywords(query)
 
     if not keywords:
         return sorted(chunks, key=lambda c: c.score, reverse=True)
 
     for chunk in chunks:
+        # 保存原始分数（便于后续分析）
+        if "cosine_score" not in chunk.metadata:
+            chunk.metadata["cosine_score"] = chunk.score
+
         text_lower = chunk.text.lower()
-        overlap = sum(1 for kw in keywords if kw in text_lower)
-        # 关键词重叠加分：最高 +0.15
-        boost = min(overlap / max(len(keywords), 1), 1.0) * 0.15
+        overlap = sum(1 for kw in keywords if kw.lower() in text_lower)
+        # 关键词重叠加分，上限由 config.rag.re_rank_keyword_boost 控制
+        boost = min(overlap / max(len(keywords), 1), 1.0) * config.rag.re_rank_keyword_boost
         chunk.score = round(chunk.score + boost, 4)
 
     return sorted(chunks, key=lambda c: c.score, reverse=True)

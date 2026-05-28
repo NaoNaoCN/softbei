@@ -1,6 +1,10 @@
 """
 backend/evaluation/collector.py
 RAG 评估数据采集器：在 RAG 管线中匿名埋点，采集检索和生成的元数据。
+
+开发阶段（evaluation.mode=development）：默认 100% LLM Judge 采样。
+生产阶段（evaluation.mode=production）：默认 10% LLM Judge 采样。
+采样率通过 config.evaluation.sampling 配置。
 """
 
 from __future__ import annotations
@@ -11,20 +15,22 @@ from typing import Optional
 
 from loguru import logger
 
+from backend.config import config
 from backend.evaluation.models import RetrievalEvalRecord, GenerationEvalRecord
 
 
 class RAGEvalCollector:
     """RAG 评估数据采集器（模块级单例）。
 
+    采样率由 config.evaluation.mode 决定：
+    - development → evaluation.sampling.development（默认 1.0）
+    - production  → evaluation.sampling.production（默认 0.1）
+
     用法::
 
         from backend.evaluation.collector import collector
 
-        # 检索开始时
         collector.start_query(query="梯度下降", kp_name="梯度下降", user_id="123", session_id="456")
-
-        # 检索完成后
         collector.record_retrieval(
             scores=[0.87, 0.65, 0.52],
             chunk_ids=["doc_a_0", "doc_a_1"],
@@ -33,29 +39,35 @@ class RAGEvalCollector:
             embedding_latency_ms=120.0,
             db_query_latency_ms=45.0,
         )
-
-        # Agent 生成完成后
         collector.record_generation(
             agent_type="doc_agent",
             draft_length=1500,
             generation_latency_ms=2500.0,
             safety_passed=True,
             safety_issues_count=0,
+            experiment_group="baseline",
         )
-
-        # 获取完整记录
         record = collector.flush()
     """
 
-    def __init__(self, sample_rate: float = 0.1):
-        """
-        :param sample_rate: LLM-as-Judge 评估采样率（0.0-1.0），默认 10%
-        """
-        self.sample_rate = sample_rate
+    def __init__(self):
         self._current_retrieval: Optional[RetrievalEvalRecord] = None
         self._current_generation: Optional[GenerationEvalRecord] = None
         self._retrieval_timer: Optional[float] = None
         self._records: list[GenerationEvalRecord] = []
+        self._experiment_group: Optional[str] = None
+
+    # ----------------------------------------------------------
+    # 采样率（从 config 动态读取）
+    # ----------------------------------------------------------
+
+    @property
+    def sample_rate(self) -> float:
+        """从 config 读取当前模式的采样率。"""
+        mode = config.evaluation.mode
+        if mode == "development":
+            return config.evaluation.sampling.development
+        return config.evaluation.sampling.production
 
     # ----------------------------------------------------------
     # 查询生命周期
@@ -108,6 +120,7 @@ class RAGEvalCollector:
         generation_latency_ms: float = 0.0,
         safety_passed: bool = True,
         safety_issues_count: int = 0,
+        experiment_group: Optional[str] = None,
     ) -> None:
         """Agent 生成完成后调用。"""
         total_ms = (
@@ -115,6 +128,7 @@ class RAGEvalCollector:
             if self._retrieval_timer
             else 0.0
         )
+        self._experiment_group = experiment_group
         self._current_generation = GenerationEvalRecord(
             session_id=self._current_retrieval.session_id if self._current_retrieval else "",
             user_id=self._current_retrieval.user_id if self._current_retrieval else "",
@@ -146,9 +160,14 @@ class RAGEvalCollector:
                 f"n_retrieved={record.n_retrieved}, draft_len={record.draft_length}, "
                 f"safety_passed={record.safety_passed}"
             )
+
+            # 健康检查采集（Layer 1）
+            self._record_health_check(record)
+
         self._current_retrieval = None
         self._current_generation = None
         self._retrieval_timer = None
+        self._experiment_group = None
         return record
 
     # ----------------------------------------------------------
@@ -162,13 +181,44 @@ class RAGEvalCollector:
         使用 session_id 的 hash 值取模，确保同一 session 的所有轮次
         要么全评估，要么全不评估。
         """
+        rate = self.sample_rate
+        if rate >= 1.0:
+            return True
+        if rate <= 0.0:
+            return False
+
         if not session_id:
             import random
-            return random.random() < self.sample_rate
+            return random.random() < rate
 
-        # 用 session_id 的 hash 做确定性采样
         seed = hash(session_id) % 100
-        return (seed / 100.0) < self.sample_rate
+        return (seed / 100.0) < rate
+
+    # ----------------------------------------------------------
+    # 健康检查
+    # ----------------------------------------------------------
+
+    def _record_health_check(self, record: GenerationEvalRecord) -> None:
+        """将 flush 的记录同步写入健康检查器。"""
+        try:
+            from backend.evaluation.health_check import health_checker
+            retrieval = record.retrieval_record
+            health_checker.record(
+                agent_type=record.agent_type,
+                kp_name=record.kp_name,
+                n_retrieved=record.n_retrieved,
+                scores=retrieval.scores if retrieval else None,
+                embedding_latency_ms=retrieval.embedding_latency_ms if retrieval else 0.0,
+                db_query_latency_ms=retrieval.db_query_latency_ms if retrieval else 0.0,
+                total_retrieval_ms=(
+                    (retrieval.embedding_latency_ms + retrieval.db_query_latency_ms)
+                    if retrieval else 0.0
+                ),
+                draft_length=record.draft_length,
+                generation_latency_ms=record.generation_latency_ms,
+            )
+        except Exception:
+            pass  # 健康检查异常不影响主流程
 
     # ----------------------------------------------------------
     # 记录查询
@@ -187,5 +237,5 @@ class RAGEvalCollector:
         self._records.clear()
 
 
-# 模块级单例（全局共享）
-collector = RAGEvalCollector(sample_rate=0.1)
+# 模块级单例（全局共享，采样率由 config.evaluation.mode 自动决定）
+collector = RAGEvalCollector()
