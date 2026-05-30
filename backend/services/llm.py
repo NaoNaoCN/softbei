@@ -44,7 +44,7 @@ def _make_client(provider: str) -> tuple[AsyncOpenAI, str]:
             api_key=config.llm.api_key,
             base_url="https://spark-api-open.xf-yun.com/v1",
             timeout=_timeout,
-        ), "generalv3.5"
+        ), "4.0Ultra"
 
     if provider == "deepseek":
         return AsyncOpenAI(
@@ -58,7 +58,7 @@ def _make_client(provider: str) -> tuple[AsyncOpenAI, str]:
             api_key=config.llm.api_key,
             base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
             timeout=_timeout,
-        ), "MiniMax-M2.5"
+        ), "deepseek-v4-flash"
 
     if provider == "openai":
         return AsyncOpenAI(
@@ -209,15 +209,84 @@ async def _local_embedding(text: str) -> list[float]:
 
 
 async def _api_embedding(text: str) -> list[float]:
-    """调用通义千问 text-embedding-v4 API。"""
-    client = AsyncOpenAI(
-        api_key=config.llm.api_key,
-        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+    """调用星火 Spark Embedding API（HMAC 签名鉴权）。"""
+    import hashlib
+    import hmac as hmac_mod
+    import base64
+    import json
+    import numpy as np
+    from datetime import datetime
+    from wsgiref.handlers import format_date_time
+    from time import mktime
+    from urllib.parse import urlencode
+    import httpx
+
+    # 从 config.llm.api_key 解析 APIKey:APISecret
+    api_key_raw = config.llm.api_key
+    if ":" in api_key_raw:
+        api_key, api_secret = api_key_raw.split(":", 1)
+    else:
+        api_key = api_key_raw
+        api_secret = ""
+    app_id = config.llm.app_id
+
+    # 构造鉴权 URL
+    host_url = "https://emb-cn-huabei-1.xf-yun.com/"
+    method = "POST"
+
+    # 解析 URL
+    from urllib.parse import urlparse
+    parsed = urlparse(host_url)
+    host = parsed.hostname
+    path = parsed.path
+
+    # 生成签名
+    now = datetime.now()
+    date = format_date_time(mktime(now.timetuple()))
+    signature_origin = f"host: {host}\ndate: {date}\n{method} {path} HTTP/1.1"
+    signature_sha = hmac_mod.new(
+        api_secret.encode("utf-8"),
+        signature_origin.encode("utf-8"),
+        digestmod=hashlib.sha256,
+    ).digest()
+    signature_sha_b64 = base64.b64encode(signature_sha).decode("utf-8")
+    authorization_origin = (
+        f'api_key="{api_key}", algorithm="hmac-sha256", '
+        f'headers="host date request-line", signature="{signature_sha_b64}"'
     )
-    response = await client.embeddings.create(
-        model="text-embedding-v4",
-        # model="tongyi-embedding-vision-flash",
-        # model="tongyi-embedding-vision-plus",
-        input=text,
-    )
-    return response.data[0].embedding
+    authorization = base64.b64encode(authorization_origin.encode("utf-8")).decode("utf-8")
+
+    auth_url = host_url + "?" + urlencode({
+        "host": host,
+        "date": date,
+        "authorization": authorization,
+    })
+
+    # 构造请求体
+    desc = {"messages": [{"content": text, "role": "user"}]}
+    body = {
+        "header": {"app_id": app_id, "uid": "embedding_user", "status": 3},
+        "parameter": {
+            "emb": {"domain": "query", "feature": {"encoding": "utf8"}}
+        },
+        "payload": {
+            "messages": {
+                "text": base64.b64encode(json.dumps(desc).encode("utf-8")).decode()
+            }
+        },
+    }
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(auth_url, json=body, headers={"content-type": "application/json"})
+        data = resp.json()
+
+    code = data.get("header", {}).get("code", -1)
+    if code != 0:
+        raise RuntimeError(f"[Spark Embedding] 请求失败: code={code}, data={data}")
+
+    text_base = data["payload"]["feature"]["text"]
+    text_data = base64.b64decode(text_base)
+    dt = np.dtype(np.float32).newbyteorder("<")
+    vector = np.frombuffer(text_data, dtype=dt).tolist()
+    logger.info(f"[Embedding] Spark API 成功，维度={len(vector)}")
+    return vector

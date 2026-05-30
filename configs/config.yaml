@@ -19,9 +19,15 @@ vector_db:
 # LLM 配置
 llm:
   api_key: "${LLM_API_KEY}"
-  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-  model: "MiniMax-M2.5"
-  provider: "qwen"
+  app_id: "${SPARK_APP_ID}"
+  base_url: "https://spark-api-open.xf-yun.com/v1"
+  model: "4.0Ultra"
+  provider: "spark"
+# llm:
+#   api_key: "${LLM_API_KEY}"
+#   base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+#   model: "deepseek-v4-flash"
+#   provider: "qwen"
 
 # Embedding 配置
 embedding:

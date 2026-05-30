@@ -44,6 +44,7 @@ class VectorDBConfig:
 class LLMConfig:
     """LLM 配置"""
     api_key: str = ""
+    app_id: str = ""
     base_url: str = ""
     model: str = ""
     provider: str = "spark"
@@ -140,6 +141,7 @@ def _build_config() -> Config:
         ),
         llm=LLMConfig(
             api_key=llm.get("api_key", ""),
+            app_id=llm.get("app_id", ""),
             base_url=llm.get("base_url", ""),
             model=llm.get("model", ""),
             provider=llm.get("provider", "spark"),
