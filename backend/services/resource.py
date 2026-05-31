@@ -100,7 +100,19 @@ async def list_resources(
 
 
 async def delete_resource(resource_id: int, db: AsyncSession) -> bool:
-    """物理删除资源元数据（级联删除 quiz_item 等）。"""
+    """物理删除资源元数据（先删所有引用它的子表行，再删 resource_meta）。"""
+    from backend.db.models import GenerationTask, QuizItem, QuizAttempt
+    from sqlalchemy import select as sa_select, delete as sa_delete
+
+    # quiz_attempt → quiz_item → resource_meta（需按依赖顺序删）
+    quiz_item_ids_result = await db.execute(
+        sa_select(QuizItem.id).where(QuizItem.resource_id == resource_id)
+    )
+    quiz_item_ids = [row[0] for row in quiz_item_ids_result]
+    if quiz_item_ids:
+        await db.execute(sa_delete(QuizAttempt).where(QuizAttempt.quiz_item_id.in_(quiz_item_ids)))
+    await db.execute(sa_delete(QuizItem).where(QuizItem.resource_id == resource_id))
+    await db.execute(sa_delete(GenerationTask).where(GenerationTask.resource_id == resource_id))
     return await delete_by_id(db, ResourceMeta, resource_id)
 
 

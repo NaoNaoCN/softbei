@@ -59,6 +59,7 @@ class LLMConfig(BaseModel):
     model: str = ""
     provider: str = "qwen"
     default_max_tokens: int = 2048
+    enable_thinking: bool | None = None  # Qwen3 深度思考开关；None=不传该参数（兼容非 Qwen3 模型）
     retry: LLMRetryConfig = Field(default_factory=LLMRetryConfig)
     timeout: LLMTimeoutConfig = Field(default_factory=LLMTimeoutConfig)
     providers: LLMProvidersConfig = Field(default_factory=LLMProvidersConfig)

@@ -266,7 +266,6 @@
             color: #333;
             background: #f0f0f0;
         }
-        }
         .recommendation-item {
             display: flex;
             align-items: center;
@@ -558,14 +557,20 @@
                 area.innerHTML = '<div style="padding:40px;text-align:center;color:#6B7280;font-size:14px;">发送消息开始对话</div>';
                 return;
             }
-            area.innerHTML = messages.map(m => {
+            const parts = [];
+            for (const m of messages) {
                 const content = m.role === 'assistant' ? renderMarkdown(m.content) : escapeHtml(m.content);
-                return `
+                parts.push(`
                 <div class="message ${m.role}">
                     <div class="message-bubble">${content}</div>
                     <div class="message-time">${formatTime(m.created_at)}</div>
-                </div>`;
-            }).join('');
+                </div>`);
+                // 在 assistant 消息后插入持久化的视频卡片
+                if (m.role === 'assistant' && m.extra && m.extra.video_refs && m.extra.video_refs.length) {
+                    parts.push(renderVideoCards(m.extra.video_refs));
+                }
+            }
+            area.innerHTML = parts.join('');
             // 渲染 LaTeX 公式
             if (typeof renderMathInElement !== 'undefined') {
                 renderMathInElement(area, {
@@ -768,23 +773,19 @@
                     }
                     // 渲染推荐学习路线
                     if (response && response.metadata) {
-                        renderRecommendations(response.metadata);
-                        // 检测批量生成，显示进度卡片
-                        if (response.metadata.batch_id) {
-                            renderBatchProgressCard(response.metadata.batch_id);
-                        }
-                        // 渲染视频引用卡片
+                        // 渲染视频引用卡片（在文档后、推荐路径前）
                         if (response.metadata.video_refs && response.metadata.video_refs.length) {
                             const area = document.getElementById('messages-area');
                             const allAssistant = area.querySelectorAll('.message.assistant');
                             const lastMsg = allAssistant[allAssistant.length - 1];
                             if (lastMsg) {
-                                const bubble = lastMsg.querySelector('.message-bubble');
-                                if (bubble) {
-                                    bubble.innerHTML = renderMarkdown(response.content, response.metadata.video_refs);
-                                }
                                 lastMsg.insertAdjacentHTML('afterend', renderVideoCards(response.metadata.video_refs));
                             }
+                        }
+                        renderRecommendations(response.metadata);
+                        // 检测批量生成，显示进度卡片
+                        if (response.metadata.batch_id) {
+                            renderBatchProgressCard(response.metadata.batch_id);
                         }
                     }
                     // 延迟刷新会话列表，等待后台自动命名完成

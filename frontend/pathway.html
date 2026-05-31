@@ -633,10 +633,10 @@
         let currentZoom = 1;
         const zoomThresholds = {
             'Course': 0.0, // Always show
-            'Chapter': 0.2,
-            'KnowledgePoint': 0.5,
-            'SubPoint': 0.7,
-            'Concept': 1.2,
+            'Chapter': 0.1,
+            'KnowledgePoint': 0.3,
+            'SubPoint': 0.5,
+            'Concept': 1,
         };
         const nodeTypeIcon = { 'Course': '📘', 'Chapter': '📖', 'KnowledgePoint': '📌', 'SubPoint': '📍', 'Concept': '💡' };
         const categoryList = ['Course', 'Chapter', 'KnowledgePoint', 'SubPoint', 'Concept'];
@@ -1055,8 +1055,24 @@
             const nodeTypeById = {};
             nodes.forEach(n => { nodeTypeById[n.id] = n.type || 'KnowledgePoint'; });
 
+            // Edge length by relation type: IS_PART_OF edges carry the hierarchy signal,
+            // so Chapter→Course edges get a long value to push clusters apart.
+            const edgeLengthByRelation = {
+                'IS_PART_OF': (srcType, tgtType) => {
+                    if (tgtType === 'Course') return 380;       // Chapter clusters far from Course
+                    if (tgtType === 'Chapter') return 160;      // KP/SubPoint close to their Chapter
+                    return 120;
+                },
+                'REQUIRES':   () => 220,
+                'RELATED_TO': () => 260,
+                'CONTAINS':   () => 160,
+            };
+
             const chartEdges = edges.map(e => {
                 const srcType = nodeTypeById[e.source_id] || 'KnowledgePoint';
+                const tgtType = nodeTypeById[e.target_id] || 'KnowledgePoint';
+                const rel = e.relation || 'RELATED_TO';
+                const lenFn = edgeLengthByRelation[rel] || (() => 200);
                 const edgeStyle = { width: nodeTypeEdgeWidth[srcType] || 1.2 };
                 // 已学习视图下，两端都不是已学习节点的边变暗
                 if (isLearnedMode && !learnedKpIds.has(e.source_id) && !learnedKpIds.has(e.target_id)) {
@@ -1067,7 +1083,8 @@
                 return {
                     source: e.source_id,
                     target: e.target_id,
-                    relation: e.relation,
+                    relation: rel,
+                    edgeLength: lenFn(srcType, tgtType),
                     lineStyle: edgeStyle,
                 };
             });
@@ -1092,8 +1109,13 @@
                     data: chartNodes, links: chartEdges,
                     lineStyle: { color: 'rgba(180,200,220,0.45)', width: 1.2, curveness: 0.2, opacity: 0.6 },
                     emphasis: { focus: 'adjacency', lineStyle: { color: '#7EC8E3', width: 2.5, opacity: 1 }, itemStyle: { borderWidth: 3, borderColor: 'rgba(255,255,255,0.8)' } },
-                    // peplusion: 边长度, gravity: 重力, layoutAnimation: 布局动画
-                    force: { repulsion: 200, gravity: 0.1, layoutAnimation: true, edgeLength: [120, 280], friction: 0.6 },
+                    force: {
+                        repulsion: 500,
+                        gravity: 0.05,
+                        layoutAnimation: true,
+                        edgeLength: [80, 380],
+                        friction: 0.6,
+                    },
                 }]
             }, true);
 

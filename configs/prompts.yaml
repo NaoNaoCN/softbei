@@ -468,10 +468,27 @@ kg_builder:
     {nodes_text}
 
     关系类型说明：
-    - IS_PART_OF: A 是 B 的组成部分（章节属于课程，知识点属于章节）
+    - IS_PART_OF: A 是 B 的组成部分/子概念（知识点属于章节，子点属于知识点，概念属于子点）
     - REQUIRES: A 的学习需要先掌握 B（前置依赖）
     - RELATED_TO: A 和 B 有关联但无层级或依赖关系
     - CONTAINS: A 包含 B（与 IS_PART_OF 方向相反）
+
+    ## IMPORTANT — 层级归属边是最高优先级
+
+    **每个 KnowledgePoint、SubPoint、Concept 节点都必须有至少一条 IS_PART_OF 边指向其上级节点。**
+    这是构建有意义的知识图谱结构的基础——没有层级边的节点会孤立漂浮，无法体现知识体系。
+
+    层级归属规则（必须覆盖）：
+    - Concept → IS_PART_OF → SubPoint 或 KnowledgePoint（概念归属于其所在的知识点）
+    - SubPoint → IS_PART_OF → KnowledgePoint（子点归属于其所在的知识点）
+    - KnowledgePoint → IS_PART_OF → Chapter（知识点归属于其所在的章节）
+
+    示例：
+    - "反向传播"（KnowledgePoint）→ IS_PART_OF → "神经网络训练"（Chapter）
+    - "链式法则"（SubPoint）→ IS_PART_OF → "反向传播"（KnowledgePoint）
+    - "梯度消失"（Concept）→ IS_PART_OF → "链式法则"（SubPoint）
+
+    在完成所有层级归属边之后，再补充 REQUIRES 和 RELATED_TO 关系。
 
     要求：
     - source 和 target 必须是上面列表中的知识点名称（精确匹配）

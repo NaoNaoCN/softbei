@@ -72,6 +72,12 @@ def _make_client(provider: str) -> tuple[AsyncOpenAI, str]:
 # 核心调用接口
 # ===========================================================
 
+def _build_extra_body() -> dict | None:
+    """根据配置构建 extra_body，仅在 enable_thinking 非 None 时传入。"""
+    if config.llm.enable_thinking is not None:
+        return {"enable_thinking": config.llm.enable_thinking}
+    return None
+
 @retry(
     stop=stop_after_attempt(config.llm.retry.max_attempts),
     wait=wait_exponential(
@@ -102,12 +108,14 @@ async def chat_completion(
     client, default_model = _make_client(_provider)
     _model = model or default_model
     _max_tokens = max_tokens if max_tokens is not None else config.llm.default_max_tokens
+    _extra = _build_extra_body()
     try:
         response = await client.chat.completions.create(
             model=_model,
             messages=messages,
             temperature=temperature,
             max_tokens=_max_tokens,
+            **({} if _extra is None else {"extra_body": _extra}),
         )
         return response.choices[0].message.content or ""
     except RateLimitError as e:
@@ -118,6 +126,7 @@ async def chat_completion(
                 messages=messages,
                 temperature=temperature,
                 max_tokens=_max_tokens,
+                **({} if _extra is None else {"extra_body": _extra}),
             )
             return response.choices[0].message.content or ""
         raise
@@ -135,6 +144,7 @@ async def stream_chat_completion(
     client, default_model = _make_client(_provider)
     _model = model or default_model
     _max_tokens = max_tokens if max_tokens is not None else config.llm.default_max_tokens
+    _extra = _build_extra_body()
     try:
         stream = await client.chat.completions.create(
             model=_model,
@@ -142,6 +152,7 @@ async def stream_chat_completion(
             temperature=temperature,
             max_tokens=_max_tokens,
             stream=True,
+            **({} if _extra is None else {"extra_body": _extra}),
         )
         async for chunk in stream:
             delta = chunk.choices[0].delta
@@ -156,6 +167,7 @@ async def stream_chat_completion(
                 temperature=temperature,
                 max_tokens=_max_tokens,
                 stream=True,
+                **({} if _extra is None else {"extra_body": _extra}),
             )
             async for chunk in stream2:
                 delta = chunk.choices[0].delta

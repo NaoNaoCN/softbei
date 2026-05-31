@@ -57,7 +57,7 @@ def extract_search_keywords(text: str) -> str:
                  "帮我", "生成", "学习", "文档", "资料", "关于", "区别", "对比"}
     keywords = [w for w in keywords if len(w) >= 2 and w not in stopwords]
     if keywords:
-        logger.debug("[VideoSearch] 提取关键词: {}", " ".join(keywords[:4]))
+        logger.info("[VideoSearch] 提取关键词: {}", " ".join(keywords[:4]))
     return " ".join(keywords[:4]) if keywords else text[:20]
 
 
@@ -156,6 +156,7 @@ async def search_videos(query: str, skip_extraction: bool = False) -> list[Video
         return []
 
     # 提取搜索关键词（调用方已处理好时可跳过）
+    logger.info(f"[VideoSearch] 原始查询: {query[:50]}...")
     keywords = query if skip_extraction else extract_search_keywords(query)
     logger.info(f"[VideoSearch] 原始查询: {query[:50]}... → 关键词: {keywords}")
 

@@ -347,11 +347,13 @@ async def chat(
                 "content": body.content,
             })
             if result.final_content:
+                video_refs = result.metadata.get("video_refs") or []
                 await crud_insert(db, ChatMessage, data={
                     "session_id": session_id,
                     "role": "assistant",
                     "content": result.final_content,
                     "resource_type": result.resource_type.value if result.resource_type else None,
+                    "extra": {"video_refs": video_refs} if video_refs else None,
                 })
             # 自动命名：会话尚无标题时，用 LLM 生成简短标题
             if not chat_sess.title:
@@ -474,6 +476,7 @@ async def get_session_messages(
             "role": m.role,
             "content": m.content,
             "resource_type": m.resource_type,
+            "extra": m.extra,
             "created_at": m.created_at.isoformat() if m.created_at else None,
         }
         for m in messages

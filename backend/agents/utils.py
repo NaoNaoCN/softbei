@@ -26,8 +26,12 @@ async def resolve_kp_name(state: AgentState, config_dict: dict | None = None) ->
         return "未知知识点"
     logger.debug(f"[resolve_kp_name] Resolving kp_name for kp_id = {kp_id}")
 
-    # 如果 kp_id 不像是哈希 ID（不以 kp_ 开头），说明本身就是名称
-    if not kp_id.startswith("kp_"):
+    # 判断是否像 DB ID：带 kp_ 前缀，或裸十六进制串（LLM 有时省略前缀）
+    is_prefixed_id = kp_id.startswith("kp_")
+    is_bare_hex = re.fullmatch(r"[0-9a-f]{8,}", kp_id) is not None
+
+    if not is_prefixed_id and not is_bare_hex:
+        # 含中文/空格等，本身就是用户输入的名称
         return kp_id
 
     # 尝试从 DB 查名称
@@ -39,14 +43,15 @@ async def resolve_kp_name(state: AgentState, config_dict: dict | None = None) ->
         try:
             from backend.db.crud import select_one
             from backend.db.models import KGNode
-            node = await select_one(db, KGNode, filters={"id": kp_id})
+            # 优先用原始 kp_id 查；若是裸十六进制则补 kp_ 前缀再查
+            lookup_id = kp_id if is_prefixed_id else f"kp_{kp_id}"
+            node = await select_one(db, KGNode, filters={"id": lookup_id})
             if node:
                 logger.debug(f"[resolve_kp_name] Found kp_name in DB: {node.name}")
                 return node.name
-            logger.debug(f"[resolve_kp_name] No DB record found for kp_id {kp_id}, using kp_id as name")
+            logger.debug(f"[resolve_kp_name] No DB record found for kp_id {lookup_id}, using kp_id as name")
         except Exception:
             logger.warning(f"[resolve_kp_name] Error querying DB for kp_id {kp_id}, using kp_id as name")
-            pass
     else:
         logger.debug(f"[resolve_kp_name] No DB available in config, using kp_id as name")
 
@@ -531,7 +536,7 @@ async def retrieve_context(
 
     retrieval_ms = (time.perf_counter() - t_start) * 1000
     if chunks:
-        logger.info("[%s] RAG 检索到 %d 条参考资料 (%.0fms)", agent_label, len(chunks), retrieval_ms)
+        logger.info("[%s] RAG 检索到 %d 条参考资料 (%.0fms)" % (agent_label, len(chunks), retrieval_ms))
     else:
         logger.warning("[%s] RAG 未检索到参考资料，降级为纯 LLM 生成 (%.0fms)", agent_label, retrieval_ms)
 

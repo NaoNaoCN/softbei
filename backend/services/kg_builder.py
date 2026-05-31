@@ -261,9 +261,60 @@ def _attach_details_to_sections(
     return edges
 
 
-# ----------------------------------------------------------
-# 核心提取逻辑
-# ----------------------------------------------------------
+def _fill_missing_hierarchy_edges(nodes: list[dict], edges: list[dict]) -> list[dict]:
+    """
+    后处理：对 LLM 遗漏的层级归属边进行补全。
+
+    规则（按节点类型，从细到粗逐级向上找最近的上级）：
+    - Concept → 最近的 SubPoint 或 KnowledgePoint
+    - SubPoint → 最近的 KnowledgePoint
+    - KnowledgePoint → 最近的 Chapter
+
+    只补充尚未存在 IS_PART_OF 出边的节点，不重复添加。
+    """
+    # 已有 IS_PART_OF 出边的节点集合（source 侧）
+    has_parent: set[str] = {
+        e["source"] for e in edges if e["relation"] == "IS_PART_OF"
+    }
+
+    # 按类型分组
+    by_type: dict[str, list[str]] = {t: [] for t in _ALL_TYPES}
+    for n in nodes:
+        t = n.get("type", "Concept")
+        if t in by_type:
+            by_type[t].append(n["name"])
+
+    # 上级候选类型映射
+    parent_type_map = {
+        "Concept":        ["SubPoint", "KnowledgePoint", "Chapter"],
+        "SubPoint":       ["KnowledgePoint", "Chapter"],
+        "KnowledgePoint": ["Chapter"],
+    }
+
+    new_edges: list[dict] = []
+    for child_type, parent_types in parent_type_map.items():
+        for child_name in by_type.get(child_type, []):
+            if child_name in has_parent:
+                continue  # 已有归属边，跳过
+            # 找第一个有候选节点的上级类型
+            for pt in parent_types:
+                candidates = by_type.get(pt, [])
+                if candidates:
+                    # 取第一个候选（顺序即文档顺序，近似最相关）
+                    new_edges.append({
+                        "source": child_name,
+                        "target": candidates[0],
+                        "relation": "IS_PART_OF",
+                    })
+                    has_parent.add(child_name)
+                    break
+
+    if new_edges:
+        logger.info(f"[KG] 补全层级归属边 {len(new_edges)} 条（LLM 遗漏）")
+    return edges + new_edges
+
+
+
 
 # 并发控制：避免触发 LLM API 并发限流
 _LLM_SEMAPHORE = asyncio.Semaphore(config.knowledge_graph.llm_concurrency)
@@ -594,6 +645,7 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
         cross_edges = await _extract_cross_edges(nodes)
 
         edges = skeleton_edges + auto_edges + cross_edges
+        edges = _fill_missing_hierarchy_edges(nodes, edges)
         logger.info(f"[KG-TOC] 总计 {len(nodes)} 节点, {len(edges)} 边（骨架 {len(skeleton_edges)} + 归属 {len(auto_edges)} + 跨章节 {len(cross_edges)}）")
     else:
         # ===== Fallback：原有逻辑 =====
@@ -615,6 +667,7 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
         if on_progress:
             await on_progress(55, "关系推断中")
         edges = await _extract_edges(nodes)
+        edges = _fill_missing_hierarchy_edges(nodes, edges)
         logger.info(f"[KG] 推断出 {len(edges)} 条关系")
 
     if not nodes:
