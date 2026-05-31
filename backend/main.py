@@ -180,6 +180,22 @@ app.add_middleware(
 )
 app.add_middleware(LoggingMiddleware)
 
+# 对 HTML 和 JS 文件禁用浏览器缓存，确保代码更新后立即生效
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+
+class NoCacheHTMLMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: StarletteRequest, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith('/app/'):
+            if request.url.path.endswith(('.html', '.js')) or '/app/' == request.url.path[-1:]:
+                response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+                response.headers['Pragma'] = 'no-cache'
+                response.headers['Expires'] = '0'
+        return response
+
+app.add_middleware(NoCacheHTMLMiddleware)
+
 # 静态文件服务：挂载 frontend 目录到 /app 路径
 from pathlib import Path
 html_dir = Path(__file__).parent.parent / "frontend"
@@ -1800,6 +1816,49 @@ async def get_learning_analytics(
         ).group_by(sa.func.date(LearningRecord.recorded_at))
         .order_by(sa.func.date(LearningRecord.recorded_at))
     )
+
+    # 单独查询每日“学习次数”：quiz 按分钟级去重（一次答题练习算一次），view/complete 正常计数
+    # quiz 次数：同一分钟内的多道题只算一次答题练习
+    quiz_daily = await db.execute(
+        sa.select(
+            sa.func.date(LearningRecord.recorded_at).label("day"),
+            sa.func.count(sa.distinct(sa.func.date_trunc('minute', LearningRecord.recorded_at))).label("cnt"),
+        ).where(
+            LearningRecord.user_id == user_id,
+            LearningRecord.recorded_at >= thirty_days_ago,
+            LearningRecord.action == 'quiz',
+        ).group_by(sa.func.date(LearningRecord.recorded_at))
+    )
+    quiz_count_by_day = {str(r.day): r.cnt for r in quiz_daily.all()}
+
+    # view 次数：每次预览算一次
+    view_daily = await db.execute(
+        sa.select(
+            sa.func.date(LearningRecord.recorded_at).label("day"),
+            sa.func.count().label("cnt"),
+        ).where(
+            LearningRecord.user_id == user_id,
+            LearningRecord.recorded_at >= thirty_days_ago,
+            LearningRecord.action == 'view',
+            LearningRecord.duration_seconds.isnot(None),
+            LearningRecord.duration_seconds > 0,
+        ).group_by(sa.func.date(LearningRecord.recorded_at))
+    )
+    view_count_by_day = {str(r.day): r.cnt for r in view_daily.all()}
+
+    # complete 次数
+    complete_daily = await db.execute(
+        sa.select(
+            sa.func.date(LearningRecord.recorded_at).label("day"),
+            sa.func.count().label("cnt"),
+        ).where(
+            LearningRecord.user_id == user_id,
+            LearningRecord.recorded_at >= thirty_days_ago,
+            LearningRecord.action == 'complete',
+        ).group_by(sa.func.date(LearningRecord.recorded_at))
+    )
+    complete_count_by_day = {str(r.day): r.cnt for r in complete_daily.all()}
+
     daily_data = []
     total_seconds = 0
     total_actions = 0
@@ -1807,7 +1866,10 @@ async def get_learning_analytics(
     for row in lr_rows.all():
         day_str = str(row.day)
         seconds = row.seconds or 0
-        actions = row.actions or 0
+        # 学习次数 = quiz次数 + view次数 + complete次数
+        actions = (quiz_count_by_day.get(day_str, 0) +
+                   view_count_by_day.get(day_str, 0) +
+                   complete_count_by_day.get(day_str, 0))
         daily_data.append({
             "date": day_str,
             "minutes": round(seconds / 60, 1),
@@ -1885,6 +1947,9 @@ async def get_learning_analytics(
     radar_sorted = sorted(radar_indicators, key=lambda x: x["value"], reverse=True)[:8]
 
     # ── 5. 学习行为分类统计 ──
+    # 排除 stay（页面停留仅用于每日学习时长，不纳入行为统计）
+    # view 只统计有 resource_id 且 duration > 0 的有效预览
+    # quiz 次数按分钟级去重（一次答题练习算一次）
     action_rows = await db.execute(
         sa.select(
             LearningRecord.action,
@@ -1892,15 +1957,38 @@ async def get_learning_analytics(
             sa.func.coalesce(sa.func.sum(LearningRecord.duration_seconds), 0).label("total_sec"),
         ).where(
             LearningRecord.user_id == user_id,
+            LearningRecord.action != 'stay',
+            sa.or_(
+                LearningRecord.action != 'view',
+                sa.and_(
+                    LearningRecord.resource_id.isnot(None),
+                    LearningRecord.duration_seconds.isnot(None),
+                    LearningRecord.duration_seconds > 0,
+                )
+            )
         ).group_by(LearningRecord.action)
     )
+
+    # quiz 单独查询“练习次数”：同一分钟内的多道题只算一次
+    quiz_session_count = await db.execute(
+        sa.select(
+            sa.func.count(sa.distinct(sa.func.date_trunc('minute', LearningRecord.recorded_at))).label("cnt"),
+        ).where(
+            LearningRecord.user_id == user_id,
+            LearningRecord.action == 'quiz',
+        )
+    )
+    quiz_sessions = quiz_session_count.scalar_one_or_none() or 0
+
     behavior_breakdown = []
     for row in action_rows.all():
-        action_label = {"view": "浏览学习", "quiz": "答题练习", "complete": "完成学习"}.get(row.action, row.action)
+        action_label = {"view": "浏览资源", "quiz": "答题练习", "complete": "完成学习", "stay": "页面停留"}.get(row.action, row.action)
+        # quiz 用分钟级去重的次数
+        count = quiz_sessions if row.action == 'quiz' else row.count
         behavior_breakdown.append({
             "action": row.action,
             "label": action_label,
-            "count": row.count,
+            "count": count,
             "total_minutes": round(float(row.total_sec or 0) / 60, 1),
         })
 
@@ -1929,20 +2017,49 @@ async def get_learning_analytics(
             "total_minutes": round(float(row.total_sec or 0) / 60, 1),
         })
 
-    # ── 7. 最近学习记录（最新 10 条） ──
+    # ── 7. 最近学习记录（最新 10 条，含详情） ──
+    # 排除 stay（仅用于每日时长）
+    # view 必须有 resource_id 且有 duration_seconds（过滤旧的不完整记录）
     recent_rows = await db.execute(
-        sa.select(LearningRecord)
-        .where(LearningRecord.user_id == user_id)
+        sa.select(
+            LearningRecord,
+            ResourceMeta.title.label("res_title"),
+            ResourceMeta.resource_type.label("res_type"),
+            KGNode.name.label("kp_name"),
+        )
+        .outerjoin(ResourceMeta, LearningRecord.resource_id == ResourceMeta.id)
+        .outerjoin(KGNode, LearningRecord.kp_id == KGNode.id)
+        .where(
+            LearningRecord.user_id == user_id,
+            LearningRecord.action != 'stay',
+            sa.or_(
+                LearningRecord.action != 'view',
+                sa.and_(
+                    LearningRecord.resource_id.isnot(None),
+                    LearningRecord.duration_seconds.isnot(None),
+                    LearningRecord.duration_seconds > 0,
+                )
+            )
+        )
         .order_by(LearningRecord.recorded_at.desc())
         .limit(10)
     )
     recent_activities = []
-    for r in recent_rows.scalars().all():
-        action_label = {"view": "浏览学习", "quiz": "答题练习", "complete": "完成学习"}.get(r.action, r.action)
+    for row in recent_rows.all():
+        r = row[0]  # LearningRecord object
+        res_title = row.res_title
+        res_type = row.res_type
+        kp_name = row.kp_name
+        action_label = {"view": "浏览资源", "quiz": "答题练习", "complete": "完成学习", "stay": "页面停留"}.get(r.action, r.action)
+        rt_val = res_type.value if hasattr(res_type, 'value') else res_type if res_type else None
         recent_activities.append({
             "action": r.action,
             "label": action_label,
             "kp_id": r.kp_id,
+            "kp_name": kp_name,
+            "resource_id": r.resource_id,
+            "resource_title": res_title,
+            "resource_type": rt_val,
             "duration_seconds": r.duration_seconds,
             "recorded_at": r.recorded_at.isoformat() if r.recorded_at else None,
         })

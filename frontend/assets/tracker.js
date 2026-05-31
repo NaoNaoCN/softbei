@@ -41,7 +41,7 @@
         reported = true;
 
         const data = {
-            action: 'view',
+            action: 'stay',
             duration_seconds: durationSec,
         };
 
@@ -75,7 +75,7 @@
         if (elapsed < MIN_DURATION) return;
 
         const data = {
-            action: 'view',
+            action: 'stay',
             duration_seconds: elapsed,
         };
 

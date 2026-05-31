@@ -616,11 +616,17 @@
                 list.innerHTML = '<div class="empty-state"><div class="empty-icon"><i data-lucide="history"></i></div><div class="empty-text">暂无答题记录</div></div>';
                 return;
             }
+            // 支持 URL 参数 kp_id 筛选
+            const filterKpId = new URLSearchParams(window.location.search).get('kp_id');
+            const filtered = filterKpId ? attempts.filter(a => a.kp_id === filterKpId) : attempts;
+            const filterInfo = filterKpId && filtered.length ? `<div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;"><span style="font-size:13px;color:#7B1FA2;background:#F3E5F5;padding:4px 12px;border-radius:12px;">📍 筛选: ${filtered[0].kp_name || filterKpId}</span><a href="./evaluate.html?tab=history" style="font-size:12px;color:#1976D2;text-decoration:none;">查看全部</a></div>` : '';
+            const displayList = filtered.length ? filtered : attempts;
             list.innerHTML = `
+                ${filterInfo}
                 <table class="table">
                     <thead><tr><th>知识点</th><th>你的答案</th><th>结果</th><th>时间</th></tr></thead>
                     <tbody>
-                        ${attempts.map(a => `
+                        ${displayList.map(a => `
                             <tr onclick="showAttemptDetail(${JSON.stringify(a).replace(/"/g, '&quot;')})" style="cursor:pointer">
                                 <td>${a.kp_name || a.kp_id || '-'}</td>
                                 <td>${a.user_answer || '-'}</td>
@@ -726,7 +732,18 @@
         window.showAttemptDetail = showAttemptDetail;
         window.onFillInput = onFillInput;
 
-        loadQuizResources();
+        // 支持 URL 参数自动切换 tab：?tab=history&kp_id=xxx
+        const urlParams = new URLSearchParams(window.location.search);
+        const initTab = urlParams.get('tab');
+        if (initTab === 'history') {
+            const historyBtn = document.querySelectorAll('.tab')[1];
+            if (historyBtn) switchTab(historyBtn, 'history');
+        } else if (initTab === 'weak') {
+            const weakBtn = document.querySelectorAll('.tab')[2];
+            if (weakBtn) switchTab(weakBtn, 'weak');
+        } else {
+            loadQuizResources();
+        }
     </script>
     <!-- Attempt Detail Modal -->
     <div class="modal-overlay" id="attempt-modal" onclick="if(event.target===this)this.classList.remove('active')">

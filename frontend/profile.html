@@ -645,20 +645,21 @@
                 container.innerHTML = '<span style="color:#6B7280;font-size:13px;">暂无学习行为记录</span>';
                 return;
             }
-            const icons = { view: '👁️', quiz: '✏️', complete: '✅' };
-            const colors = { view: '#1976D2', quiz: '#FB8C00', complete: '#43A047' };
+            const icons = { view: '👁️', quiz: '✏️', complete: '✅', stay: '⏱️' };
+            const colors = { view: '#1976D2', quiz: '#FB8C00', complete: '#43A047', stay: '#607D8B' };
             const totalCount = breakdown.reduce((s, b) => s + b.count, 0) || 1;
             container.innerHTML = breakdown.map(b => {
                 const pct = Math.round(b.count / totalCount * 100);
                 const icon = icons[b.action] || '📌';
                 const color = colors[b.action] || '#6B7280';
+                const timeInfo = b.action === 'complete' ? '' : ` | ${b.total_minutes}分钟`;
                 return `
                     <div style="display:flex;align-items:center;gap:12px;">
                         <span style="font-size:18px;">${icon}</span>
                         <div style="flex:1;">
                             <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
                                 <span style="font-size:13px;font-weight:500;color:#1A1A2E;">${b.label}</span>
-                                <span style="font-size:12px;color:#6B7280;">${b.count}次 | ${b.total_minutes}分钟</span>
+                                <span style="font-size:12px;color:#6B7280;">${b.count}次${timeInfo}</span>
                             </div>
                             <div style="height:6px;background:#E0E6ED;border-radius:3px;overflow:hidden;">
                                 <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;"></div>
@@ -707,17 +708,47 @@
                 container.innerHTML = '<span style="color:#6B7280;font-size:13px;">暂无学习记录</span>';
                 return;
             }
-            const icons = { view: '👁️', quiz: '✏️', complete: '✅' };
+            const icons = { view: '👁️', quiz: '✏️', complete: '✅', stay: '⏱️' };
+            const typeIcons = { doc: '📄', mindmap: '🧠', quiz: '📝', code: '💻', summary: '📖' };
+            const typeLabels = { doc: '文档讲义', mindmap: '思维导图', quiz: '测验题', code: '代码示例', summary: '知识总结' };
+
             container.innerHTML = activities.map(a => {
                 const icon = icons[a.action] || '📌';
                 const time = a.recorded_at ? new Date(a.recorded_at).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
                 const dur = a.duration_seconds ? `${a.duration_seconds}s` : '';
+
+                // 详情信息
+                const kpInfo = a.kp_name ? `<span style="font-size:12px;color:#7B1FA2;background:#F3E5F5;padding:2px 8px;border-radius:10px;">📍${a.kp_name}</span>` : '';
+                const resIcon = a.resource_type ? (typeIcons[a.resource_type] || '📁') : '';
+                const resLabel = a.resource_title ? `${resIcon} ${a.resource_title}` : '';
+
+                // 跳转链接
+                let linkHtml = '';
+                if (a.action === 'view' && a.resource_id) {
+                    linkHtml = `<a href="./library.html?preview=${a.resource_id}" style="font-size:12px;color:#1976D2;text-decoration:none;white-space:nowrap;" title="查看资源">查看 →</a>`;
+                } else if (a.action === 'quiz' && a.kp_id) {
+                    linkHtml = `<a href="./evaluate.html?tab=history&kp_id=${encodeURIComponent(a.kp_id)}" style="font-size:12px;color:#1976D2;text-decoration:none;white-space:nowrap;" title="查看答题历史">历史 →</a>`;
+                } else if (a.resource_id) {
+                    linkHtml = `<a href="./library.html?preview=${a.resource_id}" style="font-size:12px;color:#1976D2;text-decoration:none;white-space:nowrap;" title="查看资源">查看 →</a>`;
+                } else if (a.kp_id) {
+                    linkHtml = `<a href="./pathway.html?tab=pathways" style="font-size:12px;color:#1976D2;text-decoration:none;white-space:nowrap;" title="查看我的路径">路径 →</a>`;
+                }
+
                 return `
-                    <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#F5F7FA;border-radius:8px;">
-                        <span style="font-size:16px;">${icon}</span>
-                        <span style="font-size:13px;font-weight:500;color:#1A1A2E;flex:1;">${a.label}</span>
-                        ${dur ? `<span style="font-size:12px;color:#1976D2;background:#E3F2FD;padding:2px 8px;border-radius:10px;">${dur}</span>` : ''}
-                        <span style="font-size:12px;color:#6B7280;">${time}</span>
+                    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#F5F7FA;border-radius:8px;">
+                        <span style="font-size:18px;">${icon}</span>
+                        <div style="flex:1;min-width:0;">
+                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                <span style="font-size:13px;font-weight:500;color:#1A1A2E;">${a.label}</span>
+                                ${kpInfo}
+                                ${dur ? `<span style="font-size:12px;color:#1976D2;background:#E3F2FD;padding:2px 8px;border-radius:10px;">⏱${dur}</span>` : ''}
+                            </div>
+                            ${resLabel ? `<div style="font-size:12px;color:#6B7280;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${resLabel}</div>` : ''}
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                            ${linkHtml}
+                            <span style="font-size:11px;color:#9CA3AF;">${time}</span>
+                        </div>
                     </div>
                 `;
             }).join('');

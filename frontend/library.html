@@ -518,8 +518,57 @@
         </div>
     </div>
 
+    <!-- 浏览时长上报逻辑（独立全局脚本） -->
+    <script>
+        // 全局变量存储计时状态（比 dataset 更可靠）
+        window.__previewStartTime = 0;
+        window.__previewResourceId = '';
+        window.__previewKpId = '';
+
+        function closePreview() {
+            var modal = document.getElementById('preview-modal');
+            modal.classList.remove('active');
+            var startTime = window.__previewStartTime;
+            var resourceId = window.__previewResourceId;
+            var kpId = window.__previewKpId || '';
+            console.log('[closePreview] startTime=' + startTime + ', resourceId=' + resourceId);
+            if (startTime && resourceId) {
+                var durationSec = Math.round((Date.now() - startTime) / 1000);
+                console.log('[closePreview] durationSec=' + durationSec);
+                if (durationSec >= 1) {
+                    var uid = localStorage.getItem('user_id');
+                    if (uid) {
+                        var payload = { resource_id: resourceId, action: 'view', duration_seconds: durationSec };
+                        if (kpId && kpId.indexOf('kp_') === 0) payload.kp_id = kpId;
+                        var token = localStorage.getItem('access_token');
+                        var headers = { 'Content-Type': 'application/json' };
+                        if (token) headers['Authorization'] = 'Bearer ' + token;
+                        console.log('[closePreview] posting:', JSON.stringify(payload));
+                        fetch('/records?user_id=' + encodeURIComponent(uid), {
+                            method: 'POST',
+                            headers: headers,
+                            body: JSON.stringify(payload),
+                            keepalive: true
+                        }).then(function(r) {
+                            console.log('[closePreview] response status:', r.status);
+                        }).catch(function(e) {
+                            console.error('[closePreview] fetch error:', e);
+                        });
+                    }
+                }
+            }
+            window.__previewStartTime = 0;
+            window.__previewResourceId = '';
+            window.__previewKpId = '';
+        }
+        document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closePreview(); });
+        window.addEventListener('beforeunload', function() {
+            if (window.__previewStartTime && window.__previewResourceId) closePreview();
+        });
+    </script>
+
     <script type="module">
-        import { isLoggedIn, getUserId, getResourceStats, getResources, getResource, deleteResource, importDocumentAsync, getImportStatus, buildKg, getKgBuildStatusByDoc, postLearningRecord } from './assets/api.js';
+        import { isLoggedIn, getUserId, getResourceStats, getResources, getResource, deleteResource, importDocumentAsync, getImportStatus, buildKg, getKgBuildStatusByDoc, postLearningRecord } from './assets/api.js?v=3';
         
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
@@ -897,6 +946,11 @@
             titleEl.textContent = '资源预览';
             body.innerHTML = '<div class="preview-loading">加载中...</div>';
             modal.classList.add('active');
+            // 将计时信息存在全局变量上
+            window.__previewStartTime = Date.now();
+            window.__previewResourceId = resourceId;
+            window.__previewKpId = '';
+            console.log('[handlePreview] started, resourceId=' + resourceId + ', startTime=' + window.__previewStartTime);
             try {
                 const r = await getResource(resourceId, userId);
                 if (!r || r.detail) {
@@ -905,9 +959,8 @@
                 }
                 titleEl.textContent = `${TYPE_MAP[r.resource_type] || r.resource_type} · ${r.title || '未命名'}`;
                 body.innerHTML = renderPreview(r);
-                // 记录浏览行为（仅当 kp_id 是有效的图谱节点 ID 时）
-                if (r.kp_id && r.kp_id.startsWith('kp_')) {
-                    postLearningRecord(userId, { resource_id: resourceId, kp_id: r.kp_id, action: 'view' }).catch(() => {});
+                if (r.kp_id) {
+                    window.__previewKpId = r.kp_id;
                 }
                 // 渲染 LaTeX 公式
                 if (typeof renderMathInElement !== 'undefined') {
@@ -926,16 +979,17 @@
             }
         }
 
-        function closePreview() {
-            document.getElementById('preview-modal').classList.remove('active');
-        }
-
+        // closePreview 已在上方独立 script 中定义
         window.handlePreview = handlePreview;
-        window.closePreview = closePreview;
-        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePreview(); });
 
         loadStats();
         loadResources();
+
+        // 支持 URL 参数 ?preview=resourceId 自动打开资源预览
+        const _previewId = new URLSearchParams(window.location.search).get('preview');
+        if (_previewId) {
+            setTimeout(() => handlePreview(_previewId), 300);
+        }
     </script>
     <script>lucide.createIcons();</script>
     <script src="./assets/tracker.js"></script>

@@ -1363,6 +1363,17 @@
         loadKgGraph();
         loadPathways(); // pre-cache for overlay
 
+        // 支持 URL 参数自动切换 tab：?tab=pathways
+        const _urlParams = new URLSearchParams(window.location.search);
+        const _initTab = _urlParams.get('tab');
+        if (_initTab === 'pathways') {
+            const btn = document.querySelectorAll('.tab')[1];
+            if (btn) switchTab(btn, 'pathways');
+        } else if (_initTab === 'records') {
+            const btn = document.querySelectorAll('.tab')[2];
+            if (btn) switchTab(btn, 'records');
+        }
+
         // === Expose to global ===
         window.switchTab = switchTab;
         window.loadKgGraph = loadKgGraph;

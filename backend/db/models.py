@@ -388,7 +388,7 @@ class LearningRecord(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
     resource_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("resource_meta.id"))
     kp_id: Mapped[str | None] = mapped_column(ForeignKey("kg_node.id"))
-    action: Mapped[str] = mapped_column(String(64), nullable=False)   # "view" | "complete" | "quiz"
+    action: Mapped[str] = mapped_column(String(64), nullable=False)   # "view" | "complete" | "quiz" | "stay"
     duration_seconds: Mapped[int | None] = mapped_column(Integer)
     recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
