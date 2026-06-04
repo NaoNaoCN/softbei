@@ -12,6 +12,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -46,6 +47,7 @@ class User(Base):
     resources: Mapped[list["ResourceMeta"]] = relationship(back_populates="user")
     learning_paths: Mapped[list["LearningPath"]] = relationship(back_populates="user")
     learning_records: Mapped[list["LearningRecord"]] = relationship(back_populates="user")
+    study_plans: Mapped[list["StudyPlan"]] = relationship(back_populates="user")
 
 
 # ----------------------------------------------------------
@@ -394,6 +396,74 @@ class LearningRecord(Base):
 
     user: Mapped["User"] = relationship(back_populates="learning_records")
     resource: Mapped["ResourceMeta | None"] = relationship(back_populates="learning_records")
+
+
+# ----------------------------------------------------------
+# 9. StudyPlan + StudyPlanItem（个性化学习计划表）
+# ----------------------------------------------------------
+
+class StudyPlan(Base):
+    """学习计划表：基于画像与已有学习路径生成的、按日期排程的学习安排。"""
+    __tablename__ = "study_plan"
+    __table_args__ = (
+        Index("ix_study_plan_user_id", "user_id"),
+        Index("ix_study_plan_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("user.id"), nullable=False,
+    )
+    title: Mapped[str | None] = mapped_column(String(256))
+    description: Mapped[str | None] = mapped_column(Text)
+    # 生成时的学习目标快照（来自 StudentProfile.learning_goal）
+    goal: Mapped[str | None] = mapped_column(Text)
+    start_date: Mapped[datetime] = mapped_column(Date, nullable=False)
+    end_date: Mapped[datetime] = mapped_column(Date, nullable=False)
+    # 生成时所用的每日学习预算快照（分钟）
+    daily_time_minutes: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16), default="active", nullable=False)  # active|archived|completed
+    # 本计划聚合自哪些 LearningPath（id 列表）
+    source_path_ids: Mapped[list | None] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user: Mapped["User"] = relationship(back_populates="study_plans")
+    items: Mapped[list["StudyPlanItem"]] = relationship(
+        back_populates="plan",
+        order_by="(StudyPlanItem.scheduled_date, StudyPlanItem.order_index)",
+    )
+
+
+class StudyPlanItem(Base):
+    """学习计划项：计划表中安排在某一天（可含时段）的单个知识点学习任务。"""
+    __tablename__ = "study_plan_item"
+    __table_args__ = (
+        Index("ix_study_plan_item_plan_id", "plan_id"),
+        Index("ix_study_plan_item_plan_date", "plan_id", "scheduled_date"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
+    plan_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("study_plan.id"), nullable=False,
+    )
+    # 画像薄弱点可能尚未进入知识图谱，故 kp_id 可空；kp_name 始终填充作为快照
+    kp_id: Mapped[str | None] = mapped_column(ForeignKey("kg_node.id"), nullable=True)
+    kp_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    scheduled_date: Mapped[datetime] = mapped_column(Date, nullable=False)
+    start_time: Mapped[str | None] = mapped_column(String(5))   # "09:00"，可选时段
+    end_time: Mapped[str | None] = mapped_column(String(5))     # "10:30"
+    estimated_minutes: Mapped[int | None] = mapped_column(Integer)
+    order_index: Mapped[int] = mapped_column(Integer, default=0)
+    is_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 已匹配的 ResourceMeta id 列表
+    resource_ids: Mapped[list | None] = mapped_column(JSON, default=list)
+    # 待懒生成的资源类型，如 ["doc", "quiz"]
+    missing_resource_types: Mapped[list | None] = mapped_column(JSON, default=list)
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    plan: Mapped["StudyPlan"] = relationship(back_populates="items")
+    kp: Mapped["KGNode | None"] = relationship()
 
 
 

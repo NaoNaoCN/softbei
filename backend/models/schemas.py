@@ -5,7 +5,7 @@ Pydantic v2 数据模型，供 FastAPI 路由、Agent 以及前端 API 调用共
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 from typing import Any, Optional
 
@@ -368,6 +368,80 @@ class LearningRecordOut(BaseModel):
     recorded_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ===========================================================
+# 学习计划表（Study Plan）
+# ===========================================================
+
+class StudyPlanResourceRef(BaseModel):
+    """计划项关联的已有资源的轻量引用（不含正文内容）。"""
+    resource_id: int
+    resource_type: ResourceType
+    title: str
+
+    model_config = {"from_attributes": True}
+
+
+class StudyPlanItemOut(BaseModel):
+    id: int
+    kp_id: Optional[str] = None
+    kp_name: str
+    scheduled_date: date
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    estimated_minutes: Optional[int] = None
+    order_index: int
+    is_completed: bool
+    resources: list[StudyPlanResourceRef] = Field(default_factory=list)
+    missing_resource_types: list[str] = Field(default_factory=list)
+    notes: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class StudyPlanOut(BaseModel):
+    id: int
+    user_id: int
+    title: Optional[str] = None
+    description: Optional[str] = None
+    goal: Optional[str] = None
+    start_date: date
+    end_date: date
+    daily_time_minutes: Optional[int] = None
+    status: str
+    source_path_ids: list[int] = Field(default_factory=list)
+    items: list[StudyPlanItemOut] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class StudyPlanGenerateRequest(BaseModel):
+    """触发学习计划生成的请求体。"""
+    source: str = Field(default="aggregate", description="aggregate=汇总已有路径+画像补全；path=指定单条路径")
+    path_ids: list[int] = Field(default_factory=list, description="source=path 时指定的 LearningPath id 列表")
+    start_date: Optional[date] = Field(default=None, description="计划起始日期，默认今天")
+    days: Optional[int] = Field(default=None, ge=1, le=180, description="目标完成天数，给定则均摊每日预算")
+    daily_time_minutes: Optional[int] = Field(default=None, ge=10, le=720, description="覆盖画像中的每日学习预算")
+    default_start_hour: Optional[str] = Field(default=None, description="每日起始时刻，如 '19:00'；给定则生成时段")
+    title: Optional[str] = Field(default=None, max_length=256, description="自定义计划标题")
+
+
+class StudyPlanItemUpdate(BaseModel):
+    scheduled_date: Optional[date] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    order_index: Optional[int] = None
+    is_completed: Optional[bool] = None
+    notes: Optional[str] = None
+
+
+class StudyPlanUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=256)
+    description: Optional[str] = None
+    status: Optional[str] = None
 
 
 # ===========================================================

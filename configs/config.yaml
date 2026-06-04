@@ -350,3 +350,18 @@ evaluation:
   storage:
     persist_to_db: false               # 评估结果写入 PostgreSQL（已弃用，改用内存 + 文件存储）
     retention_days: 90                 # 评估记录保留天数
+
+# ----------------------------------------------------------
+# 学习计划表配置 — 个性化排程参数
+# ----------------------------------------------------------
+study_plan:
+  default_daily_minutes: 60              # 画像未设置每日学习时长时的兜底值（分钟）
+  default_start_hour: "19:00"            # 默认每日起始时刻（仅当请求要求生成时段时使用）
+  default_horizon_days: 14               # 未指定 days 时的默认排程跨度参考
+  min_kp_minutes: 20                     # 单知识点学习时长下限（钳制 LLM 预估）
+  max_kp_minutes: 180                    # 单知识点学习时长上限
+  default_kp_minutes: 45                 # LLM 未给出预估时的默认单点时长
+  target_resource_types: ["doc", "mindmap", "quiz"]   # 计划项默认匹配/补全的资源类型
+  sequence:
+    temperature: 0.3                     # 知识点排序 LLM 温度
+    max_tokens: 2048

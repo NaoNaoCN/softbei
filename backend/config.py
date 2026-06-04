@@ -396,6 +396,25 @@ class EvaluationConfig(BaseModel):
     storage: EvaluationStorageConfig = Field(default_factory=EvaluationStorageConfig)
 
 
+class StudyPlanSequenceConfig(BaseModel):
+    """学习计划知识点排序（LLM）配置"""
+    temperature: float = 0.3
+    max_tokens: int = 2048
+
+
+class StudyPlanConfig(BaseModel):
+    """学习计划表生成配置"""
+    default_daily_minutes: int = 60        # 画像未设置每日时长时的兜底值
+    default_start_hour: str = "19:00"      # 默认每日起始时刻（仅在请求要求生成时段时使用）
+    default_horizon_days: int = 14         # 未指定 days 时的默认排程跨度上限参考
+    min_kp_minutes: int = 20               # 单知识点学习时长下限（钳制 LLM 预估）
+    max_kp_minutes: int = 180              # 单知识点学习时长上限
+    default_kp_minutes: int = 45           # LLM 未给出预估时的默认单点时长
+    # 计划项默认尝试匹配/补全的资源类型
+    target_resource_types: list[str] = Field(default_factory=lambda: ["doc", "mindmap", "quiz"])
+    sequence: StudyPlanSequenceConfig = Field(default_factory=StudyPlanSequenceConfig)
+
+
 # ===========================================================
 # 全局配置汇总
 # ===========================================================
@@ -419,6 +438,7 @@ class Config(BaseModel):
     auth: AuthConfig = Field(default_factory=AuthConfig)
     video_search: VideoSearchConfig = Field(default_factory=VideoSearchConfig)
     evaluation: EvaluationConfig = Field(default_factory=EvaluationConfig)
+    study_plan: StudyPlanConfig = Field(default_factory=StudyPlanConfig)
 
 
 # ===========================================================
@@ -494,6 +514,8 @@ class PromptsConfig:
             "{max_recommendations}": str(self._cfg.agents.recommend.max_recommendations),
             "{target_words_min}": str(self._cfg.agents.summary.target_words_min),
             "{target_words_max}": str(self._cfg.agents.summary.target_words_max),
+            "{min_kp_minutes}": str(self._cfg.study_plan.min_kp_minutes),
+            "{max_kp_minutes}": str(self._cfg.study_plan.max_kp_minutes),
         }
         for key, value in config_vars.items():
             val = val.replace(key, value)

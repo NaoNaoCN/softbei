@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Context
 
-第十五届中国软件杯 A3 赛题 — 个性化资源生成与学习多智能体系统。面向高等教育场景，通过 9 个 LangGraph Agent 协同为学生自动生成个性化学习资源。
+第十五届中国软件杯 A3 赛题 — 个性化资源生成与学习多智能体系统。面向高等教育场景，通过 11 个 LangGraph Agent 协同为学生自动生成个性化学习资源。
 
 ## Commands
 
@@ -16,19 +16,20 @@ pip install -r requirements.txt
 alembic upgrade head
 
 # Run backend (frontend at http://localhost:8000/app)
+# On startup, if the knowledge base is empty, the configured KB dir is auto-indexed.
 uvicorn backend.main:app --reload --port 8000
 
-# Build knowledge base vector index
-python -m backend.rag.indexer
+# Reindex on demand: clear the document_chunk table, then restart (auto-index runs),
+# or call index_directory() from backend.rag.indexer (no standalone CLI entrypoint).
 
 # Run all tests
 pytest tests/ -v
 
-# Run lightweight tests (no DB/LLM deps)
-pytest tests/test_schemas.py -v
+# Run a specific test file (current tests cover video search)
+pytest tests/test_video_search.py -v
 
 # Run a single test function
-pytest tests/test_schemas.py::test_user_create -v
+pytest tests/test_video_search.py::TestExtractSearchKeywords::test_extracts_technical_term -v
 
 # Run RAG golden evaluation (requires DB + LLM)
 python -m backend.evaluation.golden_dataset --run
@@ -36,35 +37,39 @@ python -m backend.evaluation.golden_dataset --run
 
 ## Architecture
 
-**Stack:** FastAPI (async) + HTML/CSS/JS frontend + LangGraph agents + PostgreSQL vector store (JSON + numpy cosine) + SQLAlchemy 2.0 (async ORM) + PostgreSQL
+**Stack:** FastAPI (async) + HTML/CSS/JS frontend + LangGraph agents + PostgreSQL with **pgvector** extension (in-database cosine search via `<=>`, HNSW index) + SQLAlchemy 2.0 (async ORM)
 
-**LLM & Config:** Provider/model configured in `configs/config.yaml` via `${ENV_VAR}` substitution. Currently uses Kimi K2.6 (`kimi-k2.6`) via DashScope. Multi-provider support (spark/deepseek/qwen/openai) in `backend/services/llm.py`. Agent system prompts in `configs/prompts.yaml`. Config is a module-level singleton: `from backend.config import config`.
+**LLM & Config:** Provider/model configured in `configs/config.yaml` via `${ENV_VAR}` substitution. Currently uses `qwen3.6-plus-2026-04-02` (provider `qwen`) via DashScope. Multi-provider support (spark/deepseek/qwen/openai) in `backend/services/llm.py`. Agent system prompts in `configs/prompts.yaml`. Config is a module-level singleton: `from backend.config import config`.
 
 **Required env vars** (see `.env.example`): `LLM_API_KEY`, `JWT_SECRET`, `DATABASE_URL` (PostgreSQL, e.g. `postgresql+asyncpg://user:pass@localhost:5432/softbei`).
 
 ### Agent Pipeline (LangGraph)
 
-`backend/agents/graph.py` defines a 9-node StateGraph. All agents share `AgentState` (TypedDict in `backend/models/schemas.py`).
+`backend/agents/graph.py` defines an 11-node StateGraph. All agents share `AgentState` (Pydantic `BaseModel` in `backend/models/schemas.py`). The `db` session is injected via `config={"configurable": {"db": db}}`. Routing is **conditional, not parallel fan-out** — each run dispatches to a single generation agent based on `intent_type` + `resource_type`.
 
 1. `profile_agent` — extracts/accumulates student profile. Routes to END (ask follow-up) or `planner_agent` (profile sufficient).
-2. `planner_agent` — analyzes intent, fans out to up to 5 parallel generators.
-3. `doc_agent`, `mindmap_agent`, `quiz_agent`, `code_agent`, `summary_agent` — run in parallel.
-4. `safety_agent` — content safety check.
-5. `recommend_agent` → END.
+2. `planner_agent` — analyzes intent (`route_by_resource_type`), routes to one of the generation agents, `kg_agent`, `clarify_agent`, or `recommend_agent` (fallback).
+3. `clarify_agent` — asks a follow-up question, then → END (skips safety).
+4. `doc_agent`, `mindmap_agent`, `quiz_agent`, `code_agent`, `summary_agent` — generation agents, each → `safety_agent`.
+5. `kg_agent` — knowledge-graph node, → `recommend_agent` (skips safety).
+6. `safety_agent` — content safety check → `recommend_agent`.
+7. `recommend_agent` → END.
 
-Resource generation is triggered via `POST /generate`, runs as a background task in `backend/services/generation.py`, and persists results to `ResourceMeta` + `QuizItem` tables.
+`graph.invoke()` / `stream_invoke()` load the student profile and multi-turn `chat_history` into the initial state, and clear the RAG retrieval cache before each run. RAG evaluation data is collected post-run and an async LLM-as-Judge may be triggered by sampling.
+
+Resource generation is triggered via `POST /generate` (single) / `POST /generate/batch` / `POST /generate/smart`, runs as a background task in `backend/services/generation.py`, and persists results to `ResourceMeta` + `QuizItem` tables.
 
 ### Database Layer
 
 - **PostgreSQL** via `asyncpg` driver. Schema managed by **Alembic** (`migrations/`).
-- ORM models in `backend/db/models.py`: `User`, `StudentProfile`, `ProfileHistory`, `ChatSession`, `ChatMessage`, `KGNode`, `KGEdge`, `ResourceMeta`, `GenerationBatch`, `GenerationTask`, `KGBuildTask`, `QuizItem`, `QuizAttempt`, `LearningPath`, `LearningPathItem`, `LearningRecord`
+- ORM models in `backend/db/models.py`: `User`, `StudentProfile`, `ProfileHistory`, `ChatSession`, `ChatMessage`, `DocumentChunk` (pgvector store), `KGNode`, `KGEdge`, `ResourceMeta`, `GenerationBatch`, `GenerationTask`, `KGBuildTask`, `QuizItem`, `QuizAttempt`, `LearningPath`, `LearningPathItem`, `LearningRecord`
 - Generic async CRUD in `backend/db/crud.py`: `insert`, `select`, `select_one`, `update_by_id`, `delete_by_id`, `count`. Supports relation loading via `loadRelations` param.
 - Chat messages stored in static `chat_message` table.
 - Connection pool: `pool_size=10 + max_overflow=20`, `pool_pre_ping=True`.
 
 ### RAG Pipeline
 
-`backend/rag/loader.py` → `indexer.py` → `retriever.py`. Loader parses PDF/DOCX/Markdown/TXT into `TextChunk` objects. Indexer vectorizes with BGE-M3 (or DashScope `text-embedding-v4`) into PostgreSQL `document_chunk` table via **HNSW** index. Retriever does hybrid search (vector + keyword) with RRF fusion, diversity-aware reordering, and citation formatting.
+`backend/rag/loader.py` → `indexer.py` → `retriever.py`. Loader parses PDF/DOCX/Markdown/TXT into `TextChunk` objects (PDF→Markdown via `pymupdf4llm`, DOCX→Markdown via `mammoth`, preserving heading/table/list structure). Indexer vectorizes with DashScope `text-embedding-v4` (1024-dim; local BGE-M3 path deprecated, `embedding.use_spark: true`) and writes to the PostgreSQL `document_chunk` table (pgvector column + `to_tsvector` full-text column). Vector search runs **in-database** via the `<=>` cosine operator over an **HNSW** index (`hnsw.ef_search` tunable per query). Retriever does hybrid search (vector + jieba keyword via `ts_rank`) merged with RRF fusion, keyword-overlap re-ranking, diversity-aware reordering, and citation formatting.
 
 Key features:
 - **Parent-child chunking**: child chunks for precise retrieval, parent chunks provide full context
@@ -88,13 +93,13 @@ Four-layer evaluation architecture in `backend/evaluation/`:
 2. `golden_dataset.py` — runs queries through RAG pipeline → generates answers → judges faithfulness/completeness
 3. Report written to `logs/golden_eval_*.md`
 
-Reference docs in `docs/design/rag/`: 优化效果报告.md, 生成层优化方案.md, RAG评估系统.md, RAG评估指标说明.md
+Reference docs in `docs/xqt/rag/`: 优化效果报告.md, 生成层优化方案.md, RAG评估系统.md, RAG评估指标说明.md, 系统提示词书写原则.md
 
 ### Prompt Engineering Conventions
 
 All Agent system prompts live in `configs/prompts.yaml`. Template variables: config-level (`{min_recommendations}`) resolved by `config.py`; runtime (`{context}`, `{kp_name}`) filled by agents via `.format()`.
 
-**Hierarchy for rules** (from `docs/design/rag/系统提示词书写原则.md`):
+**Hierarchy for rules** (from `docs/xqt/rag/系统提示词书写原则.md`):
 
 | Priority | Keyword | When to use |
 |----------|---------|-------------|
@@ -120,22 +125,20 @@ All Agent system prompts live in `configs/prompts.yaml`. Template variables: con
 
 ### Frontend
 
-HTML/CSS/JS frontend served via FastAPI StaticFiles at `/app`. Pages: `index`, `auth`, `chat`, `profile`, `generate`, `pathway`, `library`, `evaluate`. API layer in `html-test/assets/api.js`. Auth: JWT stored in localStorage, user_id passed as query param.
+HTML/CSS/JS frontend in the `frontend/` directory, served via FastAPI StaticFiles at `/app`. Pages: `index`, `auth`, `chat`, `profile`, `generate`, `pathway`, `library`, `evaluate`. API layer in `frontend/assets/api.js`; other assets: `sidebar.js`, `command.js`, `dialog.js`, `toast.js`, `tracker.js` (page dwell-time tracking), `button.js`, `shortcut.js`, `styles.css`. Auth: JWT stored in localStorage, user_id passed as query param.
 
 ## Key Conventions
 
 - **Pydantic v2** for all schemas (`backend/models/schemas.py`)
 - **pytest-asyncio** with `asyncio_mode = auto` — no `@pytest.mark.asyncio` needed
 - All DB operations are async (`async with get_session() as session`)
-- Agent pattern: receive `AgentState` dict → call LLM → update state fields → return state
+- Agent pattern: receive `AgentState` (Pydantic model) → call LLM → return an updated copy via `state.model_copy(update={...})`
 - **Config is a module-level singleton**: `from backend.config import config`. Never instantiate a second Config object.
 - **Prompts are externalized**: never hardcode system prompts in agent `.py` files — all prompts live in `configs/prompts.yaml` and are accessed via `config.prompts["agents"][agent_name]["system_prompt"]`.
 
 ## Naming Conventions — ORM ↔ Schema Alignment
 
-**`backend/db/models.py` is the single source of truth.** Schema field names must exactly match ORM field names. Never invent aliases in schemas; never use `model_validator` for field name mapping.
-
-Full rules and checklist: [`docs/DATA_MODEL_CONVENTIONS.md`](docs/DATA_MODEL_CONVENTIONS.md)
+**`backend/db/models.py` is the single source of truth.** Schema field names must exactly match ORM field names. Never invent aliases in schemas; never use `model_validator` for field name mapping. See the quick reference below.
 
 ### Quick reference
 
