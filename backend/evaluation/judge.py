@@ -46,6 +46,7 @@ JUDGE_CHUNK_RELEVANCE_PROMPT = """你是一位 RAG 检索质量评估专家。
 JUDGE_FAITHFULNESS_PROMPT = """你是一位事实核查专家。
 给定一段参考资料和 AI 生成的答案，逐句检查答案中的陈述是否能在参考资料中找到依据。
 
+{safety_hints}
 参考资料：
 {retrieved_docs}
 
@@ -215,12 +216,14 @@ class RAGJudge:
         self,
         retrieved_docs: list[str],
         generated_content: str,
+        safety_issues: list[str] | None = None,
     ) -> dict:
         """
         评估生成内容对参考资料的忠实度。
 
         :param retrieved_docs:    检索到的参考资料文本列表
         :param generated_content: LLM 生成的答案
+        :param safety_issues:     SafetyAgent 已发现的问题（可选，用于辅助 Judge 定位疑点）
         :return:                  {"statements": [...], "faithfulness": 0.0-1.0, "issues": [...]}
         """
         if not generated_content:
@@ -238,7 +241,17 @@ class RAGJudge:
         )
         content_preview = generated_content[:3000]
 
+        # 构造 SafetyAgent 提示（如果有已发现的问题，作为 Judge 的辅助线索）
+        safety_hints = ""
+        if safety_issues:
+            issues_text = "\n".join(f"- {issue}" for issue in safety_issues)
+            safety_hints = (
+                "【SafetyAgent 已发现的可疑问题（请重点核查以下陈述）】\n"
+                f"{issues_text}\n\n"
+            )
+
         prompt = JUDGE_FAITHFULNESS_PROMPT.format(
+            safety_hints=safety_hints,
             retrieved_docs=docs_text,
             generated_content=content_preview,
         )
@@ -449,6 +462,7 @@ class RAGJudge:
         include_citation_check: bool = True,
         experiment_group: str | None = None,
         cross_validate: bool | None = None,
+        safety_issues: list[str] | None = None,
     ) -> dict:
         """
         执行完整的四维度 LLM-as-Judge 评估。
@@ -460,6 +474,7 @@ class RAGJudge:
         :param include_citation_check: 是否包含引用准确性评估
         :param experiment_group:       A/B 实验分组标签
         :param cross_validate:         是否启用多 LLM 交叉验证，None=使用 config 设置
+        :param safety_issues:          SafetyAgent 已发现的问题列表（可选，辅助 Faithfulness Judge）
         :return:                       完整评估结果 dict
         """
         t_start = time.perf_counter()
@@ -477,7 +492,7 @@ class RAGJudge:
             self.judge_chunk_relevance_batch(query, retrieved_chunks)
         )
         faithfulness_task = asyncio.create_task(
-            self.judge_faithfulness(retrieved_texts, generated_content)
+            self.judge_faithfulness(retrieved_texts, generated_content, safety_issues)
         )
         completeness_task = asyncio.create_task(
             self.judge_completeness(kp_name, generated_content)
@@ -549,6 +564,8 @@ class RAGJudge:
             # 多 LLM 交叉验证
             "cross_validated": cross_validated,
             "cross_validation_disagreement": cross_validation_disagreement,
+            # SafetyAgent 审核结论（透传）
+            "safety_issues": safety_issues or [],
             # 元数据
             "experiment_group": experiment_group,
             "evaluation_time_ms": round(elapsed_ms, 1),

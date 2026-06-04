@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>智能对话 - 个性化学习助手</title>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lucide@0.460.0"></script>
     <link rel="stylesheet" href="./assets/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
@@ -13,11 +13,11 @@
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        /* chat page overrides & specific styles */
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #F5F7FA;
-            color: #1A1A2E;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #F9FAFB;
+            color: var(--color-text);
             height: 100vh;
             overflow: hidden;
         }
@@ -26,125 +26,112 @@
             height: 100vh;
         }
 
-        /* Sidebar */
-        .sidebar {
-            position: static; /* override fixed from styles.css — chat uses flex layout */
-            width: 240px;
-            background: #EEF4FB;
-            border-right: 1px solid #E0E6ED;
-            padding: 24px 16px;
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
-        }
-        .sidebar-logo {
-            font-size: 18px;
-            font-weight: 700;
-            color: #1976D2;
-            margin-bottom: 24px;
-            padding-left: 8px;
-        }
-        .nav-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 12px 16px;
-            border-radius: 8px;
-            color: #1A1A2E;
-            text-decoration: none;
-            margin-bottom: 4px;
-            transition: all 0.2s;
-            font-size: 14px;
-        }
-        .nav-item:hover { background: #E3F2FD; color: #1976D2; }
-        .nav-item.active { background: #1976D2; color: #fff; }
-        .nav-item .icon { width: 24px; height: 18px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
-
         /* Chat Area */
         .chat-area {
             flex: 1;
             display: flex;
             flex-direction: column;
             height: 100vh;
+            background: #F9FAFB;
+            margin-left: var(--sidebar-width);
         }
 
         /* Chat Header */
         .chat-header {
-            padding: 20px 32px;
-            border-bottom: 1px solid #E0E6ED;
+            padding: 18px 28px;
+            border-bottom: 1px solid var(--color-border-light);
             background: #fff;
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            gap: 12px;
+        }
+        .chat-header-icon {
+            width: 38px; height: 38px;
+            border-radius: 10px;
+            background: var(--color-primary-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            flex-shrink: 0;
         }
         .chat-header-title {
-            font-size: 18px;
+            font-size: 17px;
             font-weight: 600;
-            color: #1A1A2E;
+            color: var(--color-text);
         }
         .chat-header-sub {
-            font-size: 13px;
-            color: #6B7280;
-            margin-top: 2px;
+            font-size: 12px;
+            color: var(--color-text-tertiary);
+            margin-top: 1px;
         }
 
         /* Onboarding Banner */
         .onboarding-banner {
-            padding: 12px 32px;
-            background: #E3F2FD;
-            border-bottom: 1px solid #E0E6ED;
-            font-size: 14px;
-            color: #1565C0;
+            padding: 12px 28px;
+            background: var(--color-primary-light);
+            border-bottom: 1px solid var(--color-border-light);
+            font-size: 13px;
+            color: var(--color-primary-hover);
         }
 
         /* Session Sidebar */
         .session-panel {
             width: 260px;
-            border-right: 1px solid #E0E6ED;
-            background: #F5F7FA;
+            border-right: 1px solid var(--color-border-light);
+            background: #FAFBFF;
             display: flex;
             flex-direction: column;
+            flex-shrink: 0;
         }
         .session-header {
             padding: 16px;
-            border-bottom: 1px solid #E0E6ED;
+            border-bottom: 1px solid var(--color-border-light);
         }
         .btn-new-chat {
             width: 100%;
-            padding: 10px;
-            background: #1976D2;
+            padding: 10px 16px;
+            background: var(--color-primary-gradient);
             color: #fff;
             border: none;
-            border-radius: 8px;
+            border-radius: 10px;
             font-size: 14px;
-            font-weight: 500;
+            font-weight: 600;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: all var(--transition-base);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
         }
-        .btn-new-chat:hover { background: #1565C0; }
+        .btn-new-chat:hover { background: var(--color-primary-hover); box-shadow: var(--shadow-button); }
         .session-list {
             flex: 1;
             overflow-y: auto;
             padding: 8px;
         }
         .session-label {
-            font-size: 12px;
-            color: #6B7280;
+            font-size: 11px;
+            color: var(--color-text-muted);
             padding: 8px 8px 4px;
-            font-weight: 500;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
         }
         .session-item {
             display: flex;
             align-items: center;
             justify-content: space-between;
             padding: 10px 12px;
-            border-radius: 8px;
+            border-radius: 9px;
             cursor: pointer;
             margin-bottom: 2px;
-            transition: all 0.2s;
+            transition: all var(--transition-base);
+            font-size: 13px;
+            color: var(--color-text-secondary);
         }
-        .session-item:hover { background: #E3F2FD; }
-        .session-item.active { background: #1976D2; color: #fff; }
+        .session-item:hover { background: #F0F4FF; color: var(--color-primary); }
+        .session-item.active { background: var(--color-primary-light); color: var(--color-primary); font-weight: 600; }
         .session-title {
             font-size: 13px;
             white-space: nowrap;
@@ -182,25 +169,44 @@
         }
         .message.user { align-self: flex-end; }
         .message.assistant { align-self: flex-start; }
+        .message.assistant .msg-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .msg-avatar {
+            width: 30px; height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            flex-shrink: 0;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .msg-avatar.bot { background: var(--color-primary-gradient); }
+        .msg-avatar.user-msg { background: #A78BFA; }
         .message-bubble {
-            padding: 12px 16px;
-            border-radius: 12px;
+            padding: 14px 18px;
+            border-radius: 16px;
             font-size: 14px;
-            line-height: 1.6;
+            line-height: 1.65;
         }
         .message.user .message-bubble {
-            background: #1976D2;
-            color: #fff;
-            border-bottom-right-radius: 4px;
+            background: #EEF1FE;
+            color: var(--color-text);
+            border-bottom-right-radius: 6px;
         }
         .message.assistant .message-bubble {
             background: #fff;
-            border: 1px solid #E0E6ED;
-            border-bottom-left-radius: 4px;
+            box-shadow: var(--shadow-sm);
+            border-bottom-left-radius: 6px;
+            border: 1px solid var(--color-border-light);
         }
         .message-time {
             font-size: 11px;
-            color: #9CA3AF;
+            color: var(--color-text-muted);
             padding: 0 4px;
         }
         .message.user .message-time { text-align: right; }
@@ -214,17 +220,17 @@
         .message.assistant .message-bubble ul,
         .message.assistant .message-bubble ol { padding-left: 20px; margin: 6px 0; }
         .message.assistant .message-bubble pre {
-            background: #f6f8fa; border-radius: 6px; padding: 10px;
+            background: #1E1E2E; color: #E5E7EB; border-radius: 10px; padding: 14px;
             overflow-x: auto; margin: 8px 0; font-size: 13px;
         }
         .message.assistant .message-bubble code {
-            font-family: 'Fira Code', Consolas, monospace; font-size: 13px;
+            font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace; font-size: 13px;
         }
         .message.assistant .message-bubble :not(pre) > code {
-            background: #f0f0f0; padding: 2px 5px; border-radius: 3px;
+            background: #F0F1F5; padding: 2px 6px; border-radius: 4px; font-size: 0.9em;
         }
         .message.assistant .message-bubble blockquote {
-            border-left: 3px solid #1976D2; padding-left: 10px; color: #555; margin: 8px 0;
+            border-left: 3px solid var(--color-primary); padding-left: 12px; color: var(--color-text-secondary); margin: 8px 0;
         }
         .message.assistant .message-bubble table {
             border-collapse: collapse; margin: 8px 0; font-size: 13px;
@@ -238,13 +244,17 @@
         /* AI Recommendations */
         .recommendations-panel {
             margin: 16px 0;
-            padding: 16px;
+            padding: 18px;
             background: #fff;
-            border: 1px solid #E0E6ED;
-            border-radius: 12px;
+            border: 1px solid var(--color-border-light);
+            border-radius: 14px;
+            box-shadow: var(--shadow-sm);
         }
         .recommendations-title {
-            font-size: 14px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--color-text-secondary);
+            margin-bottom: 10px;
             font-weight: 600;
             color: #1A1A2E;
             margin-bottom: 12px;
@@ -280,51 +290,53 @@
         .btn-rec {
             padding: 6px 16px;
             background: #E3F2FD;
-            color: #1976D2;
+            color: var(--color-primary);
             border: none;
             border-radius: 6px;
             font-size: 13px;
             cursor: pointer;
             transition: all 0.2s;
         }
-        .btn-rec:hover { background: #1976D2; color: #fff; }
+        .btn-rec:hover { background: var(--color-primary-gradient); color: #fff; }
         .btn-save-pathway {
             margin-top: 12px;
             width: 100%;
             padding: 10px;
             background: #fff;
-            color: #1976D2;
-            border: 1px solid #1976D2;
+            color: var(--color-primary);
+            border: 1px solid var(--color-primary);
             border-radius: 8px;
             font-size: 14px;
             cursor: pointer;
             transition: all 0.2s;
         }
-        .btn-save-pathway:hover { background: #1976D2; color: #fff; }
+        .btn-save-pathway:hover { background: var(--color-primary-gradient); color: #fff; }
 
         /* Input Area */
         .input-area {
-            padding: 16px 32px;
-            border-top: 1px solid #E0E6ED;
+            padding: 14px 28px;
+            border-top: 1px solid var(--color-border-light);
             background: #fff;
             display: flex;
-            gap: 12px;
+            gap: 10px;
             align-items: center;
         }
         .chat-input {
             flex: 1;
             padding: 12px 20px;
-            border: 1px solid #E0E6ED;
-            border-radius: 24px;
+            border: 1.5px solid var(--color-border);
+            border-radius: 22px;
             font-size: 14px;
+            font-family: var(--font-family);
             outline: none;
-            transition: all 0.2s;
+            transition: all var(--transition-base);
+            background: #F9FAFB;
         }
-        .chat-input:focus { border-color: #1976D2; box-shadow: 0 0 0 3px rgba(25,118,210,0.1); }
+        .chat-input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(79,110,247,0.08); background: #fff; }
         .chat-send {
-            width: 48px;
-            height: 48px;
-            background: #1976D2;
+            width: 44px;
+            height: 44px;
+            background: var(--color-primary-gradient);
             color: #fff;
             border: none;
             border-radius: 50%;
@@ -335,7 +347,7 @@
             align-items: center;
             justify-content: center;
         }
-        .chat-send:hover { background: #1565C0; }
+        .chat-send:hover { background: var(--color-primary-hover); transform: scale(1.05); }
 
         /* Chat Container Layout */
         .chat-container {
@@ -354,15 +366,28 @@
 <body>
     <div class="layout">
         <!-- Sidebar -->
-        <nav class="sidebar">
-            <div class="sidebar-logo">个性化学习助手</div>
-                <a href="index.html" class="nav-item"><span class="icon"><i data-lucide="home"></i></span><span>首页</span></a>
-                <a href="chat.html" class="nav-item active"><span class="icon"><i data-lucide="message-circle"></i></span><span>智能对话</span></a>
-                <a href="profile.html" class="nav-item"><span class="icon"><i data-lucide="user"></i></span><span>我的画像</span></a>
-                <a href="generate.html" class="nav-item"><span class="icon"><i data-lucide="sparkles"></i></span><span>生成资源</span></a>
-                <a href="pathway.html" class="nav-item"><span class="icon"><i data-lucide="map"></i></span><span>学习路径</span></a>
-                <a href="library.html" class="nav-item"><span class="icon"><i data-lucide="book-open"></i></span><span>资源库</span></a>
-                <a href="evaluate.html" class="nav-item"><span class="icon"><i data-lucide="clipboard-check"></i></span><span>学习评估</span></a>
+        <nav class="sidebar" style="flex-shrink:0;">
+            <a href="index.html" class="sidebar-logo">
+                <div class="sidebar-logo-icon">S</div>
+                智能学习
+            </a>
+            <div class="sidebar-section-title">主菜单</div>
+            <a href="index.html" class="nav-item"><span class="icon"><i data-lucide="home"></i></span>学习看板</a>
+            <a href="chat.html" class="nav-item active"><span class="icon"><i data-lucide="message-square"></i></span>智能对话</a>
+            <a href="generate.html" class="nav-item"><span class="icon"><i data-lucide="sparkles"></i></span>资源生成</a>
+            <a href="library.html" class="nav-item"><span class="icon"><i data-lucide="library"></i></span>资源库</a>
+            <a href="pathway.html" class="nav-item"><span class="icon"><i data-lucide="share-2"></i></span>学习路径</a>
+            <a href="evaluate.html" class="nav-item"><span class="icon"><i data-lucide="clipboard-check"></i></span>学习评估</a>
+            <a href="profile.html" class="nav-item"><span class="icon"><i data-lucide="circle-user"></i></span>个人中心</a>
+            <div class="sidebar-footer">
+                <div class="sidebar-user">
+                    <div class="sidebar-avatar" id="sidebar-avatar">?</div>
+                    <span class="user-info" id="user-info">加载中...</span>
+                </div>
+                <button class="btn-logout" data-action="logout">
+                    <i data-lucide="log-out" style="width:16px;height:16px;"></i>退出登录
+                </button>
+            </div>
         </nav>
 
         <!-- Chat Container -->
@@ -399,8 +424,8 @@
 
                     <!-- Input Area -->
                     <div class="input-area">
-                        <input type="text" class="chat-input" id="chat-input" placeholder="输入消息..." onkeypress="if(event.key==='Enter') sendMessage()">
-                        <button class="chat-send" onclick="sendMessage()">&#9654;</button>
+                        <input type="text" class="chat-input" id="chat-input" placeholder="输入消息...">
+                        <button class="chat-send" data-action="send-message">&#9654;</button>
                     </div>
                 </div>
             </div>
@@ -409,7 +434,12 @@
 
     <script type="module">
         import { isLoggedIn, getUserId, getChatSessions, createChatSession, getChatMessages, sendChatMessage, deleteChatSession, updateSessionTitle, createPathway, addPathwayItem, getBatchStatus } from './assets/api.js';
-        
+        import { showToast } from './assets/toast.js';
+        import { showDialog } from './assets/dialog.js';
+        import { registerActions } from './assets/button.js';
+        import { initCommandPalette } from './assets/command.js';
+        import { registerPageShortcuts } from './assets/shortcut.js';
+
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
         }
@@ -526,7 +556,7 @@
             const input = document.createElement('input');
             input.type = 'text';
             input.value = oldTitle === '新会话' ? '' : oldTitle;
-            input.style.cssText = 'width:100%;font-size:13px;padding:2px 4px;border:1px solid #1976D2;border-radius:4px;outline:none;background:#fff;color:#1A1A2E;';
+            input.style.cssText = 'width:100%;font-size:13px;padding:2px 4px;border:1px solid #4F6EF7;border-radius:4px;outline:none;background:#fff;color:#1A1A2E;';
             el.replaceWith(input);
             input.focus();
             input.select();
@@ -634,14 +664,12 @@
                             await addPathwayItem(path.id, userId, recs[i].kp_id, i);
                         }
                     }
-                    alert('已保存为学习路径，可在「学习路径」页面查看');
+                    showToast('已保存为学习路径，可在「学习路径」页面查看', 'success');
                 }
             } catch (e) {
-                alert('保存失败: ' + e.message);
+                showToast('保存失败: ' + e.message, 'error');
             }
         }
-        window.handleSavePathway = handleSavePathway;
-
         const RESOURCE_TYPE_LABELS = { doc: '学习文档', mindmap: '思维导图', quiz: '测验题目', code: '代码示例', summary: '知识总结' };
 
         function renderBatchProgressCard(batchId) {
@@ -795,30 +823,64 @@
                     if (thinking) thinking.remove();
                     sendBtn.disabled = false;
                     console.error('sendMessage error:', err);
-                    alert('发送失败: ' + err.message);
+                    showToast('发送失败: ' + err.message, 'error');
                 }
             } catch (err) {
                 console.error('sendMessage error:', err);
-                alert('发送失败: ' + err.message);
+                showToast('发送失败: ' + err.message, 'error');
             }
         }
 
         async function handleDeleteSession(sessionId) {
-            if (!confirm('确定删除该会话？')) return;
-            await deleteChatSession(sessionId, userId);
-            if (activeSessionId === sessionId) {
-                activeSessionId = null;
-                document.getElementById('messages-area').innerHTML = '<div style="padding:40px;text-align:center;color:#6B7280;font-size:14px;">发送消息开始对话</div>';
+            try {
+                const ok = await showDialog({ type: 'danger', title: '确定删除该会话？', desc: '删除后无法恢复', confirmText: '确认删除' });
+                if (!ok) return;
+                const deleted = await deleteChatSession(sessionId, userId);
+                if (!deleted) {
+                    showToast('删除失败，请重试', 'error');
+                    return;
+                }
+                if (activeSessionId === sessionId) {
+                    activeSessionId = null;
+                    document.getElementById('messages-area').innerHTML = '<div style="padding:40px;text-align:center;color:#6B7280;font-size:14px;">发送消息开始对话</div>';
+                }
+                showToast('会话已删除', 'success');
+                await loadSessions();
+            } catch (err) {
+                console.error('删除会话失败:', err);
+                showToast('删除失败: ' + err.message, 'error');
             }
-            await loadSessions();
         }
 
-        window.loadSession = loadSession;
-        window.sendMessage = sendMessage;
-        window.handleDeleteSession = handleDeleteSession;
-        window.handleNewChat = handleNewChat;
+        // 注册全局操作
+        registerActions({
+            logout: async () => {
+                const { clearAuth } = await import('./assets/api.js');
+                clearAuth();
+                window.location.href = 'auth.html';
+            },
+            'send-message': async () => { await sendMessage(); },
+        });
+
+        // 初始化命令面板和快捷键
+        initCommandPalette();
+        registerPageShortcuts('chat', {
+            'Enter': () => { const inp = document.getElementById('chat-input'); if (document.activeElement === inp) sendMessage(); },
+            'Shift+Enter': () => {}, // natural behavior
+            'Ctrl+N': () => handleNewChat(),
+        });
 
         document.querySelector('.btn-new-chat').addEventListener('click', handleNewChat);
+        document.getElementById('chat-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // 暴露给内联 onclick（推荐面板中的按钮）
+        window.handleSavePathway = handleSavePathway;
+        window.loadSession = loadSession;
 
         loadSessions();
     </script>

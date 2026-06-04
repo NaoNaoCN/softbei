@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>资源库 - 个性化学习助手</title>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lucide@0.460.0"></script>
     <link rel="stylesheet" href="./assets/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
@@ -14,37 +14,10 @@
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #F5F7FA;
-            color: #1A1A2E;
-            min-height: 100vh;
-        }
-        .layout { display: flex; min-height: 100vh; }
-        .sidebar {
-            width: 240px;
-            background: #EEF4FB;
-            border-right: 1px solid #E0E6ED;
-            padding: 24px 16px;
-            position: fixed;
-            height: 100vh;
-            overflow-y: auto;
-        }
-        .sidebar-logo { font-size: 18px; font-weight: 700; color: #1976D2; margin-bottom: 24px; padding-left: 8px; }
-        .nav-item {
-            display: flex; align-items: center; gap: 10px;
-            padding: 12px 16px; border-radius: 8px;
-            color: #1A1A2E; text-decoration: none;
-            margin-bottom: 4px; transition: all 0.2s; font-size: 14px;
-        }
-        .nav-item:hover { background: #E3F2FD; color: #1976D2; }
-        .nav-item.active { background: #1976D2; color: #fff; }
-        .nav-item .icon { width: 24px; height: 18px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
-
-        .main { margin-left: 240px; padding: 32px 40px; flex: 1; }
+        .main { margin-left: var(--sidebar-width); padding: 32px 40px; flex: 1; }
         .page-title {
-            font-size: 28px; font-weight: 700; color: #1976D2;
-            margin-bottom: 8px; padding-bottom: 12px; border-bottom: 3px solid #1976D2;
+            font-size: 28px; font-weight: 700; color: var(--color-primary);
+            margin-bottom: 8px; padding-bottom: 12px; border-bottom: 3px solid var(--color-primary);
         }
         .page-subtitle { font-size: 14px; color: #6B7280; margin-bottom: 32px; }
 
@@ -56,14 +29,14 @@
             margin-bottom: 24px;
         }
         .stat-item {
-            background: #fff;
-            border: 1px solid #E0E6ED;
+            background: var(--color-card);
+            border: 1px solid var(--color-border);
             border-radius: 10px;
             padding: 16px;
             text-align: center;
         }
-        .stat-value { font-size: 28px; font-weight: 700; color: #1976D2; }
-        .stat-label { font-size: 12px; color: #6B7280; margin-top: 4px; }
+        .stat-value { font-size: 28px; font-weight: 700; color: var(--color-primary); }
+        .stat-label { font-size: 12px; color: var(--color-text-tertiary); margin-top: 4px; }
 
         /* Filter Bar */
         .filter-bar {
@@ -75,34 +48,34 @@
         }
         .filter-select {
             padding: 8px 14px;
-            border: 1px solid #E0E6ED;
+            border: 1px solid var(--color-border);
             border-radius: 8px;
             font-size: 14px;
-            background: #fff;
+            background: var(--color-card);
             cursor: pointer;
             outline: none;
             min-width: 120px;
         }
         .filter-input {
             padding: 8px 14px;
-            border: 1px solid #E0E6ED;
+            border: 1px solid var(--color-border);
             border-radius: 8px;
             font-size: 14px;
             outline: none;
             flex: 1;
             max-width: 200px;
         }
-        .filter-input:focus { border-color: #1976D2; }
+        .filter-input:focus { border-color: #4F6EF7; }
         .btn-refresh {
             padding: 8px 16px;
-            background: #fff;
-            border: 1px solid #E0E6ED;
+            background: var(--color-card);
+            border: 1px solid var(--color-border);
             border-radius: 8px;
             font-size: 14px;
             cursor: pointer;
             transition: all 0.2s;
         }
-        .btn-refresh:hover { border-color: #1976D2; color: #1976D2; }
+        .btn-refresh:hover { border-color: #4F6EF7; color: #4F6EF7; }
         .view-toggle {
             display: flex;
             gap: 4px;
@@ -110,31 +83,31 @@
         }
         .view-btn {
             padding: 8px 14px;
-            border: 1px solid #E0E6ED;
-            background: #fff;
+            border: 1px solid var(--color-border);
+            background: var(--color-card);
             border-radius: 8px;
             font-size: 13px;
             cursor: pointer;
             transition: all 0.2s;
         }
-        .view-btn.active { background: #1976D2; color: #fff; border-color: #1976D2; }
-        .view-btn:hover:not(.active) { border-color: #1976D2; }
+        .view-btn.active { background: #4F6EF7; color: #fff; border-color: #4F6EF7; }
+        .view-btn:hover:not(.active) { border-color: #4F6EF7; }
 
         /* Card */
         .card {
-            background: #fff;
-            border: 1px solid #E0E6ED;
+            background: var(--color-card);
+            border: 1px solid var(--color-border);
             border-radius: 12px;
             padding: 20px;
             margin-bottom: 16px;
             transition: all 0.2s;
         }
-        .card:hover { border-color: #1976D2; box-shadow: 0 2px 8px rgba(25,118,210,0.08); }
+        .card:hover { border-color: #4F6EF7; box-shadow: 0 2px 8px rgba(25,118,210,0.08); }
 
         /* Document Import Section */
         .import-section {
-            background: #fff;
-            border: 1px solid #E0E6ED;
+            background: var(--color-card);
+            border: 1px solid var(--color-border);
             border-radius: 12px;
             padding: 20px;
             margin-bottom: 24px;
@@ -142,7 +115,7 @@
         .import-title {
             font-size: 15px;
             font-weight: 600;
-            color: #1A1A2E;
+            color: var(--color-text);
             margin-bottom: 16px;
             cursor: pointer;
             display: flex;
@@ -150,13 +123,13 @@
             justify-content: space-between;
         }
         .import-area {
-            border: 2px dashed #E0E6ED;
+            border: 2px dashed var(--color-border);
             border-radius: 12px;
             padding: 32px;
             text-align: center;
             transition: all 0.2s;
         }
-        .import-area:hover { border-color: #1976D2; background: #F5F7FA; }
+        .import-area:hover { border-color: #4F6EF7; background: #F7F8FC; }
         .import-icon { width: 32px; height: 32px; margin-bottom: 8px; display: inline-flex; align-items: center; justify-content: center; }
         .import-text { font-size: 14px; color: #6B7280; }
         .import-form {
@@ -167,15 +140,15 @@
         .form-input {
             flex: 1;
             padding: 10px 14px;
-            border: 1px solid #E0E6ED;
+            border: 1px solid var(--color-border);
             border-radius: 8px;
             font-size: 14px;
             outline: none;
         }
-        .form-input:focus { border-color: #1976D2; }
+        .form-input:focus { border-color: #4F6EF7; }
         .btn-primary {
             padding: 10px 24px;
-            background: #1976D2;
+            background: #4F6EF7;
             color: #fff;
             border: none;
             border-radius: 8px;
@@ -184,7 +157,7 @@
             cursor: pointer;
             transition: background 0.2s;
         }
-        .btn-primary:hover { background: #1565C0; }
+        .btn-primary:hover { background: #3B55D9; }
 
         /* Document List */
         .doc-item {
@@ -192,13 +165,13 @@
             align-items: center;
             justify-content: space-between;
             padding: 14px 16px;
-            background: #fff;
-            border: 1px solid #E0E6ED;
+            background: var(--color-card);
+            border: 1px solid var(--color-border);
             border-radius: 10px;
             margin-bottom: 10px;
             transition: all 0.2s;
         }
-        .doc-item:hover { border-color: #1976D2; }
+        .doc-item:hover { border-color: #4F6EF7; }
         .doc-info { display: flex; align-items: center; gap: 12px; }
         .doc-icon { font-size: 24px; }
         .doc-name { font-weight: 500; font-size: 14px; margin-bottom: 2px; }
@@ -206,26 +179,26 @@
         .doc-actions { display: flex; gap: 8px; }
         .btn-build-kg {
             padding: 6px 14px;
-            background: #E3F2FD;
-            color: #1976D2;
+            background: #EEF1FE;
+            color: #4F6EF7;
             border: none;
             border-radius: 6px;
             font-size: 13px;
             cursor: pointer;
             transition: all 0.2s;
         }
-        .btn-build-kg:hover { background: #1976D2; color: #fff; }
+        .btn-build-kg:hover { background: #4F6EF7; color: #fff; }
         .btn-delete {
             padding: 6px 14px;
-            background: #fff;
-            color: #E53935;
-            border: 1px solid #FFCDD2;
+            background: var(--color-card);
+            color: #EF4444;
+            border: 1px solid #FECACA;
             border-radius: 6px;
             font-size: 13px;
             cursor: pointer;
             transition: all 0.2s;
         }
-        .btn-delete:hover { background: #E53935; color: #fff; border-color: #E53935; }
+        .btn-delete:hover { background: #EF4444; color: #fff; border-color: #EF4444; }
 
         /* Resource List */
         .resource-list { display: flex; flex-direction: column; gap: 12px; }
@@ -234,16 +207,16 @@
             align-items: center;
             justify-content: space-between;
             padding: 16px;
-            background: #fff;
-            border: 1px solid #E0E6ED;
+            background: var(--color-card);
+            border: 1px solid var(--color-border);
             border-radius: 10px;
             transition: all 0.2s;
         }
-        .resource-item:hover { border-color: #1976D2; }
+        .resource-item:hover { border-color: #4F6EF7; }
         .resource-info { display: flex; align-items: center; gap: 14px; }
         .resource-icon {
             width: 44px; height: 44px;
-            background: #E3F2FD;
+            background: #EEF1FE;
             border-radius: 10px;
             display: flex;
             align-items: center;
@@ -261,23 +234,23 @@
             transition: all 0.2s;
             border: 1px solid;
         }
-        .btn-sm-outline { background: #fff; color: #6B7280; border-color: #E0E6ED; }
-        .btn-sm-outline:hover { border-color: #1976D2; color: #1976D2; }
-        .btn-sm-danger { background: #fff; color: #E53935; border-color: #FFCDD2; }
-        .btn-sm-danger:hover { background: #E53935; color: #fff; border-color: #E53935; }
+        .btn-sm-outline { background: var(--color-card); color: #6B7280; border-color: var(--color-border); }
+        .btn-sm-outline:hover { border-color: #4F6EF7; color: #4F6EF7; }
+        .btn-sm-danger { background: var(--color-card); color: #EF4444; border-color: #FECACA; }
+        .btn-sm-danger:hover { background: #EF4444; color: #fff; border-color: #EF4444; }
 
         /* Pagination */
         .pagination { display: flex; justify-content: center; align-items: center; gap: 16px; padding: 24px 0; }
         .page-btn {
             padding: 8px 16px;
-            border: 1px solid #E0E6ED;
+            border: 1px solid var(--color-border);
             border-radius: 8px;
-            background: #fff;
+            background: var(--color-card);
             font-size: 14px;
             cursor: pointer;
             transition: all 0.2s;
         }
-        .page-btn:hover { border-color: #1976D2; color: #1976D2; }
+        .page-btn:hover { border-color: #4F6EF7; color: #4F6EF7; }
         .page-info { font-size: 14px; color: #6B7280; }
 
         /* Empty State */
@@ -296,7 +269,7 @@
         }
         .modal-mask.active { display: flex; }
         .modal {
-            background: #fff;
+            background: var(--color-card);
             width: min(880px, 92vw);
             max-height: 86vh;
             border-radius: 12px;
@@ -308,34 +281,34 @@
         .modal-header {
             display: flex; align-items: center; justify-content: space-between;
             padding: 16px 20px;
-            border-bottom: 1px solid #E0E6ED;
+            border-bottom: 1px solid var(--color-border);
         }
-        .modal-title { font-size: 16px; font-weight: 600; color: #1A1A2E; }
+        .modal-title { font-size: 16px; font-weight: 600; color: var(--color-text); }
         .modal-close {
             background: transparent; border: none; cursor: pointer;
             color: #6B7280; font-size: 20px; line-height: 1;
             width: 28px; height: 28px; border-radius: 6px;
             display: inline-flex; align-items: center; justify-content: center;
         }
-        .modal-close:hover { background: #F5F7FA; color: #1A1A2E; }
+        .modal-close:hover { background: var(--color-bg); color: var(--color-text); }
         .modal-body {
             padding: 20px;
             overflow-y: auto;
             flex: 1;
             font-size: 14px;
             line-height: 1.7;
-            color: #1A1A2E;
+            color: var(--color-text);
         }
         .modal-body pre {
-            background: #F5F7FA;
-            border: 1px solid #E0E6ED;
+            background: #F7F8FC;
+            border: 1px solid var(--color-border);
             border-radius: 8px;
             padding: 12px;
             white-space: pre-wrap;
             word-break: break-word;
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             font-size: 13px;
-            color: #1A1A2E;
+            color: var(--color-text);
         }
         .modal-body .md-text { white-space: pre-wrap; word-break: break-word; }
         .modal-body .md-rendered { line-height: 1.7; word-break: break-word; }
@@ -344,17 +317,17 @@
         .modal-body .md-rendered ul, .modal-body .md-rendered ol { padding-left: 24px; margin: 8px 0; }
         .modal-body .md-rendered pre { background: #f6f8fa; border-radius: 6px; padding: 12px; overflow-x: auto; }
         .modal-body .md-rendered code { font-family: 'Fira Code', Consolas, monospace; font-size: 13px; }
-        .modal-body .md-rendered blockquote { border-left: 4px solid #1976D2; padding-left: 12px; color: #555; margin: 8px 0; }
+        .modal-body .md-rendered blockquote { border-left: 4px solid #4F6EF7; padding-left: 12px; color: #555; margin: 8px 0; }
         .preview-quiz-item {
             padding: 12px 14px;
-            border: 1px solid #E0E6ED;
+            border: 1px solid var(--color-border);
             border-radius: 8px;
             margin-bottom: 12px;
             background: #FAFBFD;
         }
         .preview-quiz-q { font-weight: 600; margin-bottom: 8px; }
         .preview-quiz-opt { padding: 4px 0; color: #374151; }
-        .preview-quiz-ans { margin-top: 8px; color: #1976D2; font-size: 13px; }
+        .preview-quiz-ans { margin-top: 8px; color: #4F6EF7; font-size: 13px; }
         .preview-quiz-exp { margin-top: 4px; color: #6B7280; font-size: 13px; }
         .preview-loading { text-align: center; color: #6B7280; padding: 30px 0; }
 
@@ -369,7 +342,7 @@
             position: relative;
             padding: 4px 0 4px 16px;
             font-size: 14px;
-            color: #1A1A2E;
+            color: var(--color-text);
         }
         .mm-tree li::before {
             content: '';
@@ -383,7 +356,7 @@
             position: absolute;
             left: 0; top: 0;
             width: 1px; height: 100%;
-            background: #E0E6ED;
+            background: var(--color-border);
         }
         .mm-tree > li::after { display: none; }
         .mm-tree li:last-child::after { height: 14px; }
@@ -391,14 +364,14 @@
             display: inline-block;
             padding: 4px 10px;
             border-radius: 6px;
-            background: #E3F2FD;
-            color: #1976D2;
+            background: #EEF1FE;
+            color: #4F6EF7;
             font-weight: 600;
             font-size: 13.5px;
         }
         .mm-tree li li .mm-node {
-            background: #F5F7FA;
-            color: #1A1A2E;
+            background: var(--color-bg);
+            color: var(--color-text);
             font-weight: 500;
         }
         .mm-tree li li li .mm-node {
@@ -412,7 +385,7 @@
         .pdf-frame {
             width: 100%;
             height: 70vh;
-            border: 1px solid #E0E6ED;
+            border: 1px solid var(--color-border);
             border-radius: 8px;
         }
         .pdf-fallback {
@@ -424,15 +397,28 @@
 </head>
 <body>
     <div class="layout">
-        <nav class="sidebar">
-            <div class="sidebar-logo">个性化学习助手</div>
-                <a href="index.html" class="nav-item"><span class="icon"><i data-lucide="home"></i></span><span>首页</span></a>
-                <a href="chat.html" class="nav-item"><span class="icon"><i data-lucide="message-circle"></i></span><span>智能对话</span></a>
-                <a href="profile.html" class="nav-item"><span class="icon"><i data-lucide="user"></i></span><span>我的画像</span></a>
-                <a href="generate.html" class="nav-item"><span class="icon"><i data-lucide="sparkles"></i></span><span>生成资源</span></a>
-                <a href="pathway.html" class="nav-item"><span class="icon"><i data-lucide="map"></i></span><span>学习路径</span></a>
-                <a href="library.html" class="nav-item active"><span class="icon"><i data-lucide="book-open"></i></span><span>资源库</span></a>
-                <a href="evaluate.html" class="nav-item"><span class="icon"><i data-lucide="clipboard-check"></i></span><span>学习评估</span></a>
+                <nav class="sidebar">
+            <a href="index.html" class="sidebar-logo">
+                <div class="sidebar-logo-icon">S</div>
+                智能学习
+            </a>
+            <div class="sidebar-section-title">主菜单</div>
+            <a href="index.html" class="nav-item"><span class="icon"><i data-lucide="home"></i></span>学习看板</a>
+            <a href="chat.html" class="nav-item"><span class="icon"><i data-lucide="message-square"></i></span>智能对话</a>
+            <a href="generate.html" class="nav-item"><span class="icon"><i data-lucide="sparkles"></i></span>资源生成</a>
+            <a href="library.html" class="nav-item active"><span class="icon"><i data-lucide="library"></i></span>资源库</a>
+            <a href="pathway.html" class="nav-item"><span class="icon"><i data-lucide="share-2"></i></span>学习路径</a>
+            <a href="evaluate.html" class="nav-item"><span class="icon"><i data-lucide="clipboard-check"></i></span>学习评估</a>
+            <a href="profile.html" class="nav-item"><span class="icon"><i data-lucide="circle-user"></i></span>个人中心</a>
+            <div class="sidebar-footer">
+                <div class="sidebar-user">
+                    <div class="sidebar-avatar" id="sidebar-avatar">?</div>
+                    <span class="user-info" id="user-info">加载中...</span>
+                </div>
+                <button class="btn-logout" data-action="logout">
+                    <i data-lucide="log-out" style="width:16px;height:16px;"></i>退出登录
+                </button>
+            </div>
         </nav>
 
         <main class="main">
@@ -568,7 +554,11 @@
     </script>
 
     <script type="module">
-        import { isLoggedIn, getUserId, getResourceStats, getResources, getResource, deleteResource, importDocumentAsync, getImportStatus, buildKg, getKgBuildStatusByDoc, postLearningRecord } from './assets/api.js?v=3';
+        import { isLoggedIn, getUserId, clearAuth, getResourceStats, getResources, getResource, deleteResource, importDocumentAsync, getImportStatus, buildKg, getKgBuildStatusByDoc, postLearningRecord } from './assets/api.js?v=3';
+        import { showToast } from './assets/toast.js';
+        import { showDialog } from './assets/dialog.js';
+        import { registerActions } from './assets/button.js';
+        import { initCommandPalette } from './assets/command.js';
         
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
@@ -665,7 +655,7 @@
             btn.style.display = 'none';
             const statusEl = document.createElement('div');
             statusEl.className = 'kg-build-status';
-            statusEl.style.cssText = 'margin-top:12px;padding:12px;background:#E3F2FD;border-radius:8px;font-size:13px;color:#1976D2;';
+            statusEl.style.cssText = 'margin-top:12px;padding:12px;background:#EEF1FE;border-radius:8px;font-size:13px;color:#4F6EF7;';
             statusEl.textContent = '构建中: ' + (initialStatus.progress || 0) + '% · ' + (initialStatus.stage || '处理中');
             btn.parentElement.appendChild(statusEl);
             pollKgBuildStatus(kpId, statusEl, btn);
@@ -679,11 +669,11 @@
                     if (s.status === 'done' || s.status === 'completed') {
                         statusEl.textContent = '✓ 知识图谱构建完成！';
                         statusEl.style.background = '#E8F5E9';
-                        statusEl.style.color = '#43A047';
+                        statusEl.style.color = '#10B981';
                     } else if (s.status === 'failed') {
-                        statusEl.textContent = '✗ 构建失败: ' + (s.error_message || s.error_msg || '未知错误');
-                        statusEl.style.background = '#FFEBEE';
-                        statusEl.style.color = '#E53935';
+                        statusEl.textContent = '✗ 构建失败: ' + (s.error_message || '未知错误');
+                        statusEl.style.background = '#FEF2F2';
+                        statusEl.style.color = '#EF4444';
                         if (btn) btn.style.display = '';
                     } else {
                         statusEl.textContent = '构建中: ' + (s.progress || 0) + '% · ' + (s.stage || '处理中');
@@ -695,10 +685,10 @@
         }
 
         async function handleBuildKg(kpId) {
-            if (!confirm('确定要为此文档构建知识图谱吗？')) return;
+            if (!await showDialog({ type: 'normal', title: '确定要为此文档构建知识图谱吗？', desc: '将根据此文档内容自动构建知识点', confirmText: '确认构建' })) return;
             const statusEl = document.createElement('div');
             statusEl.className = 'kg-build-status';
-            statusEl.style.cssText = 'margin-top:12px;padding:12px;background:#E3F2FD;border-radius:8px;font-size:13px;color:#1976D2;';
+            statusEl.style.cssText = 'margin-top:12px;padding:12px;background:#EEF1FE;border-radius:8px;font-size:13px;color:#4F6EF7;';
             statusEl.textContent = '正在提交知识图谱构建任务...';
             const btn = document.querySelector(`[onclick="handleBuildKg('${kpId}')"]`);
             btn.parentElement.appendChild(statusEl);
@@ -713,8 +703,8 @@
                 }
             } catch (e) {
                 statusEl.textContent = '✗ 提交失败: ' + e.message;
-                statusEl.style.background = '#FFEBEE';
-                statusEl.style.color = '#E53935';
+                statusEl.style.background = '#FEF2F2';
+                statusEl.style.color = '#EF4444';
                 btn.style.display = '';
             }
         }
@@ -726,7 +716,7 @@
                 const name = input.files[0].name.toLowerCase();
                 const ext = '.' + name.split('.').pop();
                 if (!SUPPORTED_EXTENSIONS.includes(ext)) {
-                    alert('不支持的文件格式：' + ext + '\n支持：' + SUPPORTED_EXTENSIONS.join(', '));
+                    showToast('不支持的文件格式：' + ext, 'error');
                     input.value = '';
                     return;
                 }
@@ -761,7 +751,7 @@
                             btn.textContent = '开始导入';
                             loadResources();
                         } else if (s.status === 'failed') {
-                            status.textContent = '导入失败: ' + (s.error || '');
+                            status.textContent = '导入失败: ' + (s.error_message || '');
                             btn.disabled = false;
                             btn.textContent = '开始导入';
                         } else {
@@ -783,18 +773,27 @@
         window.handleDelete = handleDelete;
         window.handleBuildKg = handleBuildKg;
         async function handleDelete(resourceId) {
-            if (!confirm('确定删除此资源？')) return;
+            const ok = await showDialog({ type: 'danger', title: '确定删除此资源？', desc: '删除后可在5秒内撤销', confirmText: '确认删除' });
+            if (!ok) return;
             try {
                 await deleteResource(resourceId, userId);
                 loadResources();
                 loadStats();
             } catch (e) {
-                alert('删除失败: ' + e.message);
+                showToast('删除失败: ' + e.message, 'error');
             }
         }
         window.handleFileSelect = handleFileSelect;
         window.handleImport = handleImport;
         window.changePage = changePage;
+
+        // 注册操作
+        registerActions({
+            logout: () => { clearAuth(); window.location.href = 'auth.html'; },
+        });
+
+        // 初始化命令面板
+        initCommandPalette();
 
         // ---- marked.js 配置：代码块使用 highlight.js 高亮 ----
         if (typeof marked !== 'undefined') {
@@ -848,7 +847,7 @@
         function renderPreview(r) {
             const type = r.resource_type;
             if (type === 'doc' || type === 'summary') {
-                const text = r.content_path || '（暂无内容）';
+                const text = r.content || '（暂无内容）';
                 // doc 类型优先识别 PDF：这里 content 通常是「已导入 PDF：xxx.pdf，共 N 个文本块」
                 if (type === 'doc') {
                     const fname = extractPdfFilename(text);
@@ -856,7 +855,7 @@
                         const url = `http://localhost:8000/documents/file/${encodeURIComponent(fname)}`;
                         return `
                             <div style="margin-bottom:10px;color:#6B7280;font-size:13px;">文件：${escapeHtml(fname)}
-                                · <a href="${url}" target="_blank" style="color:#1976D2;text-decoration:none;">在新标签页打开</a>
+                                · <a href="${url}" target="_blank" style="color:#4F6EF7;text-decoration:none;">在新标签页打开</a>
                             </div>
                             <iframe class="pdf-frame" src="${url}" title="PDF 预览"></iframe>
                             <div class="pdf-fallback">若浏览器未内置 PDF 查看器，请点击上方「在新标签页打开」。</div>
@@ -891,9 +890,9 @@
                 const cj = r.content_json || {};
                 let code = cj.code || '';
                 let lang = cj.language || '';
-                // fallback: 从 content_path 中提取代码块
-                if (!code && r.content_path) {
-                    const raw = r.content_path;
+                // fallback: 从 content 中提取代码块
+                if (!code && r.content) {
+                    const raw = r.content;
                     const blockMatch = raw.match(/```(\w*)\s*\n([\s\S]*?)```/);
                     if (blockMatch) {
                         lang = blockMatch[1] || 'python';
@@ -954,7 +953,7 @@
             try {
                 const r = await getResource(resourceId, userId);
                 if (!r || r.detail) {
-                    body.innerHTML = `<div style="color:#E53935;">加载失败：${escapeHtml(r?.detail || '未知错误')}</div>`;
+                    body.innerHTML = `<div style="color:#EF4444;">加载失败：${escapeHtml(r?.detail || '未知错误')}</div>`;
                     return;
                 }
                 titleEl.textContent = `${TYPE_MAP[r.resource_type] || r.resource_type} · ${r.title || '未命名'}`;
@@ -975,7 +974,7 @@
                     });
                 }
             } catch (e) {
-                body.innerHTML = `<div style="color:#E53935;">加载失败：${escapeHtml(e.message)}</div>`;
+                body.innerHTML = `<div style="color:#EF4444;">加载失败：${escapeHtml(e.message)}</div>`;
             }
         }
 

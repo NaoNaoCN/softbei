@@ -46,6 +46,7 @@ class GenerationEvalRecord(BaseModel):
     n_retrieved: int = 0
     safety_passed: bool = True
     safety_issues_count: int = 0
+    safety_issues: list[str] = Field(default_factory=list)  # SafetyAgent 发现的具体问题文本
 
     # 关联的检索快照
     retrieval_record: Optional[RetrievalEvalRecord] = None

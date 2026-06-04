@@ -237,6 +237,7 @@ def _collect_generation_eval(state: AgentState, session_id: int) -> None:
             generation_latency_ms=gen_latency,
             safety_passed=state.safety_passed,
             safety_issues_count=len(safety_issues),
+            safety_issues=safety_issues,
             experiment_group=experiment_group,
         )
     except Exception:
@@ -292,12 +293,14 @@ def _maybe_trigger_async_judge(state: AgentState, session_id: int) -> None:
             try:
                 judge = get_judge()
                 experiment_group = state.metadata.get("experiment_group") if state.metadata else None
+                safety_issues = state.metadata.get("safety_issues", []) if state.metadata else []
                 result = await judge.evaluate_full(
                     query=query,
                     kp_name=kp_name,
                     retrieved_chunks=chunks,
                     generated_content=draft,
                     experiment_group=experiment_group,
+                    safety_issues=safety_issues,
                 )
                 # 将评估结果写回 collector 的当前生成记录
                 gen_record = collector._current_generation

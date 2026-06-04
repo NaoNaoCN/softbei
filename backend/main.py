@@ -464,7 +464,6 @@ from pydantic import BaseModel
 
 class TitleIn(BaseModel):
     title: str
-    user_id: Optional[int] = None
 
 
 @app.get("/chat/{session_id}/messages", tags=["chat"])
@@ -487,16 +486,7 @@ async def get_session_messages(
         filters={"session_id": session_id},
         order_by=ChatMessage.created_at.asc(),
     )
-    return [
-        {
-            "role": m.role,
-            "content": m.content,
-            "resource_type": m.resource_type,
-            "extra": m.extra,
-            "created_at": m.created_at.isoformat() if m.created_at else None,
-        }
-        for m in messages
-    ]
+    return [ChatMessageOut.model_validate(m) for m in messages]
 
 @app.get("/documents/file/{filename}", tags=["documents"])
 async def get_document_file(filename: str):
@@ -542,15 +532,15 @@ async def delete_chat_session(
 async def update_session_title(
     session_id: int,
     body: TitleIn,
+    user_id: int = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_session),
 ):
     """更新会话标题。"""
     from backend.db.crud import select_by_id, update_by_id
 
-    if body.user_id:
-        chat_sess = await select_by_id(db, ChatSession, session_id)
-        if not chat_sess or chat_sess.user_id != body.user_id:
-            raise HTTPException(status_code=403, detail="Access denied")
+    chat_sess = await select_by_id(db, ChatSession, session_id)
+    if not chat_sess or chat_sess.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     await update_by_id(db, ChatSession, session_id, data={"title": body.title})
     return {"ok": True}
 
@@ -723,7 +713,7 @@ async def get_kg_build_status(
         stage=task.stage,
         nodes_count=task.nodes_count,
         edges_count=task.edges_count,
-        error_msg=task.error_message,
+        error_message=task.error_message,
     )
 
 
@@ -758,7 +748,7 @@ async def get_kg_build_status_by_doc(
         stage=task.stage,
         nodes_count=task.nodes_count,
         edges_count=task.edges_count,
-        error_msg=task.error_message,
+        error_message=task.error_message,
     )
 
 
@@ -1418,7 +1408,7 @@ async def import_document_async(
         "progress": 5,
         "stage": "saving",
         "doc_id": None,
-        "error": None,
+        "error_message": None,
         "result": None,
     }
 
@@ -1454,7 +1444,7 @@ async def import_document_async(
         except Exception as e:
             logger.exception(f"[import_document_async] 后台任务失败: {e}")
             _doc_import_tasks[task_id]["status"] = "failed"
-            _doc_import_tasks[task_id]["error"] = str(e)
+            _doc_import_tasks[task_id]["error_message"] = str(e)
 
     background_tasks.add_task(_run_import)
     return {
@@ -1709,6 +1699,7 @@ async def list_eval_records(
             "n_retrieved": r.n_retrieved,
             "draft_length": r.draft_length,
             "safety_passed": r.safety_passed,
+            "safety_issues": r.safety_issues,
             "faithfulness": r.faithfulness_score,
             "hallucination_rate": r.hallucination_rate_val,
             "completeness": r.completeness_score,

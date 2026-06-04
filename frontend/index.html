@@ -3,387 +3,309 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>个性化学习助手</title>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <title>学习看板 - 个性化学习助手</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@0.460.0"></script>
     <link rel="stylesheet" href="./assets/styles.css">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #F5F7FA;
-            color: #1A1A2E;
-            min-height: 100vh;
+        /* 首页特有样式 */
+        .stat-icon-box {
+            width: 44px; height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            margin-bottom: 12px;
         }
+        .stat-icon-box.blue   { background: linear-gradient(135deg, #4F6EF7, #60A5FA); }
+        .stat-icon-box.purple { background: linear-gradient(135deg, #7C5CFC, #A78BFA); }
+        .stat-icon-box.orange { background: linear-gradient(135deg, #F59E0B, #FBBF24); }
+        .stat-icon-box.green  { background: linear-gradient(135deg, #10B981, #34D399); }
 
-        /* Sidebar */
-        .sidebar {
+        .welcome-gradient {
             position: fixed;
-            left: 0; top: 0;
-            width: 240px;
-            height: 100vh;
-            background: #EEF4FB;
-            border-right: 1px solid #E0E6ED;
-            padding: 24px 16px;
-            display: flex;
-            flex-direction: column;
-        }
-        .sidebar-logo {
-            font-size: 18px;
-            font-weight: 700;
-            color: #1976D2;
-            margin-bottom: 24px;
-            padding-left: 8px;
-        }
-        .nav-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 12px 16px;
-            border-radius: 8px;
-            color: #1A1A2E;
-            text-decoration: none;
-            margin-bottom: 4px;
-            transition: all 0.2s;
-            font-size: 14px;
-        }
-        .nav-item:hover { background: #E3F2FD; color: #1976D2; }
-        .nav-item.active { background: #1976D2; color: #fff; }
-        .nav-item .icon { width: 24px; height: 18px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
-        .sidebar-footer {
-            margin-top: auto;
-            padding-top: 16px;
-            border-top: 1px solid #E0E6ED;
-        }
-        .user-info {
-            font-size: 13px;
-            color: #6B7280;
-            padding: 0 8px 8px;
-        }
-        .btn-logout {
-            width: 100%;
-            padding: 8px;
-            background: #fff;
-            color: #E53935;
-            border: 1px solid #FFCDD2;
-            border-radius: 8px;
-            font-size: 13px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .btn-logout:hover { background: #E53935; color: #fff; border-color: #E53935; }
-
-        /* Main */
-        .main {
-            margin-left: 240px;
-            padding: 32px 40px;
-            min-height: 100vh;
-        }
-        .page-title {
-            font-size: 28px;
-            font-weight: 700;
-            color: #1976D2;
-            margin-bottom: 8px;
-            padding-bottom: 12px;
-            border-bottom: 3px solid #1976D2;
-        }
-        .page-subtitle {
-            font-size: 14px;
-            color: #6B7280;
-            margin-bottom: 32px;
-        }
-
-        /* Stats */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 20px;
-            margin-bottom: 32px;
-        }
-        .stat-card {
-            background: #fff;
-            border: 1px solid #E0E6ED;
-            border-radius: 12px;
-            padding: 20px;
-            text-align: center;
-        }
-        .stat-value { font-size: 32px; font-weight: 700; color: #1976D2; margin-bottom: 4px; }
-        .stat-label { font-size: 13px; color: #6B7280; }
-
-        /* Card */
-        .card {
-            background: #fff;
-            border: 1px solid #E0E6ED;
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 20px;
-        }
-        .card-title {
-            font-size: 16px;
-            font-weight: 600;
-            color: #1A1A2E;
-            margin-bottom: 16px;
-        }
-
-        /* Feature Grid */
-        .feature-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
-        }
-        .feature-card {
-            background: #fff;
-            border: 1px solid #E0E6ED;
-            border-radius: 12px;
-            padding: 24px;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-decoration: none;
-            color: inherit;
-            display: block;
-        }
-        .feature-card:hover {
-            border-color: #1976D2;
-            box-shadow: 0 4px 12px rgba(25,118,210,0.1);
-        }
-        .feature-icon {
-            width: 48px;
-            height: 48px;
-            background: #E3F2FD;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            margin-bottom: 16px;
-        }
-        .feature-title { font-size: 16px; font-weight: 600; color: #1A1A2E; margin-bottom: 8px; }
-        .feature-desc { font-size: 13px; color: #6B7280; line-height: 1.5; }
-
-        /* Profile section */
-        .profile-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-            margin-bottom: 16px;
-        }
-        .profile-item {}
-        .profile-label { font-size: 13px; color: #6B7280; margin-bottom: 4px; }
-        .profile-value { font-size: 16px; font-weight: 500; color: #1A1A2E; }
-        .badge {
-            display: inline-block;
-            padding: 4px 10px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 500;
-        }
-        .badge-success { background: #E8F5E9; color: #43A047; }
-        .tags-list { display: flex; gap: 8px; flex-wrap: wrap; }
-
-        /* Loading */
-        .loading {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 40px;
-            color: #6B7280;
-            font-size: 14px;
-        }
-        .spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 2px solid #E0E6ED;
-            border-top-color: #1976D2;
+            top: -120px; right: -80px;
+            width: 420px; height: 420px;
+            background: radial-gradient(circle, rgba(79,110,247,0.06) 0%, rgba(124,92,252,0.03) 50%, transparent 70%);
             border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin-right: 10px;
+            pointer-events: none;
+            z-index: 0;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        .no-data {
-            padding: 20px;
-            text-align: center;
-            color: #6B7280;
-            font-size: 14px;
-        }
+        .content-area { position: relative; z-index: 1; }
     </style>
 </head>
 <body>
+    <!-- 背景光晕装饰 -->
+    <div class="welcome-gradient"></div>
+
     <!-- Sidebar -->
     <nav class="sidebar">
-        <div class="sidebar-logo">个性化学习助手</div>
-        <a href="index.html" class="nav-item active"><span class="icon"><i data-lucide="home"></i></span><span>首页</span></a>
-        <a href="chat.html" class="nav-item"><span class="icon"><i data-lucide="message-circle"></i></span><span>智能对话</span></a>
-        <a href="profile.html" class="nav-item"><span class="icon"><i data-lucide="user"></i></span><span>我的画像</span></a>
-        <a href="generate.html" class="nav-item"><span class="icon"><i data-lucide="sparkles"></i></span><span>生成资源</span></a>
-        <a href="pathway.html" class="nav-item"><span class="icon"><i data-lucide="map"></i></span><span>学习路径</span></a>
-        <a href="library.html" class="nav-item"><span class="icon"><i data-lucide="book-open"></i></span><span>资源库</span></a>
-        <a href="evaluate.html" class="nav-item"><span class="icon"><i data-lucide="clipboard-check"></i></span><span>学习评估</span></a>
+        <a href="index.html" class="sidebar-logo">
+            <div class="sidebar-logo-icon">S</div>
+            智能学习
+        </a>
+        <div class="sidebar-section-title">主菜单</div>
+        <a href="index.html" class="nav-item active">
+            <span class="icon"><i data-lucide="home"></i></span>学习看板
+        </a>
+        <a href="chat.html" class="nav-item">
+            <span class="icon"><i data-lucide="message-square"></i></span>智能对话
+        </a>
+        <a href="generate.html" class="nav-item">
+            <span class="icon"><i data-lucide="sparkles"></i></span>资源生成
+        </a>
+        <a href="library.html" class="nav-item">
+            <span class="icon"><i data-lucide="library"></i></span>资源库
+        </a>
+        <a href="pathway.html" class="nav-item">
+            <span class="icon"><i data-lucide="share-2"></i></span>学习路径
+        </a>
+        <a href="evaluate.html" class="nav-item">
+            <span class="icon"><i data-lucide="clipboard-check"></i></span>学习评估
+        </a>
+        <a href="profile.html" class="nav-item">
+            <span class="icon"><i data-lucide="circle-user"></i></span>个人中心
+        </a>
         <div class="sidebar-footer">
-            <div class="user-info" id="user-info">加载中...</div>
-            <button class="btn-logout" onclick="handleLogout()">退出登录</button>
+            <div class="sidebar-user">
+                <div class="sidebar-avatar" id="sidebar-avatar">?</div>
+                <span class="user-info" id="user-info">加载中...</span>
+            </div>
+            <button class="btn-logout" data-action="logout">
+                <i data-lucide="log-out" style="width:16px;height:16px;"></i>退出登录
+            </button>
         </div>
     </nav>
 
     <!-- Main -->
     <main class="main">
-        <h1 class="page-title">欢迎使用个性化学习助手</h1>
-        <p class="page-subtitle">基于多智能体技术，为您提供智能学习资源生成、个性化画像分析、知识图谱可视化和学习路径规划。</p>
+        <div class="content-area">
 
-        <!-- Stats -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-value" id="stat-doc">-</div>
-                <div class="stat-label">学习文档</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="stat-mindmap">-</div>
-                <div class="stat-label">思维导图</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="stat-quiz">-</div>
-                <div class="stat-label">测验</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="stat-paths">-</div>
-                <div class="stat-label">学习路径</div>
-            </div>
-        </div>
-
-        <!-- Features -->
-        <div class="card">
-            <div class="card-title">快捷入口</div>
-            <div class="feature-grid">
-                <a href="generate.html" class="feature-card">
-                    <div class="feature-icon"><i data-lucide="sparkles"></i></div>
-                    <div class="feature-title">生成资源</div>
-                    <div class="feature-desc">生成学习文档、思维导图、测验题目、代码示例等个性化学习资源。</div>
-                </a>
-                <a href="library.html" class="feature-card">
-                    <div class="feature-icon"><i data-lucide="book-open"></i></div>
-                    <div class="feature-title">资源库</div>
-                    <div class="feature-desc">浏览、管理和搜索已生成的学习资源，支持预览和删除。</div>
-                </a>
-                <a href="evaluate.html" class="feature-card">
-                    <div class="feature-icon"><i data-lucide="clipboard-check"></i></div>
-                    <div class="feature-title">学习评估</div>
-                    <div class="feature-desc">完成测验题目，了解答题历史和薄弱知识点，针对性提升。</div>
-                </a>
-                <a href="pathway.html" class="feature-card">
-                    <div class="feature-icon"><i data-lucide="map"></i></div>
-                    <div class="feature-title">学习路径</div>
-                    <div class="feature-desc">查看知识图谱，规划和管理个性化学习路径，高效达成目标。</div>
-                </a>
-            </div>
-        </div>
-
-        <!-- Profile Summary -->
-        <div class="card">
-            <div class="card-title">您的学习画像</div>
-            <div id="profile-loading" class="loading"><span class="spinner"></span>加载画像...</div>
-            <div id="profile-content" style="display:none;">
-                <div class="profile-grid">
-                    <div class="profile-item">
-                        <div class="profile-label">专业</div>
-                        <div class="profile-value" id="prof-major">-</div>
-                    </div>
-                    <div class="profile-item">
-                        <div class="profile-label">每日学习时间</div>
-                        <div class="profile-value" id="prof-daily">-</div>
-                    </div>
-                    <div class="profile-item">
-                        <div class="profile-label">认知风格</div>
-                        <div class="profile-value" id="prof-cognitive">-</div>
-                    </div>
+            <!-- 欢迎区 -->
+            <div class="page-header">
+                <div>
+                    <div class="greeting" id="greeting">欢迎回来</div>
+                    <div class="greeting-sub">今天也一起学习吧</div>
                 </div>
-                <div style="margin-top:16px;">
-                    <div style="font-size:13px;color:#6B7280;margin-bottom:8px;">已掌握知识点</div>
-                    <div class="tags-list" id="prof-mastered"></div>
-                </div>
-                <div style="margin-top:16px;">
-                    <div style="font-size:13px;color:#6B7280;margin-bottom:8px;">薄弱知识点</div>
-                    <div class="tags-list" id="prof-weak"></div>
+                <div class="page-header-right">
+                    <div class="header-date" id="header-date"></div>
                 </div>
             </div>
-            <div id="profile-empty" class="no-data" style="display:none;">
-                尚未建立画像，<a href="profile.html" style="color:#1976D2;">前往编辑</a>
+
+            <!-- 统计卡片 -->
+            <div class="stats-grid">
+                <div class="card-stat accent-blue animate-fade-in-up delay-1">
+                    <div class="stat-icon-box blue"><i data-lucide="file-text"></i></div>
+                    <div class="stat-label">学习文档</div>
+                    <div class="stat-value" id="stat-doc">-</div>
+                    <div class="stat-trend neutral" id="stat-doc-trend"></div>
+                </div>
+                <div class="card-stat accent-purple animate-fade-in-up delay-2">
+                    <div class="stat-icon-box purple"><i data-lucide="git-branch"></i></div>
+                    <div class="stat-label">思维导图</div>
+                    <div class="stat-value" id="stat-mindmap">-</div>
+                    <div class="stat-trend neutral" id="stat-mm-trend"></div>
+                </div>
+                <div class="card-stat accent-orange animate-fade-in-up delay-3">
+                    <div class="stat-icon-box orange"><i data-lucide="clipboard-list"></i></div>
+                    <div class="stat-label">测验</div>
+                    <div class="stat-value" id="stat-quiz">-</div>
+                    <div class="stat-trend neutral" id="stat-quiz-trend"></div>
+                </div>
+                <div class="card-stat accent-green animate-fade-in-up delay-4">
+                    <div class="stat-icon-box green"><i data-lucide="map"></i></div>
+                    <div class="stat-label">学习路径</div>
+                    <div class="stat-value" id="stat-paths">-</div>
+                    <div class="stat-trend neutral" id="stat-path-trend"></div>
+                </div>
             </div>
+
+            <!-- 双栏 -->
+            <div style="display:grid;grid-template-columns:1.2fr 0.8fr;gap:24px;">
+
+                <!-- 最近学习动态 -->
+                <div class="card animate-fade-in-up delay-5">
+                    <div class="card-title" style="display:flex;align-items:center;gap:8px;">
+                        <i data-lucide="clock" style="width:18px;height:18px;color:var(--color-text-tertiary);"></i>
+                        最近学习动态
+                    </div>
+                    <div id="recent-loading" class="loading"><span class="spinner spinner-dark"></span>加载中...</div>
+                    <div id="recent-timeline" class="timeline" style="display:none;"></div>
+                    <div id="recent-empty" class="no-data" style="display:none;">暂无学习动态，开始生成你的第一份学习资源吧</div>
+                </div>
+
+                <!-- 我的学习画像 -->
+                <div class="card animate-fade-in-up delay-6">
+                    <div class="card-title" style="display:flex;align-items:center;gap:8px;">
+                        <i data-lucide="user" style="width:18px;height:18px;color:var(--color-text-tertiary);"></i>
+                        我的学习画像
+                    </div>
+                    <div id="profile-loading" class="loading"><span class="spinner spinner-dark"></span>加载中...</div>
+                    <div id="profile-content" style="display:none;">
+                        <div class="profile-grid" style="grid-template-columns:repeat(2,1fr);">
+                            <div><div class="profile-label">专业</div><div class="profile-value" id="prof-major">-</div></div>
+                            <div><div class="profile-label">每日学习</div><div class="profile-value" id="prof-daily">-</div></div>
+                            <div><div class="profile-label">认知风格</div><div class="profile-value" id="prof-cognitive">-</div></div>
+                            <div><div class="profile-label">学习目标</div><div class="profile-value" id="prof-goal">-</div></div>
+                        </div>
+                        <div class="mt-4"><div class="profile-label mb-2">已掌握知识点</div>
+                            <div class="tags-list" id="prof-mastered"></div>
+                        </div>
+                        <div class="mt-4"><div class="profile-label mb-2">待提升知识点</div>
+                            <div class="tags-list" id="prof-weak"></div>
+                        </div>
+                    </div>
+                    <div id="profile-empty" class="no-data" style="display:none;">
+                        尚未建立画像，<a href="profile.html" style="color:var(--color-primary);">前往编辑</a>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </main>
 
     <script type="module">
-        import { isLoggedIn, getUserId, clearAuth, getResourceStats, getProfile, getPathways } from './assets/api.js';
-        
-        // Auth check
-        if (!isLoggedIn()) {
-            window.location.href = 'auth.html';
-        }
+        import { isLoggedIn, getUserId, clearAuth, getResourceStats, getProfile, getPathways, getLearningRecords } from './assets/api.js';
+        import { showToast } from './assets/toast.js';
+        import { registerActions } from './assets/button.js';
+        import { initCommandPalette } from './assets/command.js';
+
+        if (!isLoggedIn()) { window.location.href = 'auth.html'; }
 
         const userId = getUserId();
-        document.getElementById('user-info').textContent = userId ? `用户: ${userId.slice(0, 8)}...` : '';
 
-        // Load data
+        // 注册全局操作
+        registerActions({
+            logout: async (data, btn) => {
+                clearAuth();
+                window.location.href = 'auth.html';
+            },
+        });
+
+        // 初始化命令面板
+        initCommandPalette();
+
+        // 问候语
+        function setGreeting() {
+            const h = new Date().getHours();
+            const name = userId ? userId.slice(0, 6) : '';
+            const greet = h < 6 ? '夜深了' : h < 9 ? '早上好' : h < 12 ? '上午好' : h < 14 ? '中午好' : h < 17 ? '下午好' : '晚上好';
+            document.getElementById('greeting').textContent = greet + (name ? '，' + name : '') + ' ';
+            const d = new Date();
+            const week = ['周日','周一','周二','周三','周四','周五','周六'];
+            document.getElementById('header-date').textContent =
+                d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日 ' + week[d.getDay()];
+        }
+        setGreeting();
+
+        // 侧边栏用户信息
+        const shortId = userId ? userId.slice(0, 8) : '?';
+        document.getElementById('user-info').textContent = shortId;
+        document.getElementById('sidebar-avatar').textContent = shortId.charAt(0).toUpperCase();
+
+        // 数字递增动画
+        function animateCount(el, target) {
+            if (!target || target === 0) { el.textContent = target || '0'; return; }
+            const duration = 600;
+            const start = performance.now();
+            const step = (ts) => {
+                const p = Math.min((ts - start) / duration, 1);
+                el.textContent = Math.floor(p * target);
+                if (p < 1) requestAnimationFrame(step);
+                else el.textContent = target;
+            };
+            requestAnimationFrame(step);
+        }
+
+        // 加载统计数据
         async function loadStats() {
             const stats = await getResourceStats(userId);
             if (stats) {
-                document.getElementById('stat-doc').textContent = stats.doc || 0;
-                document.getElementById('stat-mindmap').textContent = stats.mindmap || 0;
-                document.getElementById('stat-quiz').textContent = stats.quiz || 0;
+                animateCount(document.getElementById('stat-doc'), stats.doc || 0);
+                animateCount(document.getElementById('stat-mindmap'), stats.mindmap || 0);
+                animateCount(document.getElementById('stat-quiz'), stats.quiz || 0);
             }
         }
 
+        // 加载路径
+        async function loadPathways() {
+            const pathways = await getPathways(userId);
+            if (pathways) {
+                animateCount(document.getElementById('stat-paths'), pathways.length || 0);
+            }
+        }
+
+        // 加载最近动态
+        async function loadRecent() {
+            const el = document.getElementById('recent-timeline');
+            const loading = document.getElementById('recent-loading');
+            const empty = document.getElementById('recent-empty');
+            try {
+                const records = await getLearningRecords(userId, { limit: 6 });
+                loading.style.display = 'none';
+                if (!records || records.length === 0) { empty.style.display = 'block'; return; }
+                el.style.display = 'block';
+                el.innerHTML = records.slice(0, 6).map(r => `
+                    <div class="timeline-item">
+                        <div class="timeline-dot"></div>
+                        <div class="timeline-time">${formatTimeAgo(r.created_at || r.updated_at)}</div>
+                        <div class="timeline-text">${formatRecordText(r)}</div>
+                    </div>
+                `).join('');
+            } catch(e) { loading.style.display = 'none'; empty.style.display = 'block'; }
+        }
+
+        function formatTimeAgo(t) {
+            if (!t) return '刚刚';
+            const diff = Date.now() - new Date(t).getTime();
+            const min = Math.floor(diff / 60000);
+            if (min < 1) return '刚刚';
+            if (min < 60) return min + '分钟前';
+            const h = Math.floor(min / 60);
+            if (h < 24) return h + '小时前';
+            return Math.floor(h / 24) + '天前';
+        }
+
+        function formatRecordText(r) {
+            const t = r.resource_type || '';
+            const typeMap = { doc:'学习文档', mindmap:'思维导图', quiz:'测验', code:'代码示例', summary:'要点总结' };
+            const typeName = typeMap[t] || t || '资源';
+            const title = r.title || r.resource_title || r.kp_name || '';
+            if (title) return '学习了' + typeName + '《' + title + '》';
+            return '完成了一次' + typeName + '学习';
+        }
+
+        // 加载画像
         async function loadProfile() {
             const profile = await getProfile(userId);
             const loading = document.getElementById('profile-loading');
             const content = document.getElementById('profile-content');
             const empty = document.getElementById('profile-empty');
-
-            if (!profile) {
-                loading.style.display = 'none';
-                empty.style.display = 'block';
-                return;
-            }
-
-            const isEmpty = !profile.learning_goal && (!profile.knowledge_mastered || profile.knowledge_mastered.length === 0) && (!profile.knowledge_weak || profile.knowledge_weak.length === 0);
-            if (isEmpty) {
-                loading.style.display = 'none';
-                empty.style.display = 'block';
-                return;
-            }
-
+            if (!profile) { loading.style.display = 'none'; empty.style.display = 'block'; return; }
             loading.style.display = 'none';
             content.style.display = 'block';
-
             document.getElementById('prof-major').textContent = profile.major || '未设置';
-            document.getElementById('prof-daily').textContent = profile.daily_time_minutes ? `${profile.daily_time_minutes} 分钟` : '未设置';
+            document.getElementById('prof-daily').textContent = profile.daily_time_minutes ? profile.daily_time_minutes + ' 分钟' : '未设置';
             document.getElementById('prof-cognitive').textContent = profile.cognitive_style || '未设置';
-
+            document.getElementById('prof-goal').textContent = profile.learning_goal || '未设置';
             const mastered = profile.knowledge_mastered || [];
             document.getElementById('prof-mastered').innerHTML = mastered.length
-                ? mastered.map(k => `<span class="badge badge-success">${k}</span>`).join('')
-                : '<span style="color:#6B7280;font-size:13px;">暂无</span>';
-
+                ? mastered.map(k => '<span class="badge badge-success">' + k + '</span>').join('')
+                : '<span class="text-sm text-muted">暂无</span>';
             const weak = profile.knowledge_weak || [];
             document.getElementById('prof-weak').innerHTML = weak.length
-                ? weak.map(k => `<span class="badge" style="background:#FFF3E0;color:#F57C00">${k}</span>`).join('')
-                : '<span style="color:#6B7280;font-size:13px;">暂无</span>';
+                ? weak.map(k => '<span class="badge badge-warning">' + k + '</span>').join('')
+                : '<span class="text-sm text-muted">暂无</span>';
         }
 
-        async function loadPathways() {
-            const pathways = await getPathways(userId);
-            if (pathways) {
-                document.getElementById('stat-paths').textContent = pathways.length;
-            }
-        }
-
-        window.handleLogout = function() {
-            clearAuth();
-            window.location.href = 'auth.html';
-        }
 
         loadStats();
-        loadProfile();
         loadPathways();
+        loadRecent();
+        loadProfile();
     </script>
     <script>lucide.createIcons();</script>
 </body>

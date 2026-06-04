@@ -43,7 +43,7 @@ async def get_resource(resource_id: int, db: AsyncSession) -> Optional[ResourceM
         kp_id=resource.kp_id,
         resource_type=resource.resource_type,
         title=resource.title or "",
-        content_path=resource.content,
+        content=resource.content,
         content_json=resource.content_json,
         created_at=resource.created_at,
     )
@@ -90,7 +90,7 @@ async def list_resources(
             kp_id=r.kp_id,
             resource_type=r.resource_type,
             title=r.title or "",
-            content_path=r.content,
+            content=r.content,
             content_json=r.content_json,
             created_at=r.created_at,
         )
@@ -175,7 +175,7 @@ async def get_task_status(task_id: int, db: AsyncSession) -> Optional[GenerateTa
         task_id=task.id,
         status=TaskStatus(task.status),
         progress=task.progress,
-        error_msg=task.error_message,
+        error_message=task.error_message,
         result_id=task.resource_id,
     )
 
@@ -185,13 +185,13 @@ async def update_task_progress(
     progress: int,
     status: TaskStatus,
     db: AsyncSession,
-    error_msg: Optional[str] = None,
+    error_message: Optional[str] = None,
     result_id: Optional[int] = None,
 ) -> None:
     """由 Agent 执行过程中调用，更新进度与状态。"""
     update_data = {"progress": progress, "status": status.value}
-    if error_msg is not None:
-        update_data["error_message"] = error_msg
+    if error_message is not None:
+        update_data["error_message"] = error_message
     if result_id is not None:
         update_data["resource_id"] = result_id
     await update_by_id(db, GenerationTask, task_id, update_data)
@@ -227,19 +227,34 @@ async def list_learning_records(
     limit: int = None,
     kp_id: Optional[str] = None,
 ) -> list[LearningRecordOut]:
-    """列举用户的学习历史。"""
+    """列举用户的学习历史，包含知识点名称。"""
+    from sqlalchemy import select as sa_select
+    from backend.db.models import KGNode
+
     if limit is None:
         limit = config.pagination.default_limit
-    filters: dict = {"user_id": user_id}
-    if kp_id is not None:
-        filters["kp_id"] = kp_id
-    records = await select(
-        db, LearningRecord,
-        filters=filters,
-        limit=limit,
-        offset=skip,
+
+    stmt = (
+        sa_select(
+            LearningRecord,
+            KGNode.name.label("kp_name"),
+        )
+        .outerjoin(KGNode, LearningRecord.kp_id == KGNode.id)
+        .where(LearningRecord.user_id == user_id)
+        .order_by(LearningRecord.recorded_at.desc())
+        .offset(skip)
+        .limit(limit)
     )
-    return [LearningRecordOut.model_validate(r) for r in records]
+    if kp_id is not None:
+        stmt = stmt.where(LearningRecord.kp_id == kp_id)
+
+    rows = (await db.execute(stmt)).all()
+    results = []
+    for record, kp_name in rows:
+        out = LearningRecordOut.model_validate(record)
+        out.kp_name = kp_name
+        results.append(out)
+    return results
 
 
 # ----------------------------------------------------------

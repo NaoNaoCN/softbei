@@ -7,9 +7,9 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #F5F7FA;
-            color: #1A1A2E;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #F7F8FC;
+            color: #1E1E2E;
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -28,17 +28,17 @@
         }
         .auth-logo h1 {
             font-size: 24px;
-            color: #1976D2;
+            color: #4F6EF7;
             font-weight: 700;
         }
         .auth-logo p {
             font-size: 14px;
-            color: #6B7280;
+            color: #4B5563;
             margin-top: 8px;
         }
         .tabs {
             display: flex;
-            border-bottom: 2px solid #E0E6ED;
+            border-bottom: 2px solid #E5E7EB;
             margin-bottom: 24px;
         }
         .tab {
@@ -47,15 +47,15 @@
             text-align: center;
             font-size: 15px;
             font-weight: 500;
-            color: #6B7280;
+            color: #4B5563;
             cursor: pointer;
             border-bottom: 3px solid transparent;
             transition: all 0.2s;
         }
-        .tab:hover { color: #1976D2; }
+        .tab:hover { color: #4F6EF7; }
         .tab.active {
-            color: #1976D2;
-            border-bottom-color: #1976D2;
+            color: #4F6EF7;
+            border-bottom-color: #4F6EF7;
         }
         .form-group {
             margin-bottom: 16px;
@@ -69,20 +69,20 @@
         .form-input {
             width: 100%;
             padding: 12px 14px;
-            border: 1px solid #E0E6ED;
+            border: 1px solid #E5E7EB;
             border-radius: 8px;
             font-size: 14px;
             outline: none;
             transition: all 0.2s;
         }
         .form-input:focus {
-            border-color: #1976D2;
+            border-color: #4F6EF7;
             box-shadow: 0 0 0 3px rgba(25,118,210,0.1);
         }
         .btn-primary {
             width: 100%;
             padding: 14px;
-            background: #1976D2;
+            background: #4F6EF7;
             color: #fff;
             border: none;
             border-radius: 8px;
@@ -91,7 +91,7 @@
             cursor: pointer;
             transition: background 0.2s;
         }
-        .btn-primary:hover { background: #1565C0; }
+        .btn-primary:hover { background: #3B55D9; }
         .btn-primary:disabled { background: #BDBDBD; cursor: not-allowed; }
         .alert {
             padding: 12px 16px;
@@ -102,12 +102,12 @@
         }
         .alert-success {
             background: #E8F5E9;
-            border-left: 4px solid #43A047;
+            border-left: 4px solid #10B981;
             color: #2E7D32;
         }
         .alert-danger {
             background: #FFEBEE;
-            border-left: 4px solid #E53935;
+            border-left: 4px solid #EF4444;
             color: #C62828;
         }
         .spinner {
@@ -123,10 +123,14 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="auth-container">
         <div class="auth-logo">
+            <div style="width:50px;height:50px;margin:0 auto 16px;border-radius:14px;background:var(--color-primary-gradient, linear-gradient(135deg,#4F6EF7,#7C5CFC));display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:700;">S</div>
             <h1>个性化学习助手</h1>
             <p>登录后享受更多功能</p>
         </div>

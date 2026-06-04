@@ -120,6 +120,7 @@ class RAGEvalCollector:
         generation_latency_ms: float = 0.0,
         safety_passed: bool = True,
         safety_issues_count: int = 0,
+        safety_issues: list[str] | None = None,
         experiment_group: Optional[str] = None,
     ) -> None:
         """Agent 生成完成后调用。"""
@@ -147,6 +148,7 @@ class RAGEvalCollector:
             ),
             safety_passed=safety_passed,
             safety_issues_count=safety_issues_count,
+            safety_issues=safety_issues or [],
             retrieval_record=self._current_retrieval,
         )
 
@@ -158,7 +160,7 @@ class RAGEvalCollector:
             logger.info(
                 f"[Collector] flush: agent={record.agent_type}, kp={record.kp_name}, "
                 f"n_retrieved={record.n_retrieved}, draft_len={record.draft_length}, "
-                f"safety_passed={record.safety_passed}"
+                f"safety_passed={record.safety_passed}, safety_issues={len(record.safety_issues)}"
             )
 
             # 健康检查采集（Layer 1）

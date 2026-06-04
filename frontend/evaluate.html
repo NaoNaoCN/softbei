@@ -4,64 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>学习评估 - 个性化学习助手</title>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lucide@0.460.0"></script>
     <link rel="stylesheet" href="./assets/styles.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #F5F7FA;
-            color: #1A1A2E;
-            min-height: 100vh;
-        }
-        .layout {
-            display: flex;
-            min-height: 100vh;
-        }
-        .sidebar {
-            width: 240px;
-            background: #EEF4FB;
-            border-right: 1px solid #E0E6ED;
-            padding: 24px 16px;
-            position: fixed;
-            height: 100vh;
-            overflow-y: auto;
-        }
-        .sidebar-logo {
-            font-size: 18px;
-            font-weight: 700;
-            color: #1976D2;
-            margin-bottom: 24px;
-            padding-left: 8px;
-        }
-        .nav-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 12px 16px;
-            border-radius: 8px;
-            color: #1A1A2E;
-            text-decoration: none;
-            margin-bottom: 4px;
-            transition: all 0.2s;
-            font-size: 14px;
-        }
-        .nav-item:hover { background: #E3F2FD; color: #1976D2; }
-        .nav-item.active { background: #1976D2; color: #fff; }
-        .nav-item .icon { width: 24px; height: 18px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
-
         .main {
-            margin-left: 240px;
+            margin-left: var(--sidebar-width);
             padding: 32px 40px;
             flex: 1;
         }
         .page-title {
             font-size: 28px;
             font-weight: 700;
-            color: #1976D2;
+            color: #4F6EF7;
             margin-bottom: 8px;
             padding-bottom: 12px;
-            border-bottom: 3px solid #1976D2;
+            border-bottom: 3px solid #4F6EF7;
         }
         .page-subtitle {
             font-size: 14px;
@@ -72,7 +30,7 @@
         /* Tabs */
         .tabs {
             display: flex;
-            border-bottom: 2px solid #E0E6ED;
+            border-bottom: 2px solid var(--color-border);
             margin-bottom: 24px;
             gap: 4px;
         }
@@ -89,17 +47,17 @@
             transition: all 0.2s;
             border-radius: 6px 6px 0 0;
         }
-        .tab:hover { color: #1976D2; }
+        .tab:hover { color: var(--color-primary); }
         .tab.active {
-            color: #1976D2;
-            border-bottom-color: #1976D2;
-            background: #E3F2FD;
+            color: var(--color-primary);
+            border-bottom-color: var(--color-primary);
+            background: var(--color-primary-light);
         }
 
         /* Card */
         .card {
-            background: #fff;
-            border: 1px solid #E0E6ED;
+            background: var(--color-card);
+            border: 1px solid var(--color-border);
             border-radius: 12px;
             padding: 24px;
             margin-bottom: 20px;
@@ -108,7 +66,7 @@
         .card-title {
             font-size: 16px;
             font-weight: 600;
-            color: #1A1A2E;
+            color: var(--color-text);
             margin-bottom: 16px;
         }
 
@@ -122,36 +80,36 @@
         .resource-select select {
             flex: 1;
             padding: 10px 14px;
-            border: 1px solid #E0E6ED;
-            border-radius: 8px;
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
             font-size: 14px;
-            background: #fff;
+            background: var(--color-card);
             cursor: pointer;
             outline: none;
         }
         .btn-secondary {
             padding: 10px 20px;
-            background: #fff;
-            color: #1A1A2E;
-            border: 1px solid #E0E6ED;
+            background: var(--color-card);
+            color: var(--color-text);
+            border: 1px solid var(--color-border);
             border-radius: 8px;
             font-size: 14px;
             cursor: pointer;
             transition: all 0.2s;
         }
-        .btn-secondary:hover { border-color: #1976D2; color: #1976D2; }
+        .btn-secondary:hover { border-color: var(--color-primary); color: var(--color-primary); }
 
         /* Quiz Item */
         .quiz-item {
-            background: #fff;
-            border: 1px solid #E0E6ED;
+            background: var(--color-card);
+            border: 1px solid var(--color-border);
             border-radius: 12px;
             padding: 20px;
             margin-bottom: 16px;
         }
         .quiz-question {
             font-weight: 500;
-            color: #1A1A2E;
+            color: var(--color-text);
             margin-bottom: 16px;
             font-size: 15px;
         }
@@ -170,26 +128,26 @@
             align-items: center;
             gap: 12px;
             padding: 12px 16px;
-            border: 1px solid #E0E6ED;
+            border: 1px solid var(--color-border);
             border-radius: 8px;
             cursor: pointer;
             transition: all 0.2s;
         }
-        .quiz-option:hover { border-color: #1976D2; background: #F5F7FA; }
-        .quiz-option.selected { border-color: #1976D2; background: #E3F2FD; }
+        .quiz-option:hover { border-color: var(--color-primary); background: var(--color-bg); }
+        .quiz-option.selected { border-color: #4F6EF7; background: #EEF1FE; }
         .quiz-option.correct {
-            border-color: #43A047;
+            border-color: #10B981;
             background: #E8F5E9;
         }
         .quiz-option.wrong {
-            border-color: #E53935;
-            background: #FFEBEE;
+            border-color: #EF4444;
+            background: #FEF2F2;
         }
         .quiz-option-marker {
             width: 24px;
             height: 24px;
             border-radius: 50%;
-            border: 2px solid #E0E6ED;
+            border: 2px solid var(--color-border);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -198,8 +156,8 @@
             color: #6B7280;
         }
         .quiz-option.selected .quiz-option-marker {
-            background: #1976D2;
-            border-color: #1976D2;
+            background: #4F6EF7;
+            border-color: #4F6EF7;
             color: #fff;
         }
 
@@ -208,12 +166,12 @@
             display: flex;
             gap: 12px;
             padding: 16px 0;
-            border-top: 1px solid #E0E6ED;
+            border-top: 1px solid var(--color-border);
             margin-top: 16px;
         }
         .btn-primary {
             padding: 12px 32px;
-            background: #1976D2;
+            background: #4F6EF7;
             color: #fff;
             border: none;
             border-radius: 8px;
@@ -222,7 +180,7 @@
             cursor: pointer;
             transition: background 0.2s;
         }
-        .btn-primary:hover { background: #1565C0; }
+        .btn-primary:hover { background: #3B55D9; }
         .btn-primary:disabled { background: #BDBDBD; cursor: not-allowed; }
 
         /* Score Display */
@@ -232,28 +190,28 @@
             border-radius: 12px;
             margin: 20px 0;
         }
-        .score-display.pass { background: #E8F5E9; border: 2px solid #43A047; }
-        .score-display.fail { background: #FFEBEE; border: 2px solid #E53935; }
+        .score-display.pass { background: #E8F5E9; border: 2px solid #10B981; }
+        .score-display.fail { background: #FEF2F2; border: 2px solid #EF4444; }
         .score-value { font-size: 64px; font-weight: 700; }
-        .score-display.pass .score-value { color: #43A047; }
-        .score-display.fail .score-value { color: #E53935; }
+        .score-display.pass .score-value { color: #10B981; }
+        .score-display.fail .score-value { color: #EF4444; }
         .score-detail { font-size: 16px; color: #6B7280; margin-top: 8px; }
         .score-actions { margin-top: 24px; display: flex; justify-content: center; gap: 12px; }
 
         /* History Table */
         .table { width: 100%; border-collapse: collapse; }
         .table th {
-            background: #E3F2FD;
-            color: #1565C0;
+            background: #EEF1FE;
+            color: #3B55D9;
             font-weight: 600;
             font-size: 13px;
             text-align: left;
             padding: 12px 16px;
-            border-bottom: 1px solid #E0E6ED;
+            border-bottom: 1px solid var(--color-border);
         }
         .table td {
             padding: 12px 16px;
-            border-bottom: 1px solid #E0E6ED;
+            border-bottom: 1px solid var(--color-border);
             font-size: 14px;
         }
         .result-badge {
@@ -263,17 +221,17 @@
             font-size: 13px;
             font-weight: 500;
         }
-        .result-badge.correct { background: #E8F5E9; color: #43A047; }
-        .result-badge.wrong { background: #FFEBEE; color: #E53935; }
+        .result-badge.correct { background: #E8F5E9; color: #10B981; }
+        .result-badge.wrong { background: #FEF2F2; color: #EF4444; }
 
         /* Weak Items */
         .weak-item {
             background: #fff;
-            border: 1px solid #E0E6ED;
+            border: 1px solid var(--color-border);
             border-radius: 12px;
             padding: 20px;
             margin-bottom: 12px;
-            border-left: 4px solid #E53935;
+            border-left: 4px solid #EF4444;
         }
         .weak-item-header {
             display: flex;
@@ -283,7 +241,7 @@
         }
         .weak-item-title {
             font-weight: 600;
-            color: #E53935;
+            color: #EF4444;
             font-size: 15px;
         }
         .weak-item-accuracy {
@@ -296,8 +254,8 @@
             margin-bottom: 12px;
         }
         .weak-item-actions { display: flex; gap: 8px; }
-        .progress-bar { height: 6px; background: #E0E6ED; border-radius: 3px; overflow: hidden; }
-        .progress-fill { height: 100%; background: #E53935; border-radius: 3px; }
+        .progress-bar { height: 6px; background: var(--color-border); border-radius: 3px; overflow: hidden; }
+        .progress-fill { height: 100%; background: #EF4444; border-radius: 3px; }
 
         /* Modal */
         .modal-overlay {
@@ -333,17 +291,17 @@
         .modal-close:hover { color: #374151; }
         .detail-stem { font-size: 15px; line-height: 1.6; margin-bottom: 16px; font-weight: 500; }
         .detail-options { list-style: none; padding: 0; margin: 0 0 16px; }
-        .detail-options li { padding: 8px 12px; border-radius: 8px; margin-bottom: 6px; font-size: 14px; border: 1px solid #E0E6ED; }
-        .detail-options li.user-selected { border-color: #1976D2; background: #E3F2FD; }
-        .detail-options li.correct-answer { border-color: #43A047; background: #E8F5E9; }
+        .detail-options li { padding: 8px 12px; border-radius: 8px; margin-bottom: 6px; font-size: 14px; border: 1px solid var(--color-border); }
+        .detail-options li.user-selected { border-color: #4F6EF7; background: #EEF1FE; }
+        .detail-options li.correct-answer { border-color: #10B981; background: #E8F5E9; }
         .detail-row { display: flex; gap: 16px; margin-bottom: 12px; font-size: 14px; }
         .detail-label { font-weight: 600; color: #6B7280; min-width: 70px; }
-        .detail-answer-box { background: #F5F7FA; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+        .detail-answer-box { background: var(--color-bg); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
         .detail-explanation { font-size: 13px; color: #6B7280; background: #FFFBEB; border-radius: 8px; padding: 12px; margin-top: 12px; border-left: 3px solid #F59E0B; }
         .detail-section-title { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
         .detail-badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 13px; font-weight: 500; }
-        .detail-badge.correct { background: #E8F5E9; color: #43A047; }
-        .detail-badge.wrong { background: #FFEBEE; color: #E53935; }
+        .detail-badge.correct { background: #E8F5E9; color: #10B981; }
+        .detail-badge.wrong { background: #FEF2F2; color: #EF4444; }
 
         /* Empty State */
         .empty-state {
@@ -357,15 +315,28 @@
 </head>
 <body>
     <div class="layout">
-        <nav class="sidebar">
-            <div class="sidebar-logo">个性化学习助手</div>
-                <a href="index.html" class="nav-item"><span class="icon"><i data-lucide="home"></i></span><span>首页</span></a>
-                <a href="chat.html" class="nav-item"><span class="icon"><i data-lucide="message-circle"></i></span><span>智能对话</span></a>
-                <a href="profile.html" class="nav-item"><span class="icon"><i data-lucide="user"></i></span><span>我的画像</span></a>
-                <a href="generate.html" class="nav-item"><span class="icon"><i data-lucide="sparkles"></i></span><span>生成资源</span></a>
-                <a href="pathway.html" class="nav-item"><span class="icon"><i data-lucide="map"></i></span><span>学习路径</span></a>
-                <a href="library.html" class="nav-item"><span class="icon"><i data-lucide="book-open"></i></span><span>资源库</span></a>
-                <a href="evaluate.html" class="nav-item active"><span class="icon"><i data-lucide="clipboard-check"></i></span><span>学习评估</span></a>
+                <nav class="sidebar">
+            <a href="index.html" class="sidebar-logo">
+                <div class="sidebar-logo-icon">S</div>
+                智能学习
+            </a>
+            <div class="sidebar-section-title">主菜单</div>
+            <a href="index.html" class="nav-item"><span class="icon"><i data-lucide="home"></i></span>学习看板</a>
+            <a href="chat.html" class="nav-item"><span class="icon"><i data-lucide="message-square"></i></span>智能对话</a>
+            <a href="generate.html" class="nav-item"><span class="icon"><i data-lucide="sparkles"></i></span>资源生成</a>
+            <a href="library.html" class="nav-item"><span class="icon"><i data-lucide="library"></i></span>资源库</a>
+            <a href="pathway.html" class="nav-item"><span class="icon"><i data-lucide="share-2"></i></span>学习路径</a>
+            <a href="evaluate.html" class="nav-item active"><span class="icon"><i data-lucide="clipboard-check"></i></span>学习评估</a>
+            <a href="profile.html" class="nav-item"><span class="icon"><i data-lucide="circle-user"></i></span>个人中心</a>
+            <div class="sidebar-footer">
+                <div class="sidebar-user">
+                    <div class="sidebar-avatar" id="sidebar-avatar">?</div>
+                    <span class="user-info" id="user-info">加载中...</span>
+                </div>
+                <button class="btn-logout" data-action="logout">
+                    <i data-lucide="log-out" style="width:16px;height:16px;"></i>退出登录
+                </button>
+            </div>
         </nav>
 
         <main class="main">
@@ -410,7 +381,11 @@
     </div>
 
     <script type="module">
-        import { isLoggedIn, getUserId, getResources, getQuizItems, submitQuizAnswer, getQuizAttempts, postLearningRecord } from './assets/api.js';
+        import { showToast } from './assets/toast.js';
+        import { showDialog } from './assets/dialog.js';
+        import { registerActions } from './assets/button.js';
+        import { initCommandPalette } from './assets/command.js';
+        import { isLoggedIn, getUserId, clearAuth, getResources, getQuizItems, submitQuizAnswer, getQuizAttempts, postLearningRecord } from './assets/api.js';
         
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
@@ -467,7 +442,7 @@
                 const qTypeLabel = q.question_type === 'multi' ? '多选题' : q.question_type === 'fill' ? '填空题' : '单选题';
                 let bodyHtml = '';
                 if (q.question_type === 'fill') {
-                    bodyHtml = `<div style="margin-top:12px;"><input type="text" class="quiz-fill-input" id="fill-${q.id}" placeholder="请输入答案" style="width:100%;padding:10px 14px;border:1px solid #E0E6ED;border-radius:8px;font-size:14px;box-sizing:border-box;" oninput="onFillInput('${q.id}', this.value)"></div>`;
+                    bodyHtml = `<div style="margin-top:12px;"><input type="text" class="quiz-fill-input" id="fill-${q.id}" placeholder="请输入答案" style="width:100%;padding:10px 14px;border:1px solid var(--color-border);border-radius:8px;font-size:14px;box-sizing:border-box;" oninput="onFillInput('${q.id}', this.value)"></div>`;
                 } else {
                     bodyHtml = `<div class="quiz-options">
                         ${(q.options || []).map((opt, oi) => `
@@ -544,13 +519,18 @@
                 const isMulti = q.question_type === 'multi';
                 const isFill = q.question_type === 'fill';
                 let correctOpts = isMulti
-                    ? (() => { try { return JSON.parse(answerStr); } catch { return []; } })()
+                    ? (() => {
+                        try { return JSON.parse(answerStr); } catch {
+                            // 降级：逗号分隔的字母字符串
+                            return answerStr.split(/[,，\s]+/).filter(Boolean);
+                        }
+                    })()
                     : [answerStr];
 
                 let bodyHtml = '';
                 if (isFill) {
                     const userAns = submittedAns ? submittedAns.opts.join('') : '';
-                    bodyHtml = `<div style="margin-top:12px;padding:10px 14px;background:${submittedAns ? (submittedAns.isCorrect ? '#E8F5E9' : '#FFEBEE') : '#F5F7FA'};border-radius:8px;font-size:14px;"><strong>你的答案：</strong>${userAns || '(未作答)'} &nbsp; <strong>正确答案：</strong>${answerStr}</div>`;
+                    bodyHtml = `<div style="margin-top:12px;padding:10px 14px;background:${submittedAns ? (submittedAns.isCorrect ? '#E8F5E9' : '#FEF2F2') : 'var(--color-bg)'};border-radius:8px;font-size:14px;"><strong>你的答案：</strong>${userAns || '(未作答)'} &nbsp; <strong>正确答案：</strong>${answerStr}</div>`;
                 } else {
                     const optionsHtml = (q.options || []).map((opt, oi) => {
                         const letter = String.fromCharCode(65 + oi);
@@ -570,9 +550,9 @@
                 let resultText = submittedAns
                     ? (submittedAns.isCorrect ? '✓ 回答正确' : '✗ 回答错误')
                     : '○ 未作答';
-                const resultColor = submittedAns && submittedAns.isCorrect ? '#43A047' : submittedAns ? '#E53935' : '#9CA3AF';
+                const resultColor = submittedAns && submittedAns.isCorrect ? '#10B981' : submittedAns ? '#EF4444' : '#9CA3AF';
                 const explanationHtml = q.explanation
-                    ? `<div style="margin-top:10px;padding:12px;background:#F0F7FF;border-radius:8px;font-size:13px;color:#374151;line-height:1.6;border-left:4px solid #1976D2;"><strong>解析：</strong>${q.explanation}</div>`
+                    ? `<div style="margin-top:10px;padding:12px;background:#F0F7FF;border-radius:8px;font-size:13px;color:#374151;line-height:1.6;border-left:4px solid #4F6EF7;"><strong>解析：</strong>${q.explanation}</div>`
                     : '';
 
                 const qTypeLabel = isMulti ? '多选题' : isFill ? '填空题' : '单选题';
@@ -619,15 +599,16 @@
             // 支持 URL 参数 kp_id 筛选
             const filterKpId = new URLSearchParams(window.location.search).get('kp_id');
             const filtered = filterKpId ? attempts.filter(a => a.kp_id === filterKpId) : attempts;
-            const filterInfo = filterKpId && filtered.length ? `<div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;"><span style="font-size:13px;color:#7B1FA2;background:#F3E5F5;padding:4px 12px;border-radius:12px;">📍 筛选: ${filtered[0].kp_name || filterKpId}</span><a href="./evaluate.html?tab=history" style="font-size:12px;color:#1976D2;text-decoration:none;">查看全部</a></div>` : '';
+            const filterInfo = filterKpId && filtered.length ? `<div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;"><span style="font-size:13px;color:#7B1FA2;background:#F3E5F5;padding:4px 12px;border-radius:12px;">📍 筛选: ${filtered[0].kp_name || filterKpId}</span><a href="./evaluate.html?tab=history" style="font-size:12px;color:#4F6EF7;text-decoration:none;">查看全部</a></div>` : '';
             const displayList = filtered.length ? filtered : attempts;
+            displayList.forEach(a => attemptsCache.set(a.id, a));
             list.innerHTML = `
                 ${filterInfo}
-                <table class="table">
+                <table class="table" id="history-table">
                     <thead><tr><th>知识点</th><th>你的答案</th><th>结果</th><th>时间</th></tr></thead>
                     <tbody>
                         ${displayList.map(a => `
-                            <tr onclick="showAttemptDetail(${JSON.stringify(a).replace(/"/g, '&quot;')})" style="cursor:pointer">
+                            <tr data-attempt-id="${a.id}" class="attempt-row" style="cursor:pointer">
                                 <td>${a.kp_name || a.kp_id || '-'}</td>
                                 <td>${a.user_answer || '-'}</td>
                                 <td><span class="result-badge ${a.is_correct ? 'correct' : 'wrong'}">${a.is_correct ? '正确' : '错误'}</span></td>
@@ -673,6 +654,8 @@
             `}).join('');
         }
 
+        const attemptsCache = new Map();
+
         function showAttemptDetail(a) {
             const modal = document.getElementById('attempt-modal');
             const content = document.getElementById('attempt-modal-content');
@@ -704,7 +687,7 @@
                    </div>
                    <div class="detail-answer-box">
                     <div class="detail-section-title">正确答案</div>
-                    <div style="font-size:14px;font-weight:600;color:#43A047;">${correctAnswer}</div>
+                    <div style="font-size:14px;font-weight:600;color:#10B981;">${correctAnswer}</div>
                    </div>`
                 : '';
 
@@ -722,6 +705,12 @@
             modal.classList.add('active');
         }
 
+        // 注册操作
+        registerActions({
+            logout: () => { clearAuth(); window.location.href = 'auth.html'; },
+        });
+        initCommandPalette();
+
         window.switchTab = switchTab;
         window.selectOption = selectOption;
         window.submitQuiz = submitQuiz;
@@ -730,6 +719,15 @@
         window.loadHistory = loadHistory;
         window.loadWeakAnalysis = loadWeakAnalysis;
         window.showAttemptDetail = showAttemptDetail;
+
+        // 使用事件委托代替内联 onclick，避免 XSS 风险
+        document.getElementById('history-list').addEventListener('click', (e) => {
+            const row = e.target.closest('.attempt-row');
+            if (!row) return;
+            const attemptId = row.dataset.attemptId;
+            const attempt = attemptsCache.get(attemptId ? Number(attemptId) : null);
+            if (attempt) showAttemptDetail(attempt);
+        });
         window.onFillInput = onFillInput;
 
         // 支持 URL 参数自动切换 tab：?tab=history&kp_id=xxx

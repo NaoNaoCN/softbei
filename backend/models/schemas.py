@@ -127,7 +127,9 @@ class ChatMessageIn(BaseModel):
 class ChatMessageOut(BaseModel):
     role: str
     content: str
-    created_at: datetime
+    resource_type: Optional[str] = None
+    extra: Optional[dict[str, Any]] = None
+    created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
@@ -234,7 +236,7 @@ class GenerateTaskOut(BaseModel):
     task_id: int
     status: TaskStatus
     progress: int = Field(ge=0, le=100)
-    error_msg: Optional[str] = None
+    error_message: Optional[str] = None
     result_id: Optional[int] = None
 
     model_config = {"from_attributes": True}
@@ -248,7 +250,7 @@ class KGBuildTaskOut(BaseModel):
     stage: Optional[str] = None
     nodes_count: int = 0
     edges_count: int = 0
-    error_msg: Optional[str] = None
+    error_message: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -288,7 +290,7 @@ class ResourceMetaOut(BaseModel):
     kp_id: Optional[str]
     resource_type: ResourceType
     title: str
-    content_path: Optional[str]
+    content: Optional[str]
     content_json: Optional[dict[str, Any]]
     created_at: datetime
 
@@ -360,6 +362,7 @@ class LearningRecordOut(BaseModel):
     user_id: int
     resource_id: Optional[int] = None
     kp_id: Optional[str] = None
+    kp_name: Optional[str] = None
     action: str
     duration_seconds: Optional[int] = None
     recorded_at: datetime

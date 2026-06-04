@@ -4,49 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>我的画像 - 个性化学习助手</title>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lucide@0.460.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <link rel="stylesheet" href="./assets/styles.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #F5F7FA;
-            color: #1A1A2E;
-            min-height: 100vh;
-        }
-        .layout { display: flex; min-height: 100vh; }
-        .sidebar {
-            width: 240px;
-            background: #EEF4FB;
-            border-right: 1px solid #E0E6ED;
-            padding: 24px 16px;
-            position: fixed;
-            height: 100vh;
-            overflow-y: auto;
-        }
-        .sidebar-logo { font-size: 18px; font-weight: 700; color: #1976D2; margin-bottom: 24px; padding-left: 8px; }
-        .nav-item {
-            display: flex; align-items: center; gap: 10px;
-            padding: 12px 16px; border-radius: 8px;
-            color: #1A1A2E; text-decoration: none;
-            margin-bottom: 4px; transition: all 0.2s; font-size: 14px;
-        }
-        .nav-item:hover { background: #E3F2FD; color: #1976D2; }
-        .nav-item.active { background: #1976D2; color: #fff; }
-        .nav-item .icon { width: 24px; height: 18px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
-
-        .main { margin-left: 240px; padding: 32px 40px; flex: 1; }
+        .main { margin-left: var(--sidebar-width); padding: 32px 40px; flex: 1; }
         .page-title {
-            font-size: 28px; font-weight: 700; color: #1976D2;
-            margin-bottom: 8px; padding-bottom: 12px; border-bottom: 3px solid #1976D2;
+            font-size: 28px; font-weight: 700; color: #4F6EF7;
+            margin-bottom: 8px; padding-bottom: 12px; border-bottom: 3px solid #4F6EF7;
         }
         .page-subtitle { font-size: 14px; color: #6B7280; margin-bottom: 32px; }
 
         /* Tabs */
         .tabs {
             display: flex;
-            border-bottom: 2px solid #E0E6ED;
+            border-bottom: 2px solid #E5E7EB;
             margin-bottom: 24px;
             gap: 4px;
         }
@@ -59,20 +32,20 @@
             margin-bottom: -2px; transition: all 0.2s;
             border-radius: 6px 6px 0 0;
         }
-        .tab:hover { color: #1976D2; }
-        .tab.active { color: #1976D2; border-bottom-color: #1976D2; background: #E3F2FD; }
+        .tab:hover { color: #4F6EF7; }
+        .tab.active { color: #4F6EF7; border-bottom-color: #4F6EF7; background: #EEF1FE; }
 
         /* Profile View Card */
         .card {
             background: #fff;
-            border: 1px solid #E0E6ED;
+            border: 1px solid #E5E7EB;
             border-radius: 12px;
             padding: 24px;
             margin-bottom: 20px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
         .card-title {
-            font-size: 16px; font-weight: 600; color: #1A1A2E; margin-bottom: 20px;
+            font-size: 16px; font-weight: 600; color: #1E1E2E; margin-bottom: 20px;
         }
 
         /* Stats Grid */
@@ -84,12 +57,12 @@
         }
         .stat-item {
             background: #fff;
-            border: 1px solid #E0E6ED;
+            border: 1px solid #E5E7EB;
             border-radius: 10px;
             padding: 20px;
             text-align: center;
         }
-        .stat-value { font-size: 28px; font-weight: 700; color: #1976D2; }
+        .stat-value { font-size: 28px; font-weight: 700; color: #4F6EF7; }
         .stat-label { font-size: 13px; color: #6B7280; margin-top: 6px; }
 
         /* Profile Info Grid */
@@ -99,7 +72,7 @@
             gap: 20px;
         }
         .profile-item {
-            background: #F5F7FA;
+            background: #F7F8FC;
             border-radius: 10px;
             padding: 16px 20px;
         }
@@ -112,13 +85,13 @@
         .profile-value {
             font-size: 16px;
             font-weight: 500;
-            color: #1A1A2E;
+            color: #1E1E2E;
         }
 
         /* Tags */
         .tags-section { margin-top: 24px; }
         .tags-title {
-            font-size: 14px; font-weight: 600; color: #1A1A2E; margin-bottom: 12px;
+            font-size: 14px; font-weight: 600; color: #1E1E2E; margin-bottom: 12px;
         }
         .tags-list { display: flex; gap: 8px; flex-wrap: wrap; }
         .tag {
@@ -128,10 +101,10 @@
             font-size: 13px;
             font-weight: 500;
         }
-        .tag-success { background: #E8F5E9; color: #43A047; }
-        .tag-warning { background: #FFF3E0; color: #F57C00; }
-        .tag-info { background: #E3F2FD; color: #1976D2; }
-        .tag-default { background: #F5F7FA; color: #6B7280; }
+        .tag-success { background: #E8F5E9; color: #10B981; }
+        .tag-warning { background: #FFF3E0; color: #F59E0B; }
+        .tag-info { background: #EEF1FE; color: #4F6EF7; }
+        .tag-default { background: #F7F8FC; color: #6B7280; }
 
         /* Form */
         .form-grid {
@@ -148,7 +121,7 @@
         .form-input, .form-select, .form-textarea {
             width: 100%;
             padding: 10px 14px;
-            border: 1px solid #E0E6ED;
+            border: 1px solid #E5E7EB;
             border-radius: 8px;
             font-size: 14px;
             outline: none;
@@ -156,7 +129,7 @@
             font-family: inherit;
         }
         .form-input:focus, .form-select:focus, .form-textarea:focus {
-            border-color: #1976D2;
+            border-color: #4F6EF7;
             box-shadow: 0 0 0 3px rgba(25,118,210,0.1);
         }
         .form-textarea { resize: vertical; min-height: 80px; }
@@ -164,7 +137,7 @@
 
         .btn-primary {
             padding: 12px 32px;
-            background: #1976D2;
+            background: #4F6EF7;
             color: #fff;
             border: none;
             border-radius: 8px;
@@ -172,32 +145,45 @@
             cursor: pointer;
             transition: background 0.2s;
         }
-        .btn-primary:hover { background: #1565C0; }
+        .btn-primary:hover { background: #3B55D9; }
         .btn-secondary {
             padding: 12px 32px;
             background: #fff;
-            color: #1A1A2E;
-            border: 1px solid #E0E6ED;
+            color: #1E1E2E;
+            border: 1px solid #E5E7EB;
             border-radius: 8px;
             font-size: 15px; font-weight: 500;
             cursor: pointer;
             transition: all 0.2s;
         }
-        .btn-secondary:hover { border-color: #1976D2; color: #1976D2; }
+        .btn-secondary:hover { border-color: #4F6EF7; color: #4F6EF7; }
         .form-actions { display: flex; gap: 12px; margin-top: 24px; }
     </style>
 </head>
 <body>
     <div class="layout">
-        <nav class="sidebar">
-            <div class="sidebar-logo">个性化学习助手</div>
-                <a href="index.html" class="nav-item"><span class="icon"><i data-lucide="home"></i></span><span>首页</span></a>
-                <a href="chat.html" class="nav-item"><span class="icon"><i data-lucide="message-circle"></i></span><span>智能对话</span></a>
-                <a href="profile.html" class="nav-item active"><span class="icon"><i data-lucide="user"></i></span><span>我的画像</span></a>
-                <a href="generate.html" class="nav-item"><span class="icon"><i data-lucide="sparkles"></i></span><span>生成资源</span></a>
-                <a href="pathway.html" class="nav-item"><span class="icon"><i data-lucide="map"></i></span><span>学习路径</span></a>
-                <a href="library.html" class="nav-item"><span class="icon"><i data-lucide="book-open"></i></span><span>资源库</span></a>
-                <a href="evaluate.html" class="nav-item"><span class="icon"><i data-lucide="clipboard-check"></i></span><span>学习评估</span></a>
+                <nav class="sidebar">
+            <a href="index.html" class="sidebar-logo">
+                <div class="sidebar-logo-icon">S</div>
+                智能学习
+            </a>
+            <div class="sidebar-section-title">主菜单</div>
+            <a href="index.html" class="nav-item"><span class="icon"><i data-lucide="home"></i></span>学习看板</a>
+            <a href="chat.html" class="nav-item"><span class="icon"><i data-lucide="message-square"></i></span>智能对话</a>
+            <a href="generate.html" class="nav-item"><span class="icon"><i data-lucide="sparkles"></i></span>资源生成</a>
+            <a href="library.html" class="nav-item"><span class="icon"><i data-lucide="library"></i></span>资源库</a>
+            <a href="pathway.html" class="nav-item"><span class="icon"><i data-lucide="share-2"></i></span>学习路径</a>
+            <a href="evaluate.html" class="nav-item"><span class="icon"><i data-lucide="clipboard-check"></i></span>学习评估</a>
+            <a href="profile.html" class="nav-item active"><span class="icon"><i data-lucide="circle-user"></i></span>个人中心</a>
+            <div class="sidebar-footer">
+                <div class="sidebar-user">
+                    <div class="sidebar-avatar" id="sidebar-avatar">?</div>
+                    <span class="user-info" id="user-info">加载中...</span>
+                </div>
+                <button class="btn-logout" data-action="logout">
+                    <i data-lucide="log-out" style="width:16px;height:16px;"></i>退出登录
+                </button>
+            </div>
         </nav>
 
         <main class="main">
@@ -256,7 +242,7 @@
 
                     <div class="tags-section">
                         <div class="tags-title">学习目标</div>
-                        <div style="background:#F5F7FA;border-radius:8px;padding:14px 16px;font-size:14px;color:#1A1A2E;line-height:1.6;" id="view-goal">暂无</div>
+                        <div style="background:#F7F8FC;border-radius:8px;padding:14px 16px;font-size:14px;color:#1E1E2E;line-height:1.6;" id="view-goal">暂无</div>
                     </div>
 
                     <div class="tags-section">
@@ -328,7 +314,7 @@
                         <div class="card-title">🔔 遗忘曲线复习提醒</div>
                         <p style="font-size:13px;color:#6B7280;margin-bottom:16px;">基于艾宾浩斯遗忘曲线，以下知识点建议及时复习：</p>
                         <div id="forgetting-list" style="display:flex;flex-direction:column;gap:10px;"></div>
-                        <div id="forgetting-empty" style="display:none;text-align:center;color:#43A047;padding:20px;font-size:14px;">🎉 所有知识点都在记忆窗口内，暂无需复习</div>
+                        <div id="forgetting-empty" style="display:none;text-align:center;color:#10B981;padding:20px;font-size:14px;">🎉 所有知识点都在记忆窗口内，暂无需复习</div>
                     </div>
 
                     <!-- 学习行为分类 + 资源使用情况 -->
@@ -419,7 +405,11 @@
     </div>
 
     <script type="module">
-        import { isLoggedIn, getUserId, getProfile, updateProfile, getQuizAttempts, getLearningAnalytics } from './assets/api.js?v=2';
+        import { showToast } from './assets/toast.js';
+        import { showDialog } from './assets/dialog.js';
+        import { registerActions } from './assets/button.js';
+        import { initCommandPalette } from './assets/command.js';
+        import { isLoggedIn, getUserId, clearAuth, getProfile, updateProfile, getQuizAttempts, getLearningAnalytics } from './assets/api.js?v=2';
         
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
@@ -482,11 +472,11 @@
             btn.textContent = '保存中...';
             try {
                 await updateProfile(userId, data);
-                alert('保存成功！');
+                showToast('保存成功！', 'success');
                 loadProfile();
                 document.querySelectorAll('.tab')[0].click();
             } catch (e) {
-                alert('保存失败，请稍后重试');
+                showToast('保存失败，请稍后重试', 'error');
             } finally {
                 btn.disabled = false;
                 btn.textContent = '保存修改';
@@ -565,7 +555,7 @@
                 series: [
                     {
                         name: '学习时长(分钟)', type: 'bar', data: minutes,
-                        itemStyle: { color: '#1976D2', borderRadius: [4, 4, 0, 0] },
+                        itemStyle: { color: '#4F6EF7', borderRadius: [4, 4, 0, 0] },
                         barMaxWidth: 20,
                     },
                     {
@@ -593,8 +583,8 @@
                     indicator: radarData.indicators,
                     shape: 'polygon',
                     splitNumber: 4,
-                    axisName: { color: '#1A1A2E', fontSize: 11 },
-                    splitArea: { areaStyle: { color: ['#fff', '#F5F7FA', '#EEF4FB', '#E3F2FD'] } },
+                    axisName: { color: '#1E1E2E', fontSize: 11 },
+                    splitArea: { areaStyle: { color: ['#fff', '#F7F8FC', '#FAFBFF', '#EEF1FE'] } },
                 },
                 series: [{
                     type: 'radar',
@@ -602,8 +592,8 @@
                         value: radarData.values,
                         name: '知识掌握度',
                         areaStyle: { color: 'rgba(25,118,210,0.2)' },
-                        lineStyle: { color: '#1976D2', width: 2 },
-                        itemStyle: { color: '#1976D2' },
+                        lineStyle: { color: '#4F6EF7', width: 2 },
+                        itemStyle: { color: '#4F6EF7' },
                     }]
                 }]
             });
@@ -620,9 +610,9 @@
                 return;
             }
             const urgencyConfig = {
-                high: { color: '#E53935', bg: '#FFEBEE', icon: '🔴', label: '紧急' },
+                high: { color: '#EF4444', bg: '#FEF2F2', icon: '🔴', label: '紧急' },
                 medium: { color: '#FB8C00', bg: '#FFF3E0', icon: '🟡', label: '建议' },
-                low: { color: '#43A047', bg: '#E8F5E9', icon: '🟢', label: '可选' },
+                low: { color: '#10B981', bg: '#E8F5E9', icon: '🟢', label: '可选' },
             };
             container.innerHTML = needsReview.slice(0, 10).map(item => {
                 const cfg = urgencyConfig[item.urgency] || urgencyConfig.low;
@@ -630,7 +620,7 @@
                     <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:${cfg.bg};border-radius:8px;border-left:4px solid ${cfg.color};">
                         <span style="font-size:16px;">${cfg.icon}</span>
                         <div style="flex:1;">
-                            <div style="font-size:14px;font-weight:500;color:#1A1A2E;">${item.kp_name}</div>
+                            <div style="font-size:14px;font-weight:500;color:#1E1E2E;">${item.kp_name}</div>
                             <div style="font-size:12px;color:#6B7280;margin-top:2px;">距上次学习 ${item.days_since_last} 天 | 已学 ${item.study_count} 次</div>
                         </div>
                         <span style="font-size:12px;font-weight:600;color:${cfg.color};background:#fff;padding:4px 10px;border-radius:12px;border:1px solid ${cfg.color};">${cfg.label}复习</span>
@@ -646,7 +636,7 @@
                 return;
             }
             const icons = { view: '👁️', quiz: '✏️', complete: '✅', stay: '⏱️' };
-            const colors = { view: '#1976D2', quiz: '#FB8C00', complete: '#43A047', stay: '#607D8B' };
+            const colors = { view: '#4F6EF7', quiz: '#FB8C00', complete: '#10B981', stay: '#607D8B' };
             const totalCount = breakdown.reduce((s, b) => s + b.count, 0) || 1;
             container.innerHTML = breakdown.map(b => {
                 const pct = Math.round(b.count / totalCount * 100);
@@ -658,10 +648,10 @@
                         <span style="font-size:18px;">${icon}</span>
                         <div style="flex:1;">
                             <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                                <span style="font-size:13px;font-weight:500;color:#1A1A2E;">${b.label}</span>
+                                <span style="font-size:13px;font-weight:500;color:#1E1E2E;">${b.label}</span>
                                 <span style="font-size:12px;color:#6B7280;">${b.count}次${timeInfo}</span>
                             </div>
-                            <div style="height:6px;background:#E0E6ED;border-radius:3px;overflow:hidden;">
+                            <div style="height:6px;background:#E5E7EB;border-radius:3px;overflow:hidden;">
                                 <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;"></div>
                             </div>
                         </div>
@@ -677,7 +667,7 @@
                 return;
             }
             const icons = { doc: '📄', mindmap: '🧠', quiz: '📝', code: '💻', summary: '📖' };
-            const colors = { doc: '#1976D2', mindmap: '#7B1FA2', quiz: '#FB8C00', code: '#00897B', summary: '#43A047' };
+            const colors = { doc: '#4F6EF7', mindmap: '#7B1FA2', quiz: '#FB8C00', code: '#00897B', summary: '#10B981' };
             const totalCount = usage.reduce((s, u) => s + u.count, 0) || 1;
             container.innerHTML = usage.map(u => {
                 const pct = Math.round(u.count / totalCount * 100);
@@ -690,10 +680,10 @@
                         <span style="font-size:18px;">${icon}</span>
                         <div style="flex:1;">
                             <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                                <span style="font-size:13px;font-weight:500;color:#1A1A2E;">${u.label}</span>
+                                <span style="font-size:13px;font-weight:500;color:#1E1E2E;">${u.label}</span>
                                 <span style="font-size:12px;color:#6B7280;">使用${u.count}次 | ${resInfo}${timeInfo} (${pct}%)</span>
                             </div>
-                            <div style="height:6px;background:#E0E6ED;border-radius:3px;overflow:hidden;">
+                            <div style="height:6px;background:#E5E7EB;border-radius:3px;overflow:hidden;">
                                 <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;"></div>
                             </div>
                         </div>
@@ -725,23 +715,23 @@
                 // 跳转链接
                 let linkHtml = '';
                 if (a.action === 'view' && a.resource_id) {
-                    linkHtml = `<a href="./library.html?preview=${a.resource_id}" style="font-size:12px;color:#1976D2;text-decoration:none;white-space:nowrap;" title="查看资源">查看 →</a>`;
+                    linkHtml = `<a href="./library.html?preview=${a.resource_id}" style="font-size:12px;color:#4F6EF7;text-decoration:none;white-space:nowrap;" title="查看资源">查看 →</a>`;
                 } else if (a.action === 'quiz' && a.kp_id) {
-                    linkHtml = `<a href="./evaluate.html?tab=history&kp_id=${encodeURIComponent(a.kp_id)}" style="font-size:12px;color:#1976D2;text-decoration:none;white-space:nowrap;" title="查看答题历史">历史 →</a>`;
+                    linkHtml = `<a href="./evaluate.html?tab=history&kp_id=${encodeURIComponent(a.kp_id)}" style="font-size:12px;color:#4F6EF7;text-decoration:none;white-space:nowrap;" title="查看答题历史">历史 →</a>`;
                 } else if (a.resource_id) {
-                    linkHtml = `<a href="./library.html?preview=${a.resource_id}" style="font-size:12px;color:#1976D2;text-decoration:none;white-space:nowrap;" title="查看资源">查看 →</a>`;
+                    linkHtml = `<a href="./library.html?preview=${a.resource_id}" style="font-size:12px;color:#4F6EF7;text-decoration:none;white-space:nowrap;" title="查看资源">查看 →</a>`;
                 } else if (a.kp_id) {
-                    linkHtml = `<a href="./pathway.html?tab=pathways" style="font-size:12px;color:#1976D2;text-decoration:none;white-space:nowrap;" title="查看我的路径">路径 →</a>`;
+                    linkHtml = `<a href="./pathway.html?tab=pathways" style="font-size:12px;color:#4F6EF7;text-decoration:none;white-space:nowrap;" title="查看我的路径">路径 →</a>`;
                 }
 
                 return `
-                    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#F5F7FA;border-radius:8px;">
+                    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#F7F8FC;border-radius:8px;">
                         <span style="font-size:18px;">${icon}</span>
                         <div style="flex:1;min-width:0;">
                             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                                <span style="font-size:13px;font-weight:500;color:#1A1A2E;">${a.label}</span>
+                                <span style="font-size:13px;font-weight:500;color:#1E1E2E;">${a.label}</span>
                                 ${kpInfo}
-                                ${dur ? `<span style="font-size:12px;color:#1976D2;background:#E3F2FD;padding:2px 8px;border-radius:10px;">⏱${dur}</span>` : ''}
+                                ${dur ? `<span style="font-size:12px;color:#4F6EF7;background:#EEF1FE;padding:2px 8px;border-radius:10px;">⏱${dur}</span>` : ''}
                             </div>
                             ${resLabel ? `<div style="font-size:12px;color:#6B7280;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${resLabel}</div>` : ''}
                         </div>
@@ -763,15 +753,15 @@
             const sorted = [...quizMastery].sort((a, b) => (a.mastery_score || a.accuracy) - (b.mastery_score || b.accuracy));
             container.innerHTML = sorted.map(m => {
                 const score = m.mastery_score !== undefined ? m.mastery_score : m.accuracy;
-                let color = '#E53935';
-                if (score >= 80) color = '#43A047';
+                let color = '#EF4444';
+                if (score >= 80) color = '#10B981';
                 else if (score >= 60) color = '#FB8C00';
                 const avgTime = m.avg_seconds ? `${m.avg_seconds}s` : '-';
                 const detail = `正确率:${m.accuracy}% | 平均用时:${avgTime} | 答题:${m.correct}/${m.total}`;
                 return `
                     <div style="display:flex;align-items:center;gap:12px;" title="${detail}">
-                        <div style="min-width:140px;font-size:13px;font-weight:500;color:#1A1A2E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${m.kp_name}">${m.kp_name}</div>
-                        <div style="flex:1;height:10px;background:#E0E6ED;border-radius:5px;overflow:hidden;position:relative;">
+                        <div style="min-width:140px;font-size:13px;font-weight:500;color:#1E1E2E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${m.kp_name}">${m.kp_name}</div>
+                        <div style="flex:1;height:10px;background:#E5E7EB;border-radius:5px;overflow:hidden;position:relative;">
                             <div style="height:100%;width:${score}%;background:${color};border-radius:5px;transition:width 0.3s;"></div>
                         </div>
                         <div style="min-width:110px;font-size:12px;color:${color};font-weight:600;text-align:right;">${score}分 (正${m.accuracy}%|时${m.time_score || 50})</div>
@@ -779,6 +769,12 @@
                 `;
             }).join('');
         }
+
+        // 注册操作
+        registerActions({
+            logout: () => { clearAuth(); window.location.href = 'auth.html'; },
+        });
+        initCommandPalette();
 
         document.getElementById('save-btn').addEventListener('click', handleSave);
         loadProfile();
