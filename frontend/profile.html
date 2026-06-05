@@ -666,8 +666,8 @@
                 container.innerHTML = '<span style="color:#6B7280;font-size:13px;">暂无资源使用记录</span>';
                 return;
             }
-            const icons = { doc: '📄', mindmap: '🧠', quiz: '📝', code: '💻', summary: '📖' };
-            const colors = { doc: '#4F6EF7', mindmap: '#7B1FA2', quiz: '#FB8C00', code: '#00897B', summary: '#10B981' };
+            const icons = { doc: '📄', mindmap: '🧠', quiz: '📝', code: '💻', summary: '📖', animation: '🎬' };
+            const colors = { doc: '#4F6EF7', mindmap: '#7B1FA2', quiz: '#FB8C00', code: '#00897B', summary: '#10B981', animation: '#C77B3C' };
             const totalCount = usage.reduce((s, u) => s + u.count, 0) || 1;
             container.innerHTML = usage.map(u => {
                 const pct = Math.round(u.count / totalCount * 100);
@@ -699,8 +699,8 @@
                 return;
             }
             const icons = { view: '👁️', quiz: '✏️', complete: '✅', stay: '⏱️' };
-            const typeIcons = { doc: '📄', mindmap: '🧠', quiz: '📝', code: '💻', summary: '📖' };
-            const typeLabels = { doc: '文档讲义', mindmap: '思维导图', quiz: '测验题', code: '代码示例', summary: '知识总结' };
+            const typeIcons = { doc: '📄', mindmap: '🧠', quiz: '📝', code: '💻', summary: '📖', animation: '🎬' };
+            const typeLabels = { doc: '文档讲义', mindmap: '思维导图', quiz: '测验题', code: '代码示例', summary: '知识总结', animation: '动画演示' };
 
             container.innerHTML = activities.map(a => {
                 const icon = icons[a.action] || '📌';

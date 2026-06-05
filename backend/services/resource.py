@@ -100,9 +100,9 @@ async def list_resources(
 
 
 async def delete_resource(resource_id: int, db: AsyncSession) -> bool:
-    """物理删除资源元数据（先删所有引用它的子表行，再删 resource_meta）。"""
-    from backend.db.models import GenerationTask, QuizItem, QuizAttempt
-    from sqlalchemy import select as sa_select, delete as sa_delete
+    """物理删除资源元数据（先删/断开所有引用它的子表行，再删 resource_meta）。"""
+    from backend.db.models import GenerationTask, QuizItem, QuizAttempt, LearningRecord
+    from sqlalchemy import select as sa_select, delete as sa_delete, update as sa_update
 
     # quiz_attempt → quiz_item → resource_meta（需按依赖顺序删）
     quiz_item_ids_result = await db.execute(
@@ -113,6 +113,12 @@ async def delete_resource(resource_id: int, db: AsyncSession) -> bool:
         await db.execute(sa_delete(QuizAttempt).where(QuizAttempt.quiz_item_id.in_(quiz_item_ids)))
     await db.execute(sa_delete(QuizItem).where(QuizItem.resource_id == resource_id))
     await db.execute(sa_delete(GenerationTask).where(GenerationTask.resource_id == resource_id))
+    # learning_record.resource_id 可为 NULL：保留学习行为记录，仅断开对该资源的引用
+    await db.execute(
+        sa_update(LearningRecord)
+        .where(LearningRecord.resource_id == resource_id)
+        .values(resource_id=None)
+    )
     return await delete_by_id(db, ResourceMeta, resource_id)
 
 

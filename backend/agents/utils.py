@@ -462,7 +462,7 @@ async def retrieve_context(
 
     # 优先命中缓存
     if cache_key in _retrieval_cache:
-        logger.info("[%s] RAG 命中缓存，跳过检索", agent_label)
+        logger.info("[%s] RAG 命中缓存，跳过检索" % agent_label)
         return _retrieval_cache[cache_key]
 
     cfg = config.rag

@@ -271,7 +271,7 @@
 
         function formatRecordText(r) {
             const t = r.resource_type || '';
-            const typeMap = { doc:'学习文档', mindmap:'思维导图', quiz:'测验', code:'代码示例', summary:'要点总结' };
+            const typeMap = { doc:'学习文档', mindmap:'思维导图', quiz:'测验', code:'代码示例', summary:'要点总结', animation:'动画演示' };
             const typeName = typeMap[t] || t || '资源';
             const title = r.title || r.resource_title || r.kp_name || '';
             if (title) return '学习了' + typeName + '《' + title + '》';

@@ -892,7 +892,7 @@ async def get_resource_stats(user_id: int, db: AsyncSession = Depends(get_sessio
         .where(ResourceMeta.user_id == user_id)
         .group_by(ResourceMeta.resource_type)
     )
-    stats = {rt: 0 for rt in ["doc", "mindmap", "quiz", "code", "summary"]}
+    stats = {rt: 0 for rt in ["doc", "mindmap", "quiz", "code", "summary", "animation"]}
     for rt, cnt in rows.all():
         if rt in stats:
             stats[rt] = cnt
@@ -1528,7 +1528,6 @@ async def delete_document(
     db: AsyncSession = Depends(get_session),
 ):
     """删除文档（同时从向量库移除）。"""
-    from backend.db.crud import delete_by_id
     from backend.db.vector import delete_by_doc_id
 
     # 校验文档归属
@@ -1542,7 +1541,8 @@ async def delete_document(
     except Exception:
         pass
 
-    await delete_by_id(db, ResourceMeta, resource.id)
+    # 复用 delete_resource：统一清理 quiz/task/learning_record 等子表，避免外键约束错误
+    await resource_svc.delete_resource(resource.id, db)
     return {"deleted": True}
 
 
@@ -1997,7 +1997,7 @@ async def get_learning_analytics(
         ).group_by(ResourceMeta.resource_type)
     )
     resource_usage = []
-    type_labels = {"doc": "文档讲义", "mindmap": "思维导图", "quiz": "测验题", "code": "代码示例", "summary": "知识总结"}
+    type_labels = {"doc": "文档讲义", "mindmap": "思维导图", "quiz": "测验题", "code": "代码示例", "summary": "知识总结", "animation": "动画演示"}
     for row in res_rows.all():
         rt = row.resource_type.value if hasattr(row.resource_type, 'value') else row.resource_type
         resource_usage.append({

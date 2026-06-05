@@ -182,6 +182,7 @@ def route_by_resource_type(state: AgentState) -> str:
         ResourceType.mindmap: "mindmap_agent",
         ResourceType.quiz: "quiz_agent",
         ResourceType.code: "code_agent",
+        ResourceType.animation: "anim_agent",
         ResourceType.summary: "summary_agent",
         ResourceType.kg: "kg_agent",
     }

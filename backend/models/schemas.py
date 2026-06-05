@@ -22,6 +22,7 @@ class ResourceType(str, Enum):
     quiz = "quiz"
     code = "code"
     summary = "summary"
+    animation = "animation"
     kg = "kg"
 
 

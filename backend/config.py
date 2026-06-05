@@ -247,6 +247,12 @@ class CodeAgentConfig(BaseModel):
     max_tokens: int = 5000
 
 
+class AnimAgentConfig(BaseModel):
+    """Animation Agent 配置（基于 p5.js 的教学动画生成）"""
+    temperature: float = 0.4
+    max_tokens: int = 6000
+
+
 class DocAgentConfig(BaseModel):
     """Doc Agent 配置"""
     temperature: float = 0.7
@@ -313,6 +319,7 @@ class AgentsConfig(BaseModel):
     """所有 Agent 配置汇总"""
     clarify: ClarifyAgentConfig = Field(default_factory=ClarifyAgentConfig)
     code: CodeAgentConfig = Field(default_factory=CodeAgentConfig)
+    anim: AnimAgentConfig = Field(default_factory=AnimAgentConfig)
     doc: DocAgentConfig = Field(default_factory=DocAgentConfig)
     mindmap: MindmapAgentConfig = Field(default_factory=MindmapAgentConfig)
     planner: PlannerAgentConfig = Field(default_factory=PlannerAgentConfig)

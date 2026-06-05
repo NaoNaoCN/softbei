@@ -13,6 +13,7 @@ from langgraph.graph import END, StateGraph
 from backend.agents import (
     clarify_agent,
     code_agent,
+    anim_agent,
     doc_agent,
     kg_agent,
     mindmap_agent,
@@ -78,6 +79,7 @@ def build_graph() -> StateGraph:
     graph.add_node("mindmap_agent", mindmap_agent.run)
     graph.add_node("quiz_agent", quiz_agent.run)
     graph.add_node("code_agent", code_agent.run)
+    graph.add_node("anim_agent", anim_agent.run)
     graph.add_node("summary_agent", summary_agent.run)
     graph.add_node("safety_agent", safety_agent.run)
     graph.add_node("recommend_agent", recommend_agent.run)
@@ -106,6 +108,7 @@ def build_graph() -> StateGraph:
             "mindmap_agent": "mindmap_agent",
             "quiz_agent": "quiz_agent",
             "code_agent": "code_agent",
+            "anim_agent": "anim_agent",
             "summary_agent": "summary_agent",
             "kg_agent": "kg_agent",
             "recommend_agent": "recommend_agent",
@@ -114,7 +117,7 @@ def build_graph() -> StateGraph:
     )
 
     # 各生成 Agent → safety_agent
-    for agent_name in ["doc_agent", "mindmap_agent", "quiz_agent", "code_agent", "summary_agent"]:
+    for agent_name in ["doc_agent", "mindmap_agent", "quiz_agent", "code_agent", "anim_agent", "summary_agent"]:
         graph.add_edge(agent_name, "safety_agent")
 
     # safety → recommend → END

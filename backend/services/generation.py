@@ -113,6 +113,7 @@ async def run_generation(
                 or draft.startswith("思维导图生成失败")
                 or draft.startswith("题目生成失败")
                 or draft.startswith("代码生成失败")
+                or draft.startswith("动画生成失败")
                 or draft.startswith("总结生成失败")
                 or not draft
             )
@@ -207,6 +208,23 @@ def _parse_code_block(draft: str) -> tuple[str, str]:
     return draft.strip(), "python"
 
 
+def _parse_anim_block(draft: str) -> str:
+    """
+    从 LLM 返回的内容中提取 p5.js 动画 sketch 源码。
+    优先取 ```js/javascript 代码块；找不到 fence 则退回裸文本。
+    要求最终至少包含 defineAnimation 调用。
+    """
+    # 优先匹配显式标注 js/javascript 的代码块
+    blocks = re.findall(r"```(?:javascript|js)?\s*\n([\s\S]*?)```", draft, re.IGNORECASE)
+    for code in blocks:
+        if "defineAnimation" in code:
+            return code.strip()
+    if blocks:
+        return blocks[-1].strip()
+    # 无 fence：退回裸文本（可能 LLM 直接输出了 defineAnimation(...)）
+    return draft.strip()
+
+
 async def _persist_content(
     task_id: int,
     resource_type: ResourceType,
@@ -230,6 +248,14 @@ async def _persist_content(
     elif resource_type == ResourceType.code:
         code_text, language = _parse_code_block(draft)
         content_json = {"code": code_text, "language": language}
+        await update_by_id(
+            db, ResourceMeta, resource_id,
+            {"content": draft, "content_json": content_json},
+        )
+
+    elif resource_type == ResourceType.animation:
+        sketch = _parse_anim_block(draft)
+        content_json = {"library": "p5", "code": sketch}
         await update_by_id(
             db, ResourceMeta, resource_id,
             {"content": draft, "content_json": content_json},

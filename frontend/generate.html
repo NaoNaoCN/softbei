@@ -335,6 +335,11 @@
                                 <span class="form-radio-icon"><i data-lucide="layout-list"></i></span>
                                 <span class="form-radio-text">知识总结</span>
                             </label>
+                            <label class="form-radio" onclick="toggleCheckbox(this)">
+                                <input type="checkbox" name="resource_type" value="animation">
+                                <span class="form-radio-icon"><i data-lucide="play-circle"></i></span>
+                                <span class="form-radio-text">动画演示</span>
+                            </label>
                         </div>
                     </div>
 
@@ -656,7 +661,7 @@
             poll();
         }
 
-        const TYPE_LABELS = { doc: '文档', mindmap: '思维导图', quiz: '测验题', code: '代码', summary: '总结' };
+        const TYPE_LABELS = { doc: '文档', mindmap: '思维导图', quiz: '测验题', code: '代码', summary: '总结', animation: '动画演示' };
 
         function pollBatchTask(batchId, initialTasks, btn) {
             let attempts = 0;

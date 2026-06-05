@@ -236,6 +236,11 @@ agents:
     temperature: 0.4                     # 降低温度减少偏离资料（原 0.7）
     max_tokens: 5000                     # 代码输出通常较长
 
+  # -- 动画 Agent — 生成基于 p5.js 的教学动画 --
+  anim:
+    temperature: 0.4                     # 偏低温度保证生成的 sketch 可运行
+    max_tokens: 6000                     # 动画 sketch 源码通常较长
+
   # -- 文档 Agent — 生成学习文档 --
   doc:
     temperature: 0.3                     # 降低温度减少事实编造（原 0.7）

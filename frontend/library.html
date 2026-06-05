@@ -393,6 +393,30 @@
             font-size: 13px;
             color: #6B7280;
         }
+        .anim-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .anim-frame {
+            width: 100%;
+            height: 540px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            background: #fff;
+        }
+        .anim-src {
+            background: #0d1117;
+            color: #c9d1d9;
+            border-radius: 8px;
+            padding: 14px;
+            overflow: auto;
+            max-height: 540px;
+            font-family: 'Fira Code', Consolas, monospace;
+            font-size: 12.5px;
+            line-height: 1.5;
+        }
     </style>
 </head>
 <body>
@@ -447,6 +471,10 @@
                     <div class="stat-value" id="stat-summary">-</div>
                     <div class="stat-label">知识总结</div>
                 </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-animation">-</div>
+                    <div class="stat-label">动画演示</div>
+                </div>
             </div>
 
             <!-- Document Import -->
@@ -478,6 +506,7 @@
                     <option value="quiz">测验</option>
                     <option value="code">代码示例</option>
                     <option value="summary">知识总结</option>
+                    <option value="animation">动画演示</option>
                 </select>
                 <input type="text" class="filter-input" id="search-input" placeholder="搜索资源标题...">
                 <button class="btn-refresh" onclick="loadResources()">刷新</button>
@@ -571,8 +600,8 @@
         const pageSize = 20;
         let allResources = [];  // store for build kg
 
-        const TYPE_MAP = { doc: '学习文档', mindmap: '思维导图', quiz: '测验', code: '代码示例', summary: '知识总结' };
-        const ICON_MAP = { doc: '<i data-lucide="file-text"></i>', mindmap: '<i data-lucide="git-branch"></i>', quiz: '<i data-lucide="file-question"></i>', code: '<i data-lucide="terminal"></i>', summary: '<i data-lucide="layout-list"></i>' };
+        const TYPE_MAP = { doc: '学习文档', mindmap: '思维导图', quiz: '测验', code: '代码示例', summary: '知识总结', animation: '动画演示' };
+        const ICON_MAP = { doc: '<i data-lucide="file-text"></i>', mindmap: '<i data-lucide="git-branch"></i>', quiz: '<i data-lucide="file-question"></i>', code: '<i data-lucide="terminal"></i>', summary: '<i data-lucide="layout-list"></i>', animation: '<i data-lucide="play-circle"></i>' };
 
         async function loadStats() {
             const stats = await getResourceStats(userId);
@@ -582,6 +611,8 @@
             document.getElementById('stat-quiz').textContent = stats.quiz || 0;
             document.getElementById('stat-code').textContent = stats.code || 0;
             document.getElementById('stat-summary').textContent = stats.summary || 0;
+            var elAnim = document.getElementById('stat-animation');
+            if (elAnim) elAnim.textContent = stats.animation || 0;
         }
 
         async function loadResources() {
@@ -935,7 +966,101 @@
                     return `<div class="preview-quiz-item"><div class="preview-quiz-q">${i + 1}. ${escapeHtml(q.question || q.stem || '')}</div>${opts}${ans}${exp}</div>`;
                 }).join('');
             }
+            if (type === 'animation') {
+                const cj = r.content_json || {};
+                let sketch = cj.code || '';
+                // fallback: 从 content 提取 js 代码块
+                if (!sketch && r.content) {
+                    const m = r.content.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/i);
+                    sketch = m ? m[1].trim() : r.content;
+                }
+                if (!sketch || sketch.indexOf('defineAnimation') === -1) {
+                    return '<div style="color:#6B7280;">（暂无可渲染的动画）</div>';
+                }
+                // 用占位容器 + 工具栏；iframe 在 mountAnimation() 中挂载（沙箱渲染）
+                return `
+                    <div class="anim-toolbar">
+                        <button id="anim-viewsrc" class="btn-sm btn-sm-outline" type="button">查看源码</button>
+                        <span style="color:#9CA3AF;font-size:12px;">播放控制在动画画面内</span>
+                    </div>
+                    <iframe id="anim-frame" class="anim-frame" sandbox="allow-scripts" title="教学动画"></iframe>
+                    <pre id="anim-src" class="anim-src" style="display:none;"><code>${escapeHtml(sketch)}</code></pre>
+                `;
+            }
             return `<pre>${escapeHtml(JSON.stringify(r, null, 2))}</pre>`;
+        }
+
+        // 缓存 anim-runtime 源码（首次预览时拉取，内联进沙箱 iframe）
+        let __animRuntimeSrc = null;
+        async function getAnimRuntimeSrc() {
+            if (__animRuntimeSrc !== null) return __animRuntimeSrc;
+            try {
+                const resp = await fetch('./assets/anim-runtime.js');
+                __animRuntimeSrc = await resp.text();
+            } catch (e) {
+                __animRuntimeSrc = '';
+            }
+            return __animRuntimeSrc;
+        }
+
+        // 在沙箱 iframe 中挂载动画。sandbox="allow-scripts" 且不含 allow-same-origin，
+        // 生成的 sketch 无法访问父页面 localStorage(JWT) 或同源 API。
+        async function mountAnimation(r) {
+            const frame = document.getElementById('anim-frame');
+            if (!frame) return;
+            const cj = r.content_json || {};
+            let sketch = cj.code || '';
+            if (!sketch && r.content) {
+                const m = r.content.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/i);
+                sketch = m ? m[1].trim() : r.content;
+            }
+            const runtime = await getAnimRuntimeSrc();
+
+            // 看门狗：sketch 内若有同步死循环，无法被外部打断，但 p5 的 draw 循环
+            // 由 requestAnimationFrame 调度，单帧异常已在 runtime 内 try/catch 兜底。
+            const srcdoc = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+  html,body{margin:0;padding:0;background:#fff;overflow:hidden;font-family:system-ui,-apple-system,'Microsoft YaHei',sans-serif;}
+  #anim-root{position:relative;}
+  #anim-canvas-holder{position:relative;}
+  #anim-controls{display:flex;gap:8px;padding:8px 4px 0;}
+  #anim-controls button{font-size:13px;padding:4px 12px;border:1px solid #D1D5DB;background:#fff;border-radius:6px;cursor:pointer;color:#374151;}
+  #anim-controls button:hover{background:#F3F4F6;}
+  .katex{font-size:1em;}
+</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+</head><body>
+<div id="anim-root"><div id="anim-canvas-holder"></div></div>
+<div id="anim-controls">
+  <button id="anim-playpause" type="button">⏸ 暂停</button>
+  <button id="anim-replay" type="button">↻ 重播</button>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"><\/script>
+<script>${runtime}<\/script>
+<script>
+window.onerror=function(m){var e=document.getElementById('anim-root');if(e){e.innerHTML='<div style="padding:24px;color:#EF4444;font-size:14px">⚠️ 动画运行出错：'+m+'</div>';}return true;};
+try {
+${sketch}
+} catch(err){ window.onerror(err.message); }
+<\/script>
+</body></html>`;
+
+            frame.srcdoc = srcdoc;
+
+            // 工具栏按钮转发到 iframe（playpause/replay 在 iframe 内部已绑定，
+            // 父页面这两个按钮只是占位说明；真正控制按钮在 iframe 内）。
+            // 这里仅处理"查看源码"切换，它属于父页面。
+            const viewBtn = document.getElementById('anim-viewsrc');
+            const srcPre = document.getElementById('anim-src');
+            if (viewBtn && srcPre) {
+                viewBtn.onclick = function () {
+                    const showing = srcPre.style.display !== 'none';
+                    srcPre.style.display = showing ? 'none' : 'block';
+                    frame.style.display = showing ? 'block' : 'none';
+                    viewBtn.textContent = showing ? '查看源码' : '返回动画';
+                };
+            }
         }
 
         async function handlePreview(resourceId, resourceType) {
@@ -960,6 +1085,10 @@
                 body.innerHTML = renderPreview(r);
                 if (r.kp_id) {
                     window.__previewKpId = r.kp_id;
+                }
+                // 动画类型：挂载沙箱 iframe
+                if (r.resource_type === 'animation') {
+                    mountAnimation(r);
                 }
                 // 渲染 LaTeX 公式
                 if (typeof renderMathInElement !== 'undefined') {
