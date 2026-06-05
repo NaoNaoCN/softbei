@@ -365,3 +365,19 @@ study_plan:
   sequence:
     temperature: 0.3                     # 知识点排序 LLM 温度
     max_tokens: 2048
+
+# ----------------------------------------------------------
+# 邮件服务配置 — SMTP 发送邮件（验证、密码重置、学习报告）
+# ----------------------------------------------------------
+email:
+  smtp_host: "${SMTP_HOST}"
+  smtp_port: "${SMTP_PORT}"
+  smtp_username: "${SMTP_USERNAME}"
+  smtp_password: "${SMTP_PASSWORD}"
+  smtp_from: "${SMTP_FROM}"
+  smtp_use_tls: true
+  smtp_timeout: 30
+  max_retries: 3
+  verification_expire_minutes: 30
+  password_reset_expire_minutes: 15
+  rate_limit_send_per_hour: 5

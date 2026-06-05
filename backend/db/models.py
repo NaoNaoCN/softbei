@@ -40,6 +40,9 @@ class User(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(128), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(256), unique=True, nullable=True)
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     profile: Mapped["StudentProfile"] = relationship(back_populates="user", uselist=False)
@@ -466,5 +469,21 @@ class StudyPlanItem(Base):
     kp: Mapped["KGNode | None"] = relationship()
 
 
+# ----------------------------------------------------------
+# 10. EmailVerification（邮箱验证 & 密码重置 Token）
+# ----------------------------------------------------------
 
+class EmailVerification(Base):
+    __tablename__ = "email_verification"
+    __table_args__ = (
+        Index("ix_email_verification_user_id", "user_id"),
+        Index("ix_email_verification_token_hash", "token_hash"),
+    )
 
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=generate_id)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    purpose: Mapped[str] = mapped_column(String(32), nullable=False)  # "email_verify" | "password_reset"
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    used: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

@@ -152,12 +152,19 @@
                 <input type="password" id="login-password" class="form-input" placeholder="请输入密码" autocomplete="current-password">
             </div>
             <button class="btn-primary" id="login-btn" onclick="handleLogin()">登录</button>
+            <div style="text-align: center; margin-top: 16px;">
+                <a href="forgot-password.html" style="font-size: 13px; color: #4F6EF7; text-decoration: none;">忘记密码？</a>
+            </div>
         </div>
 
         <div id="register-form" style="display:none;">
             <div class="form-group">
                 <label class="form-label">用户名</label>
                 <input type="text" id="reg-username" class="form-input" placeholder="请输入用户名（3-20字符）" autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label class="form-label">邮箱（可选）</label>
+                <input type="email" id="reg-email" class="form-input" placeholder="请输入邮箱地址" autocomplete="email">
             </div>
             <div class="form-group">
                 <label class="form-label">密码</label>
@@ -233,6 +240,7 @@
 
         async function handleRegister() {
             const username = document.getElementById('reg-username').value.trim();
+            const email = document.getElementById('reg-email').value.trim();
             const password = document.getElementById('reg-password').value;
             const passwordConfirm = document.getElementById('reg-password-confirm').value;
             const btn = document.getElementById('register-btn');
@@ -256,12 +264,13 @@
 
             setLoading(btn, true);
             try {
-                const resp = await authRegister(username, password);
+                const resp = await authRegister(username, password, email || null);
                 if (resp && resp.id) {
                     showAlert('注册成功！请登录。', 'success');
                     switchTab('login');
                     document.getElementById('login-username').value = username;
                     document.getElementById('login-password').value = '';
+                    document.getElementById('reg-email').value = '';
                     document.getElementById('reg-password').value = '';
                     document.getElementById('reg-password-confirm').value = '';
                 } else {

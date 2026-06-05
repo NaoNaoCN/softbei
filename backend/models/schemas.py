@@ -68,11 +68,14 @@ class CognitiveStyle(str, Enum):
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=2, max_length=64)
     password: str = Field(..., min_length=6)
+    email: str | None = Field(default=None, max_length=256)
 
 # 出站数据（API 响应），包含 id/created_at，故意没有 password，且有 from_attributes=True 用于从 ORM 对象直接构造
 class UserOut(BaseModel):
     id: int
     username: str
+    email: str | None = None
+    email_verified: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -87,6 +90,23 @@ class TokenOut(BaseModel):
     user_id: int
     access_token: str
     token_type: str = "bearer"
+
+
+# ===========================================================
+# 邮箱验证 & 密码重置
+# ===========================================================
+
+class ForgotPasswordIn(BaseModel):
+    email: str = Field(..., max_length=256)
+
+
+class ResetPasswordIn(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=6)
+
+
+class EmailVerificationOut(BaseModel):
+    message: str
 
 
 # ===========================================================
