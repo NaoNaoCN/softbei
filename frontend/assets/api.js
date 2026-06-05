@@ -24,6 +24,7 @@ export function clearAuth() {
     localStorage.removeItem('user_id');
     localStorage.removeItem('access_token');
     localStorage.removeItem('session_id');
+    sessionStorage.removeItem('softbei_daily_shown');
 }
 
 export function isLoggedIn() {

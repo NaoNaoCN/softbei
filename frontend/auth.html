@@ -219,6 +219,7 @@
             try {
                 const result = await authLogin(username, password);
                 if (result && result.user_id) {
+                    sessionStorage.removeItem('softbei_daily_shown');
                     window.location.href = 'index.html';
                 } else {
                     showAlert('登录失败，请检查用户名和密码');
