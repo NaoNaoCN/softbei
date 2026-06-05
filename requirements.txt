@@ -35,6 +35,9 @@ markdown>=3.6
 pymupdf4llm>=0.3.0      # PDF → Markdown（保留标题/表格/列表结构）
 mammoth>=1.8.0           # DOCX → Markdown
 
+# ---- 邮件 ----
+aiosmtplib>=4.0.0
+
 # ---- 工具 ----
 python-dotenv>=1.0.0
 loguru>=0.7.0

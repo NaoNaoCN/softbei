@@ -1,0 +1,588 @@
+/* ============================================================
+   assistant.css — AI 学习助手浮窗 + 每日学习提醒
+   适配主题: 蓝紫渐变 · 柔和阴影 · 呼吸感
+   ============================================================ */
+
+/* ===== 悬浮机器人按钮 ===== */
+.ai-bot-fab {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4F6EF7 0%, #7C5CFC 100%);
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(79, 110, 247, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9000;
+    transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.3s;
+    animation: botBounce 3s ease-in-out infinite;
+}
+.ai-bot-fab:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 28px rgba(124, 92, 252, 0.5);
+    animation: none;
+}
+.ai-bot-fab .bot-avatar {
+    width: 36px;
+    height: 36px;
+    font-size: 28px;
+    line-height: 36px;
+    text-align: center;
+}
+.ai-bot-fab .bot-close {
+    display: none;
+    font-size: 24px;
+    color: #fff;
+}
+.ai-bot-fab.open .bot-avatar { display: none; }
+.ai-bot-fab.open .bot-close { display: block; }
+.ai-bot-fab.open { animation: none; }
+
+@keyframes botBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+}
+
+/* 未读红点 */
+.ai-bot-fab .bot-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #EF4444;
+    border: 2px solid #fff;
+    display: none;
+}
+.ai-bot-fab .bot-badge.show { display: block; }
+
+/* 气泡提示 */
+.ai-bot-bubble {
+    position: fixed;
+    bottom: 100px;
+    right: 32px;
+    background: #fff;
+    border: 1px solid #E5E7EB;
+    border-radius: 12px;
+    padding: 12px 16px;
+    box-shadow: 0 4px 16px rgba(124, 92, 252, 0.1);
+    font-size: 13px;
+    color: #1E1E2E;
+    max-width: 220px;
+    z-index: 9001;
+    opacity: 0;
+    transform: translateY(8px) scale(0.95);
+    transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none;
+}
+.ai-bot-bubble.show {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+.ai-bot-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -8px;
+    right: 24px;
+    width: 0; height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 8px solid #fff;
+}
+
+/* ===== 主面板 ===== */
+.ai-bot-panel {
+    position: fixed;
+    bottom: 104px;
+    right: 32px;
+    width: 360px;
+    height: 520px;
+    background: #fff;
+    border: 1px solid #E5E7EB;
+    border-radius: 20px;
+    box-shadow: 0 8px 32px rgba(124, 92, 252, 0.12), 0 2px 8px rgba(0,0,0,0.04);
+    z-index: 9002;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    transform: translateY(16px) scale(0.95);
+    transition: opacity 0.25s cubic-bezier(0.4,0,0.2,1), transform 0.25s cubic-bezier(0.4,0,0.2,1);
+    pointer-events: none;
+    overflow: hidden;
+}
+.ai-bot-panel.open {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+/* 面板头部 */
+.ai-panel-header {
+    background: linear-gradient(135deg, #4F6EF7 0%, #7C5CFC 100%);
+    color: #fff;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+.ai-panel-header .panel-bot-icon { font-size: 22px; }
+.ai-panel-header .panel-title { font-size: 15px; font-weight: 600; }
+.ai-panel-header .panel-subtitle { font-size: 11px; opacity: 0.8; margin-top: 1px; }
+
+/* 今日在线时长 */
+.ai-panel-today-time {
+    margin-left: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: rgba(255,255,255,0.15);
+    border-radius: 10px;
+    padding: 6px 12px;
+    min-width: 70px;
+}
+.ai-panel-today-time .today-time-icon {
+    font-size: 14px;
+    margin-bottom: 1px;
+}
+.ai-panel-today-time .today-time-value {
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.ai-panel-today-time .today-time-label {
+    font-size: 10px;
+    opacity: 0.85;
+}
+
+/* Tab 栏 */
+.ai-panel-tabs {
+    display: flex;
+    border-bottom: 1px solid #E5E7EB;
+    flex-shrink: 0;
+    background: #F8F7FC;
+}
+.ai-panel-tab {
+    flex: 1;
+    padding: 10px 0;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 500;
+    color: #6B7280;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+.ai-panel-tab:hover { color: #4F6EF7; background: #EEF1FE; }
+.ai-panel-tab.active {
+    color: #4F6EF7;
+    border-bottom-color: #4F6EF7;
+    background: #fff;
+}
+.ai-panel-tab .tab-icon { font-size: 16px; }
+
+/* Tab 内容 */
+.ai-panel-content {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+}
+.ai-tab-pane {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    padding: 14px 16px;
+    display: none;
+}
+.ai-tab-pane.active { display: block; }
+
+/* ===== Tab1: 迷你对话 ===== */
+.ai-chat-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+.ai-chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 0 8px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.ai-chat-msg {
+    max-width: 85%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.6;
+    word-break: break-word;
+}
+.ai-chat-msg.bot {
+    align-self: flex-start;
+    background: #EEF1FE;
+    color: #1E1E2E;
+    border-bottom-left-radius: 4px;
+}
+.ai-chat-msg.user {
+    align-self: flex-end;
+    background: linear-gradient(135deg, #4F6EF7 0%, #7C5CFC 100%);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+}
+.ai-chat-msg.typing {
+    background: #F5F3FA;
+    color: #9CA3AF;
+    font-style: italic;
+}
+.ai-chat-input-area {
+    display: flex;
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid #E5E7EB;
+    flex-shrink: 0;
+}
+.ai-chat-input {
+    flex: 1;
+    border: 1px solid #E5E7EB;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+    resize: none;
+    max-height: 60px;
+}
+.ai-chat-input:focus { border-color: #4F6EF7; box-shadow: 0 0 0 3px rgba(79,110,247,0.1); }
+.ai-chat-send-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4F6EF7 0%, #7C5CFC 100%);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    align-self: flex-end;
+    box-shadow: 0 2px 8px rgba(79,110,247,0.3);
+}
+.ai-chat-send-btn:hover { box-shadow: 0 4px 14px rgba(124,92,252,0.4); transform: scale(1.05); }
+.ai-chat-send-btn:disabled { background: #D1D5DB; box-shadow: none; cursor: not-allowed; transform: none; }
+
+/* 快捷提问 */
+.ai-chat-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+.ai-chat-suggestion {
+    padding: 5px 10px;
+    border: 1px solid #E5E7EB;
+    border-radius: 16px;
+    font-size: 11px;
+    color: #4F6EF7;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #fff;
+}
+.ai-chat-suggestion:hover {
+    background: #EEF1FE;
+    border-color: #4F6EF7;
+}
+
+/* ===== Tab2: 学情摘要 ===== */
+.ai-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+.ai-stat-card {
+    background: #F5F3FA;
+    border-radius: 12px;
+    padding: 12px;
+    text-align: center;
+}
+.ai-stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: #4F6EF7;
+}
+.ai-stat-label {
+    font-size: 11px;
+    color: #6B7280;
+    margin-top: 2px;
+}
+
+.ai-section-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #6B7280;
+    margin: 12px 0 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* 遗忘复习列表 */
+.ai-review-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.ai-review-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.ai-review-item:hover { opacity: 0.85; transform: translateX(2px); }
+.ai-review-item.urgency-high { background: #FFEBEE; border: 1px solid #EF9A9A; }
+.ai-review-item.urgency-medium { background: #FFF8E1; border: 1px solid #FFE082; }
+.ai-review-item.urgency-low { background: #E8F5E9; border: 1px solid #A5D6A7; }
+.ai-review-item .review-name {
+    font-weight: 500; color: #1E1E2E;
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ai-review-item .review-days {
+    font-size: 11px; color: #6B7280; margin-left: 8px; white-space: nowrap;
+}
+
+.ai-empty-state {
+    text-align: center;
+    padding: 16px;
+    color: #9CA3AF;
+    font-size: 13px;
+}
+
+/* ===== Tab3: 番茄钟 ===== */
+.ai-pomodoro {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 20px;
+}
+.ai-pomo-circle {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    border: 6px solid #E5E7EB;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    margin-bottom: 20px;
+}
+.ai-pomo-circle.running { border-color: #4F6EF7; }
+.ai-pomo-circle.resting { border-color: #10B981; }
+.ai-pomo-time {
+    font-size: 36px;
+    font-weight: 700;
+    color: #1E1E2E;
+    font-variant-numeric: tabular-nums;
+}
+.ai-pomo-label {
+    font-size: 12px;
+    color: #6B7280;
+    margin-top: 4px;
+}
+.ai-pomo-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+.ai-pomo-btn {
+    padding: 10px 24px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+}
+.ai-pomo-btn.primary { background: linear-gradient(135deg, #4F6EF7 0%, #7C5CFC 100%); color: #fff; box-shadow: 0 2px 8px rgba(79,110,247,0.3); }
+.ai-pomo-btn.primary:hover { box-shadow: 0 4px 14px rgba(124,92,252,0.4); }
+.ai-pomo-btn.danger { background: #FEF2F2; color: #EF4444; }
+.ai-pomo-btn.danger:hover { background: #FECACA; }
+.ai-pomo-btn.secondary { background: #F5F3FA; color: #6B7280; }
+.ai-pomo-btn.secondary:hover { background: #E5E7EB; }
+
+.ai-pomo-stats {
+    display: flex;
+    gap: 20px;
+    font-size: 12px;
+    color: #6B7280;
+}
+.ai-pomo-stats span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.ai-pomo-stats .pomo-count {
+    font-weight: 700;
+    color: #4F6EF7;
+    font-size: 14px;
+}
+
+.ai-pomo-settings {
+    margin-top: 16px;
+    width: 100%;
+    padding-top: 14px;
+    border-top: 1px solid #E5E7EB;
+}
+.ai-pomo-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: #6B7280;
+}
+.ai-pomo-setting-row input {
+    width: 50px;
+    border: 1px solid #E5E7EB;
+    border-radius: 6px;
+    padding: 4px 8px;
+    text-align: center;
+    font-size: 12px;
+    outline: none;
+}
+.ai-pomo-setting-row input:focus { border-color: #4F6EF7; box-shadow: 0 0 0 3px rgba(79,110,247,0.1); }
+
+/* ===== 每日学习提醒弹窗 ===== */
+.daily-reminder-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+}
+.daily-reminder-overlay.show {
+    opacity: 1;
+    pointer-events: auto;
+}
+.daily-reminder-card {
+    background: #fff;
+    border-radius: 20px;
+    padding: 32px;
+    max-width: 420px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 16px 60px rgba(124, 92, 252, 0.18), 0 4px 12px rgba(0,0,0,0.06);
+    transform: scale(0.9) translateY(20px);
+    transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+}
+.daily-reminder-overlay.show .daily-reminder-card {
+    transform: scale(1) translateY(0);
+}
+.daily-reminder-icon { font-size: 48px; margin-bottom: 12px; }
+.daily-reminder-greeting { font-size: 20px; font-weight: 700; color: #4F6EF7; margin-bottom: 8px; }
+.daily-reminder-time { font-size: 13px; color: #6B7280; margin-bottom: 20px; }
+.daily-reminder-section { text-align: left; margin-bottom: 16px; }
+.daily-reminder-section-title {
+    font-size: 13px; font-weight: 600; color: #1E1E2E; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 6px;
+}
+.daily-reminder-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.daily-reminder-tag { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; }
+.daily-reminder-tag.urgent { background: #FFEBEE; color: #E53935; }
+.daily-reminder-tag.medium { background: #FFF3E0; color: #F57C00; }
+.daily-reminder-tag.normal { background: #E8F5E9; color: #43A047; }
+.daily-reminder-tip {
+    background: #EEF1FE; border-radius: 12px; padding: 12px 16px;
+    font-size: 13px; color: #4F6EF7; line-height: 1.6; margin-bottom: 20px; text-align: left;
+}
+.daily-reminder-actions { display: flex; gap: 10px; justify-content: center; }
+.daily-reminder-btn {
+    padding: 10px 24px; border-radius: 10px; font-size: 14px;
+    font-weight: 600; cursor: pointer; border: none; transition: all 0.2s;
+}
+.daily-reminder-btn.primary { background: linear-gradient(135deg, #4F6EF7 0%, #7C5CFC 100%); color: #fff; box-shadow: 0 4px 14px rgba(79,110,247,0.3); }
+.daily-reminder-btn.primary:hover { box-shadow: 0 6px 20px rgba(124,92,252,0.4); transform: translateY(-1px); }
+.daily-reminder-btn.secondary { background: #F5F3FA; color: #6B7280; }
+.daily-reminder-btn.secondary:hover { background: #E5E7EB; }
+.daily-motivation { font-size: 13px; color: #9CA3AF; font-style: italic; margin-top: 12px; }
+
+/* ===== 每小时休息提醒弹窗 ===== */
+.rest-reminder-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 10001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+}
+.rest-reminder-overlay.show {
+    opacity: 1;
+    pointer-events: auto;
+}
+.rest-reminder-card {
+    background: #fff;
+    border-radius: 20px;
+    padding: 32px;
+    max-width: 380px;
+    width: 85%;
+    text-align: center;
+    box-shadow: 0 16px 60px rgba(124, 92, 252, 0.18), 0 4px 12px rgba(0,0,0,0.06);
+    transform: scale(0.9) translateY(20px);
+    transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+}
+.rest-reminder-overlay.show .rest-reminder-card {
+    transform: scale(1) translateY(0);
+}
+.rest-reminder-icon { font-size: 52px; margin-bottom: 16px; }
+.rest-reminder-title {
+    font-size: 18px; font-weight: 700; color: #4F6EF7; margin-bottom: 8px;
+}
+.rest-reminder-desc {
+    font-size: 14px; color: #6B7280; line-height: 1.7; margin-bottom: 20px;
+}
+.rest-reminder-hours-label {
+    font-size: 13px; color: #9CA3AF; margin-bottom: 4px;
+}
+.rest-reminder-hours {
+    font-size: 36px; font-weight: 800; color: #4F6EF7;
+    margin-bottom: 20px;
+}
+.rest-reminder-hours-unit {
+    font-size: 16px; font-weight: 600; margin-left: 4px;
+}
+.rest-reminder-btn {
+    padding: 12px 32px; border-radius: 10px; font-size: 14px;
+    font-weight: 600; cursor: pointer; border: none;
+    background: linear-gradient(135deg, #4F6EF7 0%, #7C5CFC 100%); color: #fff;
+    box-shadow: 0 4px 14px rgba(79,110,247,0.3);
+    transition: all 0.2s;
+}
+.rest-reminder-btn:hover { box-shadow: 0 6px 20px rgba(124,92,252,0.4); transform: translateY(-1px); }

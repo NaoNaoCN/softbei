@@ -6,6 +6,7 @@
     <title>生成资源 - 个性化学习助手</title>
     <script src="https://unpkg.com/lucide@0.460.0"></script>
     <link rel="stylesheet" href="./assets/styles.css">
+    <link rel="stylesheet" href="./assets/assistant.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         .main {
@@ -425,8 +426,8 @@
                 }
             });
 
-            // 根节点：没有被任何 IS_PART_OF/CONTAINS 指向为子节点的
-            const roots = graph.nodes.filter(n => !childSet.has(n.id));
+            // 根节点：没有被任何 IS_PART_OF/CONTAINS 指向为子节点的（使用 nodeMap 中的对象，包含 children）
+            const roots = graph.nodes.filter(n => !childSet.has(n.id)).map(n => nodeMap[n.id]);
 
             // 类型排序优先级
             const typePriority = { Course: 0, Chapter: 1, KnowledgePoint: 2, SubPoint: 3, Concept: 4 };
@@ -440,9 +441,14 @@
 
             // 预填充
             if (prefillKp) {
-                const decodedKp = decodeURIComponent(prefillKp);
-                // 找到匹配节点并展开路径
-                const target = graph.nodes.find(n => n.name === decodedKp || n.id === decodedKp);
+                // URLSearchParams.get() 已自动解码，先直接匹配，再尝试 decodeURIComponent 兼容旧链接
+                let target = graph.nodes.find(n => n.name === prefillKp || n.id === prefillKp);
+                if (!target) {
+                    try {
+                        const decodedKp = decodeURIComponent(prefillKp);
+                        target = graph.nodes.find(n => n.name === decodedKp || n.id === decodedKp);
+                    } catch(e) {}
+                }
                 if (target) selectNodeById(target.id);
             }
         }
@@ -870,5 +876,6 @@
     </script>
     <script>lucide.createIcons();</script>
     <script src="./assets/tracker.js"></script>
+    <script type="module" src="./assets/assistant.js"></script>
 </body>
 </html>

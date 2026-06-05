@@ -5,6 +5,7 @@
 /demo
 /media
 /uploaded_docs
+debug_emails/
 
 # 环境变量
 .env

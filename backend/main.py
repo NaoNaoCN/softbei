@@ -67,6 +67,8 @@ from backend.models.schemas import (
     ChatMessageIn,
     ChatMessageOut,
     ChatSessionOut,
+    EmailVerificationOut,
+    ForgotPasswordIn,
     GenerateRequest,
     GenerateTaskOut,
     KGGraphOut,
@@ -84,6 +86,7 @@ from backend.models.schemas import (
     QuizItemOut,
     QuizSubmitIn,
     QuestionType,
+    ResetPasswordIn,
     ResourceListOut,
     ResourceMetaOut,
     ResourceType,
@@ -95,9 +98,12 @@ from backend.models.schemas import (
     KGNodeType,
     KGRelation,
 )
+from backend.db.models import User, ChatSession, ChatMessage, KGNode, KGEdge, QuizItem, QuizAttempt, LearningPath, LearningPathItem, ResourceMeta, LearningRecord, EmailVerification
 from backend.services import profile as profile_svc
 from backend.services import resource as resource_svc
 from backend.services import document as document_svc
+from backend.email.sender import email_sender
+from backend.email.utils import generate_token, hash_token, expires_at
 from backend.db.models import User, ChatSession, ChatMessage, KGNode, KGEdge, QuizItem, QuizAttempt, LearningPath, LearningPathItem, ResourceMeta, LearningRecord
 
 # 内存任务字典：{task_id: {status, progress, stage, doc_id, error, result}}
@@ -222,6 +228,54 @@ async def health():
 # 用户认证
 # ===========================================================
 
+# 内存限流：{user_id: [timestamp, ...]}
+_rate_limit_store: dict[int, list[datetime]] = {}
+
+
+def _check_rate_limit(user_id: int) -> bool:
+    """检查用户是否超出每小时发送限制。返回 True 表示允许发送。"""
+    now = datetime.utcnow()
+    limit = app_config.email.rate_limit_send_per_hour
+    if limit <= 0:
+        return True
+    timestamps = _rate_limit_store.get(user_id, [])
+    timestamps = [t for t in timestamps if (now - t).total_seconds() < 3600]
+    _rate_limit_store[user_id] = timestamps
+    return len(timestamps) < limit
+
+
+def _record_rate_limit(user_id: int):
+    timestamps = _rate_limit_store.get(user_id, [])
+    timestamps.append(datetime.utcnow())
+    _rate_limit_store[user_id] = timestamps
+
+
+async def _send_verification_email(user_id: int, email: str):
+    """后台任务：发送邮箱验证邮件。使用独立 DB 会话。"""
+    try:
+        from backend.db.database import _session_factory
+        from backend.db.crud import insert as bg_insert, select_one as bg_select_one
+        if _session_factory is None:
+            logger.error("[Email] _session_factory is None, cannot send verification email")
+            return
+        token = generate_token()
+        token_hash_val = hash_token(token)
+        async with _session_factory() as bg_db:
+            await bg_insert(bg_db, EmailVerification, data={
+                "user_id": user_id,
+                "token_hash": token_hash_val,
+                "purpose": "email_verify",
+                "expires_at": expires_at("email_verify"),
+            })
+            await bg_db.commit()
+        user_for_email = await bg_select_one(bg_db, User, filters={"id": user_id})
+        username_for_email = user_for_email.username if user_for_email else email
+        await email_sender.send_verification(email, username_for_email, token)
+        logger.info("[Email] 验证邮件已发送至 {}", email)
+    except Exception as e:
+        logger.exception("[Email] 发送验证邮件失败: {}", e)
+
+
 @app.post("/auth/register", response_model=UserOut, tags=["auth"])
 async def register(body: UserCreate, db: AsyncSession = Depends(get_session)):
     """注册新用户。"""
@@ -231,10 +285,21 @@ async def register(body: UserCreate, db: AsyncSession = Depends(get_session)):
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already exists")
 
-    user = await insert(
-        db, User,
-        data={"username": body.username, "hashed_password": hash_password(body.password)},
-    )
+    if body.email:
+        existing_email = await select_one(db, User, filters={"email": body.email})
+        if existing_email:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+
+    user_data = {"username": body.username, "hashed_password": hash_password(body.password)}
+    if body.email:
+        user_data["email"] = body.email
+
+    user = await insert(db, User, data=user_data)
+
+    if body.email:
+        import asyncio as _asyncio
+        _asyncio.create_task(_send_verification_email(user.id, body.email))
+
     return UserOut.model_validate(user)
 
 
@@ -251,6 +316,168 @@ async def login(body: UserCreate, db: AsyncSession = Depends(get_session)):
     payload = {"sub": str(user.id), "exp": expire}
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
     return TokenOut(user_id=user.id, access_token=token, token_type="bearer")
+
+
+@app.post("/auth/send-verification", response_model=EmailVerificationOut, tags=["auth"])
+async def send_verification(
+    body: dict = Body(...),
+    db: AsyncSession = Depends(get_session),
+):
+    """重新发送邮箱验证邮件。"""
+    from backend.db.crud import select_one
+
+    user_id = body.get("user_id")
+    email = body.get("email")
+    if not user_id or not email:
+        raise HTTPException(status_code=400, detail="user_id and email are required")
+
+    user = await select_one(db, User, filters={"id": int(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.email_verified:
+        return EmailVerificationOut(message="邮箱已验证，无需重复验证")
+
+    if not _check_rate_limit(user.id):
+        raise HTTPException(status_code=429, detail="发送过于频繁，请稍后再试")
+
+    _record_rate_limit(user.id)
+
+    import asyncio as _asyncio
+    _asyncio.create_task(_send_verification_email(user.id, email))
+
+    return EmailVerificationOut(message="验证邮件已发送，请查收邮箱")
+
+
+@app.get("/auth/verify-email", tags=["auth"])
+async def verify_email(
+    token: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """验证邮箱 Token，重定向到前端验证结果页面。"""
+    from backend.db.crud import select_one, update_by_id
+    from fastapi.responses import RedirectResponse
+
+    token_hash_val = hash_token(token)
+    record = await select_one(db, EmailVerification, filters={
+        "token_hash": token_hash_val,
+        "purpose": "email_verify",
+    })
+
+    base_url = "/app/verify-email.html"
+
+    if not record:
+        return RedirectResponse(f"{base_url}?status=error&reason=invalid_token")
+    if record.used:
+        return RedirectResponse(f"{base_url}?status=already_verified")
+    if record.expires_at < datetime.utcnow():
+        return RedirectResponse(f"{base_url}?status=error&reason=expired")
+
+    await update_by_id(db, EmailVerification, record.id, data={"used": True})
+    await update_by_id(db, User, record.user_id, data={
+        "email_verified": True,
+        "email_verified_at": datetime.utcnow(),
+    })
+
+    return RedirectResponse(f"{base_url}?status=success", status_code=302)
+
+
+@app.post("/auth/forgot-password", response_model=EmailVerificationOut, tags=["auth"])
+async def forgot_password(
+    body: ForgotPasswordIn,
+    db: AsyncSession = Depends(get_session),
+):
+    """忘记密码：发送密码重置邮件。反枚举保护 — 无论邮箱是否存在都返回相同信息。"""
+    from backend.db.crud import select_one, insert as crud_insert
+
+    user = await select_one(db, User, filters={"email": body.email})
+    if user:
+        if _check_rate_limit(user.id):
+            _record_rate_limit(user.id)
+            token = generate_token()
+            token_hash_val = hash_token(token)
+            await crud_insert(db, EmailVerification, data={
+                "user_id": user.id,
+                "token_hash": token_hash_val,
+                "purpose": "password_reset",
+                "expires_at": expires_at("password_reset"),
+            })
+            import asyncio as _asyncio
+            _asyncio.create_task(email_sender.send_password_reset(body.email, user.username, token))
+
+    return EmailVerificationOut(message="如果该邮箱已注册，重置邮件已发送，请查收")
+
+
+@app.post("/auth/reset-password", response_model=EmailVerificationOut, tags=["auth"])
+async def reset_password(
+    body: ResetPasswordIn,
+    db: AsyncSession = Depends(get_session),
+):
+    """使用 Token 重置密码。"""
+    from backend.db.crud import select_one, update_by_id
+
+    token_hash_val = hash_token(body.token)
+    record = await select_one(db, EmailVerification, filters={
+        "token_hash": token_hash_val,
+        "purpose": "password_reset",
+    })
+
+    if not record:
+        raise HTTPException(status_code=400, detail="无效的重置链接")
+    if record.used:
+        raise HTTPException(status_code=400, detail="该链接已被使用")
+    if record.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="该链接已过期，请重新申请")
+
+    await update_by_id(db, EmailVerification, record.id, data={"used": True})
+    await update_by_id(db, User, record.user_id, data={
+        "hashed_password": hash_password(body.new_password),
+    })
+
+    return EmailVerificationOut(message="密码重置成功，请使用新密码登录")
+
+
+@app.post("/email/learning-report", tags=["email"])
+async def send_learning_report(
+    user_id: int,
+    db: AsyncSession = Depends(get_session),
+):
+    """发送学习报告邮件。"""
+    import sqlalchemy as sa
+
+    user = await db.execute(sa.select(User).where(User.id == user_id))
+    user = user.scalar_one_or_none()
+    if not user or not user.email:
+        raise HTTPException(status_code=400, detail="未设置邮箱")
+
+    # 统计数据
+    resource_count = (await db.execute(
+        sa.select(sa.func.count(ResourceMeta.id)).where(ResourceMeta.user_id == user_id)
+    )).scalar() or 0
+
+    quiz_attempts = await db.execute(
+        sa.select(
+            sa.func.count(QuizAttempt.id),
+            sa.func.sum(sa.case((QuizAttempt.is_correct == True, 1), else_=0)),
+        ).where(QuizAttempt.user_id == user_id)
+    )
+    quiz_total, quiz_correct = quiz_attempts.one()
+    mastery_pct = round(quiz_correct / quiz_total * 100) if quiz_total else 0
+
+    pathway_count = (await db.execute(
+        sa.select(sa.func.count(LearningPath.id)).where(LearningPath.user_id == user_id)
+    )).scalar() or 0
+
+    stats = {
+        "resource_count": resource_count,
+        "quiz_total": quiz_total or 0,
+        "quiz_correct": quiz_correct or 0,
+        "mastery_pct": mastery_pct,
+        "pathway_count": pathway_count,
+    }
+
+    import asyncio as _asyncio
+    _asyncio.create_task(email_sender.send_learning_report(user.email, user.username, stats))
+    return {"message": "学习报告邮件已发送"}
 
 
 # ===========================================================

@@ -24,6 +24,7 @@ export function clearAuth() {
     localStorage.removeItem('user_id');
     localStorage.removeItem('access_token');
     localStorage.removeItem('session_id');
+    sessionStorage.removeItem('softbei_daily_shown');
 }
 
 export function isLoggedIn() {
@@ -72,12 +73,14 @@ export async function authLogin(username, password) {
     }
 }
 
-export async function authRegister(username, password) {
+export async function authRegister(username, password, email = null) {
     try {
+        const body = { username, password };
+        if (email) body.email = email;
         const resp = await apiFetch('/auth/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
+            body: JSON.stringify(body)
         });
         return resp?.json();
     } catch (e) {

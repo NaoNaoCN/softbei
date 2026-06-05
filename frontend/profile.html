@@ -7,6 +7,7 @@
     <script src="https://unpkg.com/lucide@0.460.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <link rel="stylesheet" href="./assets/styles.css">
+    <link rel="stylesheet" href="./assets/assistant.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         .main { margin-left: var(--sidebar-width); padding: 32px 40px; flex: 1; }
@@ -623,7 +624,7 @@
                             <div style="font-size:14px;font-weight:500;color:#1E1E2E;">${item.kp_name}</div>
                             <div style="font-size:12px;color:#6B7280;margin-top:2px;">距上次学习 ${item.days_since_last} 天 | 已学 ${item.study_count} 次</div>
                         </div>
-                        <span style="font-size:12px;font-weight:600;color:${cfg.color};background:#fff;padding:4px 10px;border-radius:12px;border:1px solid ${cfg.color};">${cfg.label}复习</span>
+                        <span style="font-size:12px;font-weight:600;color:${cfg.color};background:#fff;padding:4px 10px;border-radius:12px;border:1px solid ${cfg.color};cursor:pointer;" onclick="location.href='generate.html?kp=${encodeURIComponent(item.kp_id || item.kp_name)}&type=doc'">前往复习</span>
                     </div>
                 `;
             }).join('');
@@ -782,5 +783,6 @@
     </script>
     <script>lucide.createIcons();</script>
     <script src="./assets/tracker.js"></script>
+    <script type="module" src="./assets/assistant.js"></script>
 </body>
 </html>

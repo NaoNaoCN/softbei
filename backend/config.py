@@ -12,7 +12,7 @@ from typing import Any
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # 加载项目根目录的 .env 文件（os.getenv() 优先于 .env）
 load_dotenv(Path(__file__).parent.parent / ".env", override=False)
@@ -232,6 +232,28 @@ class JWTConfig(BaseModel):
     expire_hours: int = 24
 
 
+class EmailConfig(BaseModel):
+    """邮件服务配置"""
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_use_tls: bool = True
+    smtp_timeout: int = 30
+    max_retries: int = 3
+    verification_expire_minutes: int = 30
+    password_reset_expire_minutes: int = 15
+    rate_limit_send_per_hour: int = 5
+
+    @field_validator("smtp_port", mode="before")
+    @classmethod
+    def _coerce_port(cls, v):
+        if v == "" or v is None:
+            return 587
+        return int(v)
+
+
 # ===========================================================
 # Agent 配置
 # ===========================================================
@@ -446,6 +468,7 @@ class Config(BaseModel):
     video_search: VideoSearchConfig = Field(default_factory=VideoSearchConfig)
     evaluation: EvaluationConfig = Field(default_factory=EvaluationConfig)
     study_plan: StudyPlanConfig = Field(default_factory=StudyPlanConfig)
+    email: EmailConfig = Field(default_factory=EmailConfig)
 
 
 # ===========================================================
