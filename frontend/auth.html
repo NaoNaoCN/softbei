@@ -3,118 +3,125 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 / 注册 - 个性化学习助手</title>
+    <title>登录 / 注册 · 智学实验室</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <script src="https://unpkg.com/lucide@0.460.0"></script>
+    <link rel="stylesheet" href="./assets/aurora.css">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #F7F8FC;
-            color: #1E1E2E;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        body { display: flex; align-items: center; justify-content: center; padding: 32px; }
+
+        .auth-card {
+            position: relative;
+            z-index: 1;
+            width: 440px;
+            max-width: 100%;
         }
-        .auth-container {
-            width: 420px;
-            background: #fff;
+        .auth-card .glass-body { padding: 40px; }
+
+        .auth-logo { text-align: center; margin-bottom: 28px; }
+        .auth-mark {
+            width: 60px; height: 60px; margin: 0 auto 18px;
             border-radius: 16px;
-            padding: 40px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            background: var(--neon);
+            display: grid; place-items: center;
+            color: #fff;
+            box-shadow: var(--shadow-neon), inset 0 0 14px rgba(255,255,255,0.35);
+            position: relative;
         }
-        .auth-logo {
-            text-align: center;
-            margin-bottom: 32px;
+        .auth-mark i { width: 28px; height: 28px; }
+        .auth-mark::after {
+            content: ''; position: absolute; inset: -6px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(199, 123, 60, 0.45);
+            animation: ripple 2.6s var(--ease) infinite;
         }
-        .auth-logo h1 {
-            font-size: 24px;
-            color: #4F6EF7;
-            font-weight: 700;
-        }
-        .auth-logo p {
-            font-size: 14px;
-            color: #4B5563;
-            margin-top: 8px;
-        }
-        .tabs {
+        .auth-logo h1 { font-family: var(--display); font-size: 24px; font-weight: 800; letter-spacing: -0.02em; color: var(--text-1); }
+        .auth-logo p { font-size: 13.5px; color: var(--text-2); margin-top: 6px; }
+
+        .auth-tabs {
             display: flex;
-            border-bottom: 2px solid #E5E7EB;
+            gap: 4px;
+            padding: 5px;
+            background: rgba(255, 255, 255, 0.45);
+            border: 1px solid var(--border-glass);
+            border-radius: var(--r-full);
             margin-bottom: 24px;
         }
-        .tab {
+        .auth-tab {
             flex: 1;
-            padding: 12px;
+            padding: 10px;
             text-align: center;
-            font-size: 15px;
-            font-weight: 500;
-            color: #4B5563;
-            cursor: pointer;
-            border-bottom: 3px solid transparent;
-            transition: all 0.2s;
-        }
-        .tab:hover { color: #4F6EF7; }
-        .tab.active {
-            color: #4F6EF7;
-            border-bottom-color: #4F6EF7;
-        }
-        .form-group {
-            margin-bottom: 16px;
-        }
-        .form-label {
-            display: block;
             font-size: 14px;
-            font-weight: 500;
-            margin-bottom: 6px;
+            font-weight: 600;
+            color: var(--text-2);
+            cursor: pointer;
+            border-radius: var(--r-full);
+            transition: all 0.25s var(--ease);
+            user-select: none;
         }
+        .auth-tab:hover { color: var(--text-1); }
+        .auth-tab.active {
+            color: #fff;
+            background: var(--neon);
+            box-shadow: 0 4px 14px rgba(199, 123, 60, 0.35);
+        }
+
+        .form-group { margin-bottom: 16px; }
+        .form-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-2); margin-bottom: 7px; }
         .form-input {
             width: 100%;
-            padding: 12px 14px;
-            border: 1px solid #E5E7EB;
-            border-radius: 8px;
+            padding: 13px 15px;
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid var(--border-glass);
+            border-radius: var(--r-md);
             font-size: 14px;
+            font-family: inherit;
+            color: var(--text-1);
             outline: none;
-            transition: all 0.2s;
+            transition: all 0.25s var(--ease);
         }
+        .form-input::placeholder { color: var(--text-3); }
         .form-input:focus {
-            border-color: #4F6EF7;
-            box-shadow: 0 0 0 3px rgba(25,118,210,0.1);
+            background: #fff;
+            border-color: var(--indigo);
+            box-shadow: 0 0 0 3px rgba(199, 123, 60, 0.16);
         }
-        .btn-primary {
+
+        .btn-submit {
             width: 100%;
-            padding: 14px;
-            background: #4F6EF7;
+            height: 48px;
+            margin-top: 6px;
+            background: var(--neon);
             color: #fff;
             border: none;
-            border-radius: 8px;
+            border-radius: var(--r-md);
             font-size: 15px;
-            font-weight: 600;
+            font-weight: 700;
+            font-family: inherit;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: transform 0.25s var(--spring), box-shadow 0.3s var(--ease);
+            box-shadow: 0 6px 20px rgba(199, 123, 60, 0.32);
         }
-        .btn-primary:hover { background: #3B55D9; }
-        .btn-primary:disabled { background: #BDBDBD; cursor: not-allowed; }
+        .btn-submit:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(199, 123, 60, 0.45); }
+        .btn-submit:active { transform: scale(0.97); }
+        .btn-submit:disabled { background: var(--text-4); box-shadow: none; cursor: not-allowed; transform: none; }
+
         .alert {
-            padding: 12px 16px;
-            border-radius: 8px;
-            font-size: 14px;
-            margin-bottom: 16px;
+            padding: 12px 15px;
+            border-radius: var(--r-md);
+            font-size: 13.5px;
+            margin-bottom: 18px;
             display: none;
+            border: 1px solid;
         }
-        .alert-success {
-            background: #E8F5E9;
-            border-left: 4px solid #10B981;
-            color: #2E7D32;
-        }
-        .alert-danger {
-            background: #FFEBEE;
-            border-left: 4px solid #EF4444;
-            color: #C62828;
-        }
+        .alert-success { background: rgba(110, 148, 102, 0.12); border-color: rgba(110, 148, 102, 0.35); color: #4F6F47; }
+        .alert-danger  { background: rgba(201, 96, 90, 0.12);  border-color: rgba(201, 96, 90, 0.35);  color: #A8423C; }
+
         .spinner {
             display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid rgba(255,255,255,0.3);
+            width: 16px; height: 16px;
+            border: 2px solid rgba(255,255,255,0.4);
             border-top-color: #fff;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
@@ -123,23 +130,25 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="auth-container">
+    <div class="aurora-bg"></div>
+    <div class="aurora-orb"></div>
+    <div class="aurora-grid"></div>
+
+    <div class="auth-card glass">
+      <div class="glass-body">
         <div class="auth-logo">
-            <div style="width:50px;height:50px;margin:0 auto 16px;border-radius:14px;background:var(--color-primary-gradient, linear-gradient(135deg,#4F6EF7,#7C5CFC));display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;font-weight:700;">S</div>
-            <h1>个性化学习助手</h1>
-            <p>登录后享受更多功能</p>
+            <div class="auth-mark"><i data-lucide="atom"></i></div>
+            <h1>智学实验室</h1>
+            <p>个性化资源生成与学习多智能体系统</p>
         </div>
 
         <div id="alert-box" class="alert"></div>
 
-        <div class="tabs">
-            <div class="tab active" id="tab-login" onclick="switchTab('login')">登录</div>
-            <div class="tab" id="tab-register" onclick="switchTab('register')">注册</div>
+        <div class="auth-tabs">
+            <div class="auth-tab active" id="tab-login" onclick="switchTab('login')">登录</div>
+            <div class="auth-tab" id="tab-register" onclick="switchTab('register')">注册</div>
         </div>
 
         <div id="login-form">
@@ -151,7 +160,7 @@
                 <label class="form-label">密码</label>
                 <input type="password" id="login-password" class="form-input" placeholder="请输入密码" autocomplete="current-password">
             </div>
-            <button class="btn-primary" id="login-btn" onclick="handleLogin()">登录</button>
+            <button class="btn-submit" id="login-btn" onclick="handleLogin()">登录</button>
         </div>
 
         <div id="register-form" style="display:none;">
@@ -167,8 +176,9 @@
                 <label class="form-label">确认密码</label>
                 <input type="password" id="reg-password-confirm" class="form-input" placeholder="请再次输入密码" autocomplete="new-password">
             </div>
-            <button class="btn-primary" id="register-btn" onclick="handleRegister()">注册</button>
+            <button class="btn-submit" id="register-btn" onclick="handleRegister()">注册</button>
         </div>
+      </div>
     </div>
 
     <script type="module">
@@ -287,5 +297,6 @@
         window.handleLogin = handleLogin;
         window.handleRegister = handleRegister;
     </script>
+    <script>lucide.createIcons();</script>
 </body>
 </html>

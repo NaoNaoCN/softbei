@@ -6,6 +6,8 @@
     <title>智能对话 - 个性化学习助手</title>
     <script src="https://unpkg.com/lucide@0.460.0"></script>
     <link rel="stylesheet" href="./assets/styles.css">
+    <link rel="stylesheet" href="./assets/aurora.css">
+    <link rel="stylesheet" href="./assets/aurora-bridge.css">
     <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
     <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
@@ -15,8 +17,8 @@
     <style>
         /* chat page overrides & specific styles */
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #F9FAFB;
+            font-family: var(--font);
+            background: var(--bg);
             color: var(--color-text);
             height: 100vh;
             overflow: hidden;
@@ -24,6 +26,7 @@
         .layout {
             display: flex;
             height: 100vh;
+            padding-top: 76px;   /* 为顶部悬浮胶囊导航留白 */
         }
 
         /* Chat Area */
@@ -31,55 +34,61 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            height: 100vh;
-            background: #F9FAFB;
-            margin-left: var(--sidebar-width);
+            height: calc(100vh - 76px);
+            background: transparent;
+            margin-left: 0;
+            min-width: 0;
         }
 
         /* Chat Header */
         .chat-header {
-            padding: 18px 28px;
-            border-bottom: 1px solid var(--color-border-light);
-            background: #fff;
+            padding: 16px 28px;
+            border-bottom: 1px solid var(--border-glass);
+            background: rgba(255, 255, 255, 0.55);
+            backdrop-filter: blur(20px) saturate(150%);
+            -webkit-backdrop-filter: blur(20px) saturate(150%);
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 13px;
         }
         .chat-header-icon {
-            width: 38px; height: 38px;
-            border-radius: 10px;
-            background: var(--color-primary-gradient);
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            width: 40px; height: 40px;
+            border-radius: 11px;
+            background: var(--neon);
+            display: grid;
+            place-items: center;
             color: #fff;
             flex-shrink: 0;
+            box-shadow: var(--shadow-neon), inset 0 0 12px rgba(255,255,255,0.3);
         }
+        .chat-header-icon i { width: 20px; height: 20px; }
         .chat-header-title {
-            font-size: 17px;
-            font-weight: 600;
-            color: var(--color-text);
+            font-family: var(--display);
+            font-size: 19px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            color: var(--text-1);
         }
         .chat-header-sub {
-            font-size: 12px;
-            color: var(--color-text-tertiary);
+            font-size: 12.5px;
+            color: var(--text-3);
             margin-top: 1px;
         }
 
         /* Onboarding Banner */
         .onboarding-banner {
-            padding: 12px 28px;
-            background: var(--color-primary-light);
-            border-bottom: 1px solid var(--color-border-light);
+            padding: 11px 28px;
+            background: rgba(199, 123, 60, 0.10);
+            border-bottom: 1px solid var(--border-glass);
             font-size: 13px;
-            color: var(--color-primary-hover);
+            color: var(--indigo);
         }
 
         /* Session Sidebar */
         .session-panel {
             width: 260px;
             border-right: 1px solid var(--color-border-light);
-            background: #FAFBFF;
+            background: rgba(255,255,255,0.35);
             display: flex;
             flex-direction: column;
             flex-shrink: 0;
@@ -130,7 +139,7 @@
             font-size: 13px;
             color: var(--color-text-secondary);
         }
-        .session-item:hover { background: #F0F4FF; color: var(--color-primary); }
+        .session-item:hover { background: #F5E9D8; color: var(--color-primary); }
         .session-item.active { background: var(--color-primary-light); color: var(--color-primary); font-weight: 600; }
         .session-title {
             font-size: 13px;
@@ -194,7 +203,7 @@
             line-height: 1.65;
         }
         .message.user .message-bubble {
-            background: #EEF1FE;
+            background: #F5E9D8;
             color: var(--color-text);
             border-bottom-right-radius: 6px;
         }
@@ -330,9 +339,9 @@
             font-family: var(--font-family);
             outline: none;
             transition: all var(--transition-base);
-            background: #F9FAFB;
+            background: transparent;
         }
-        .chat-input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(79,110,247,0.08); background: #fff; }
+        .chat-input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(199,123,60,0.14); background: #fff; }
         .chat-send {
             width: 44px;
             height: 44px;
@@ -364,36 +373,39 @@
     </style>
 </head>
 <body>
+    <script>
+        // 转场入场：若来自看板「开始」，立即铺暖色光幕（在首帧绘制前，避免闪烁），随后褪去
+        (function () {
+            try {
+                if (sessionStorage.getItem('warp_in') === '1') {
+                    sessionStorage.removeItem('warp_in');
+                    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                    if (!reduce) {
+                        document.documentElement.classList.add('warp-entering');
+                        var v = document.createElement('div');
+                        v.className = 'warp-veil warp-in-veil';
+                        v.style.opacity = '1';
+                        document.addEventListener('DOMContentLoaded', function () {
+                            document.body.appendChild(v);
+                            var layout = document.querySelector('.layout');
+                            if (layout) layout.classList.add('warp-in');
+                            setTimeout(function () { v.remove(); }, 700);
+                        });
+                    }
+                }
+            } catch (_) {}
+        })();
+    </script>
+    <div class="aurora-bg"></div>
+    <div class="aurora-orb"></div>
+    <div class="aurora-grid"></div>
     <div class="layout">
-        <!-- Sidebar -->
-        <nav class="sidebar" style="flex-shrink:0;">
-            <a href="index.html" class="sidebar-logo">
-                <div class="sidebar-logo-icon">S</div>
-                智能学习
-            </a>
-            <div class="sidebar-section-title">主菜单</div>
-            <a href="index.html" class="nav-item"><span class="icon"><i data-lucide="home"></i></span>学习看板</a>
-            <a href="chat.html" class="nav-item active"><span class="icon"><i data-lucide="message-square"></i></span>智能对话</a>
-            <a href="generate.html" class="nav-item"><span class="icon"><i data-lucide="sparkles"></i></span>资源生成</a>
-            <a href="library.html" class="nav-item"><span class="icon"><i data-lucide="library"></i></span>资源库</a>
-            <a href="pathway.html" class="nav-item"><span class="icon"><i data-lucide="share-2"></i></span>学习路径</a>
-            <a href="evaluate.html" class="nav-item"><span class="icon"><i data-lucide="clipboard-check"></i></span>学习评估</a>
-            <a href="profile.html" class="nav-item"><span class="icon"><i data-lucide="circle-user"></i></span>个人中心</a>
-            <div class="sidebar-footer">
-                <div class="sidebar-user">
-                    <div class="sidebar-avatar" id="sidebar-avatar">?</div>
-                    <span class="user-info" id="user-info">加载中...</span>
-                </div>
-                <button class="btn-logout" data-action="logout">
-                    <i data-lucide="log-out" style="width:16px;height:16px;"></i>退出登录
-                </button>
-            </div>
-        </nav>
 
         <!-- Chat Container -->
         <div class="chat-area">
             <!-- Header -->
             <div class="chat-header">
+                <div class="chat-header-icon"><i data-lucide="sparkles"></i></div>
                 <div>
                     <div class="chat-header-title">智能对话</div>
                     <div class="chat-header-sub">描述您的学习需求，AI 将自动生成相应资源</div>
@@ -439,12 +451,14 @@
         import { registerActions } from './assets/button.js';
         import { initCommandPalette } from './assets/command.js';
         import { registerPageShortcuts } from './assets/shortcut.js';
+        import { initCapNav } from './assets/nav.js';
 
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
         }
 
         const userId = getUserId();
+        initCapNav('chat');
         let activeSessionId = null;
         let sessions = [];
 
@@ -556,7 +570,7 @@
             const input = document.createElement('input');
             input.type = 'text';
             input.value = oldTitle === '新会话' ? '' : oldTitle;
-            input.style.cssText = 'width:100%;font-size:13px;padding:2px 4px;border:1px solid #4F6EF7;border-radius:4px;outline:none;background:#fff;color:#1A1A2E;';
+            input.style.cssText = 'width:100%;font-size:13px;padding:2px 4px;border:1px solid #C77B3C;border-radius:4px;outline:none;background:#fff;color:#1A1A2E;';
             el.replaceWith(input);
             input.focus();
             input.select();
@@ -883,6 +897,17 @@
         window.loadSession = loadSession;
 
         loadSessions();
+
+        // 首页 AI 核心提问框跳转而来：?q=... 自动填入并发送
+        (function handleQueryParam() {
+            const q = new URLSearchParams(window.location.search).get('q');
+            if (!q) return;
+            const input = document.getElementById('chat-input');
+            if (input) input.value = q;
+            // 清掉地址栏参数，避免刷新重复发送
+            history.replaceState(null, '', window.location.pathname);
+            setTimeout(() => sendMessage(), 400);
+        })();
     </script>
     <script>lucide.createIcons();</script>
     <script src="./assets/tracker.js"></script>

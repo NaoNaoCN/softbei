@@ -7,12 +7,14 @@
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <script src="https://unpkg.com/lucide@0.460.0"></script>
     <link rel="stylesheet" href="./assets/styles.css">
+    <link rel="stylesheet" href="./assets/aurora.css">
+    <link rel="stylesheet" href="./assets/aurora-bridge.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         .main { margin-left: var(--sidebar-width); padding: 32px 40px; flex: 1; }
         .page-title {
-            font-size: 28px; font-weight: 700; color: #4F6EF7;
-            margin-bottom: 8px; padding-bottom: 12px; border-bottom: 3px solid #4F6EF7;
+            font-size: 28px; font-weight: 700; color: #C77B3C;
+            margin-bottom: 8px; padding-bottom: 12px; border-bottom: 3px solid #C77B3C;
         }
         .page-subtitle { font-size: 14px; color: #6B7280; margin-bottom: 32px; }
 
@@ -32,8 +34,8 @@
             margin-bottom: -2px; transition: all 0.2s;
             border-radius: 6px 6px 0 0;
         }
-        .tab:hover { color: #4F6EF7; }
-        .tab.active { color: #4F6EF7; border-bottom-color: #4F6EF7; background: #EEF1FE; }
+        .tab:hover { color: #C77B3C; }
+        .tab.active { color: #C77B3C; border-bottom-color: #C77B3C; background: #F5E9D8; }
 
         /* KG Graph Container */
         .kg-container {
@@ -63,7 +65,7 @@
             transition: background 0.3s ease;
         }
         .kg-graph-area.light-bg {
-            background: linear-gradient(135deg, #F8FAFC 0%, #EEF2F7 50%, #E8EDF4 100%);
+            background: linear-gradient(135deg, #FBF7F1 0%, #F4ECDF 50%, #EFE4D2 100%);
         }
         .kg-graph-area.light-bg::before {
             display: none;
@@ -156,13 +158,13 @@
             pointer-events: auto;
         }
         .kg-detail-panel h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; color: #1E1E2E; }
-        .kg-detail-panel .detail-type { display: inline-block; font-size: 11px; background: #EEF1FE; color: #4F6EF7; padding: 2px 8px; border-radius: 4px; margin-bottom: 8px; }
+        .kg-detail-panel .detail-type { display: inline-block; font-size: 11px; background: #F5E9D8; color: #C77B3C; padding: 2px 8px; border-radius: 4px; margin-bottom: 8px; }
         .kg-detail-panel .detail-id { font-size: 11px; color: #9CA3AF; margin-bottom: 8px; word-break: break-all; }
         .kg-detail-panel .detail-desc { font-size: 13px; color: #4B5563; margin-bottom: 12px; line-height: 1.5; }
         .kg-detail-panel .detail-section { font-size: 13px; font-weight: 600; color: #374151; margin: 12px 0 6px; }
         .kg-detail-panel .relation-item { font-size: 12px; color: #4B5563; padding: 4px 0; display: flex; align-items: center; gap: 4px; }
         .kg-detail-panel .resource-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #fff; border: 1px solid #E5E7EB; border-radius: 6px; margin-bottom: 6px; font-size: 12px; cursor: pointer; transition: all 0.2s; }
-        .kg-detail-panel .resource-item:hover { border-color: #4F6EF7; }
+        .kg-detail-panel .resource-item:hover { border-color: #C77B3C; }
         .kg-detail-panel .detail-actions { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
         .kg-detail-panel .detail-actions button { width: 100%; }
         .kg-placeholder {
@@ -190,14 +192,14 @@
 
         /* Type filter checkboxes */
         .type-filter-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-        .type-filter-group label { display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; padding: 4px 8px; border-radius: 4px; background: #F7F8FC; border: 1px solid #E5E7EB; transition: all 0.2s; }
-        .type-filter-group label:hover { border-color: #4F6EF7; }
+        .type-filter-group label { display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; padding: 4px 8px; border-radius: 4px; background: #F2EBDF; border: 1px solid #E5E7EB; transition: all 0.2s; }
+        .type-filter-group label:hover { border-color: #C77B3C; }
         .type-filter-group input[type="checkbox"] { width: 14px; height: 14px; }
 
         /* Pathway select in detail panel */
         .pathway-select-list { max-height: 150px; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 12px; margin-top: 6px; }
         .pathway-select-item { padding: 8px 12px; font-size: 12px; cursor: pointer; transition: background 0.2s; }
-        .pathway-select-item:hover { background: #EEF1FE; }
+        .pathway-select-item:hover { background: #F5E9D8; }
 
         /* KG Filter Bar */
         .kg-filter {
@@ -226,7 +228,7 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        .btn-secondary:hover { border-color: #4F6EF7; color: #4F6EF7; }
+        .btn-secondary:hover { border-color: #C77B3C; color: #C77B3C; }
 
         /* Pathway Cards */
         .pathway-grid {
@@ -241,7 +243,7 @@
             padding: 20px;
             transition: all 0.2s;
         }
-        .pathway-card:hover { border-color: #4F6EF7; box-shadow: 0 4px 12px rgba(25,118,210,0.08); }
+        .pathway-card:hover { border-color: #C77B3C; box-shadow: 0 4px 12px rgba(199,123,60,0.10); }
         .pathway-header {
             display: flex;
             justify-content: space-between;
@@ -276,21 +278,21 @@
             padding: 8px 12px;
             border-radius: 8px;
             font-size: 13px;
-            background: #F7F8FC;
+            background: #F2EBDF;
             border-left: 3px solid #E5E7EB;
         }
         .step-item.completed { background: #E8F5E9; border-left-color: #10B981; }
         .step-item.in-progress { background: #FFF3E0; border-left-color: #F59E0B; }
-        .step-item.pending { background: #EEF1FE; border-left-color: #4F6EF7; }
+        .step-item.pending { background: #F5E9D8; border-left-color: #C77B3C; }
         .step-status { font-size: 12px; }
         .step-item.completed .step-status { color: #10B981; }
         .step-item.in-progress .step-status { color: #F59E0B; }
-        .step-item.pending .step-status { color: #4F6EF7; }
+        .step-item.pending .step-status { color: #C77B3C; }
 
         .pathway-actions { display: flex; gap: 8px; }
         .btn-primary {
             padding: 8px 16px;
-            background: #4F6EF7;
+            background: #C77B3C;
             color: #fff;
             border: none;
             border-radius: 8px;
@@ -309,7 +311,7 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        .btn-outline:hover { border-color: #4F6EF7; color: #4F6EF7; }
+        .btn-outline:hover { border-color: #C77B3C; color: #C77B3C; }
 
         /* Node List */
         .node-grid {
@@ -327,7 +329,7 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        .node-item:hover { border-color: #4F6EF7; background: #F7F8FC; }
+        .node-item:hover { border-color: #C77B3C; background: #F2EBDF; }
         .node-icon { width: 24px; height: 24px; margin-bottom: 6px; display: inline-flex; align-items: center; justify-content: center; }
         .node-name { font-size: 13px; font-weight: 500; color: #1E1E2E; }
         .node-type { font-size: 11px; color: #6B7280; margin-top: 2px; }
@@ -346,7 +348,7 @@
             padding: 16px;
             text-align: center;
         }
-        .stat-value { font-size: 24px; font-weight: 700; color: #4F6EF7; }
+        .stat-value { font-size: 24px; font-weight: 700; color: #C77B3C; }
         .stat-label { font-size: 13px; color: #6B7280; margin-top: 4px; }
 
         .record-item {
@@ -383,7 +385,7 @@
             font-size: 14px;
             outline: none;
         }
-        .form-input:focus { border-color: #4F6EF7; }
+        .form-input:focus { border-color: #C77B3C; }
 
         /* KG 全屏模式 */
         body.kg-fullscreen .sidebar,
@@ -409,31 +411,10 @@
     </style>
 </head>
 <body>
+    <div class="aurora-bg"></div>
+    <div class="aurora-orb"></div>
+    <div class="aurora-grid"></div>
     <div class="layout">
-                <nav class="sidebar">
-            <a href="index.html" class="sidebar-logo">
-                <div class="sidebar-logo-icon">S</div>
-                智能学习
-            </a>
-            <div class="sidebar-section-title">主菜单</div>
-            <a href="index.html" class="nav-item"><span class="icon"><i data-lucide="home"></i></span>学习看板</a>
-            <a href="chat.html" class="nav-item"><span class="icon"><i data-lucide="message-square"></i></span>智能对话</a>
-            <a href="generate.html" class="nav-item"><span class="icon"><i data-lucide="sparkles"></i></span>资源生成</a>
-            <a href="library.html" class="nav-item"><span class="icon"><i data-lucide="library"></i></span>资源库</a>
-            <a href="pathway.html" class="nav-item active"><span class="icon"><i data-lucide="share-2"></i></span>学习路径</a>
-            <a href="evaluate.html" class="nav-item"><span class="icon"><i data-lucide="clipboard-check"></i></span>学习评估</a>
-            <a href="profile.html" class="nav-item"><span class="icon"><i data-lucide="circle-user"></i></span>个人中心</a>
-            <div class="sidebar-footer">
-                <div class="sidebar-user">
-                    <div class="sidebar-avatar" id="sidebar-avatar">?</div>
-                    <span class="user-info" id="user-info">加载中...</span>
-                </div>
-                <button class="btn-logout" data-action="logout">
-                    <i data-lucide="log-out" style="width:16px;height:16px;"></i>退出登录
-                </button>
-            </div>
-        </nav>
-
         <main class="main">
             <h1 class="page-title">学习路径 & 知识图谱</h1>
             <p class="page-subtitle">查看知识图谱结构，规划和管理个性化学习路径，高效达成学习目标。</p>
@@ -557,12 +538,14 @@
         import { showDialog } from './assets/dialog.js';
         import { registerActions } from './assets/button.js';
         import { initCommandPalette } from './assets/command.js';
-        
+        import { initCapNav } from './assets/nav.js';
+
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
         }
 
         const userId = getUserId();
+        initCapNav('pathway');
 
         // === Module-level state ===
         let fullGraph = null;
@@ -1033,7 +1016,7 @@
                     const st = pathItemMap[n.id];
                     if (st === 'completed') { node.itemStyle.borderColor = '#10B981'; node.itemStyle.borderWidth = 3; }
                     else if (st === 'current') { node.itemStyle.borderColor = '#F59E0B'; node.itemStyle.borderWidth = 3; node.symbolSize = baseSize * 1.3; node._baseSize = baseSize * 1.3; }
-                    else if (st === 'planned') { node.itemStyle.borderColor = '#4F6EF7'; node.itemStyle.borderWidth = 2; }
+                    else if (st === 'planned') { node.itemStyle.borderColor = '#C77B3C'; node.itemStyle.borderWidth = 2; }
                 } else if (overlayPathId && Object.keys(pathItemMap).length > 0 && !pathItemMap[n.id]) {
                     node.itemStyle.opacity = 0.4;
                     node._baseOpacity = 0.4;
@@ -1162,7 +1145,7 @@
 
             if (relations.length) {
                 html += `<div class="detail-section">关联关系 (${relations.length})</div>`;
-                html += relations.map(r => `<div class="relation-item"><span>${r.direction}</span><span style="color:#4F6EF7;">${r.relation}</span><span>${r.otherName}</span></div>`).join('');
+                html += relations.map(r => `<div class="relation-item"><span>${r.direction}</span><span style="color:#C77B3C;">${r.relation}</span><span>${r.otherName}</span></div>`).join('');
             }
 
             html += `<hr style="margin:12px 0;border:none;border-top:1px solid #E5E7EB;">`;
@@ -1187,7 +1170,7 @@
                     resDiv.innerHTML = resources.map(r => {
                         const icon = r.resource_type === 'quiz' ? '📝' : r.resource_type === 'mindmap' ? '🗺️' : r.resource_type === 'code' ? '💻' : '📄';
                         const action = r.resource_type === 'quiz' ? `onclick="location.href='evaluate.html?resource_id=${r.id}'"` : `onclick="location.href='library.html?preview=${r.id}'"`;
-                        return `<div class="resource-item" ${action}><span>${icon}</span><span style="flex:1;">${r.title || '未命名'}</span><span style="color:#4F6EF7;font-size:11px;">查看</span></div>`;
+                        return `<div class="resource-item" ${action}><span>${icon}</span><span style="flex:1;">${r.title || '未命名'}</span><span style="color:#C77B3C;font-size:11px;">查看</span></div>`;
                     }).join('');
                 }
             } catch(e) { console.warn('load resources error:', e); }
@@ -1235,7 +1218,7 @@
             populatePathwayOverlay();
             const grid = document.getElementById('pathway-grid');
             if (!cachedPathways.length) {
-                grid.innerHTML = '<div style="padding:40px;text-align:center;color:#6B7280;font-size:14px;grid-column:1/-1;">暂无学习路径，<a href="chat.html" style="color:#4F6EF7;">前往对话生成</a></div>';
+                grid.innerHTML = '<div style="padding:40px;text-align:center;color:#6B7280;font-size:14px;grid-column:1/-1;">暂无学习路径，<a href="chat.html" style="color:#C77B3C;">前往对话生成</a></div>';
                 return;
             }
             grid.innerHTML = cachedPathways.map(p => {

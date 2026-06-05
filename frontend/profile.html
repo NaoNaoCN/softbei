@@ -7,46 +7,37 @@
     <script src="https://unpkg.com/lucide@0.460.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <link rel="stylesheet" href="./assets/styles.css">
+    <link rel="stylesheet" href="./assets/aurora.css">
+    <link rel="stylesheet" href="./assets/aurora-bridge.css">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        .main { margin-left: var(--sidebar-width); padding: 32px 40px; flex: 1; }
         .page-title {
-            font-size: 28px; font-weight: 700; color: #4F6EF7;
-            margin-bottom: 8px; padding-bottom: 12px; border-bottom: 3px solid #4F6EF7;
+            font-family: var(--display); font-size: 30px; font-weight: 800; letter-spacing: -0.02em;
+            color: var(--color-text); margin-bottom: 8px;
         }
-        .page-subtitle { font-size: 14px; color: #6B7280; margin-bottom: 32px; }
+        .page-subtitle { font-size: 14px; color: var(--color-text-tertiary); margin-bottom: 32px; }
 
         /* Tabs */
         .tabs {
-            display: flex;
-            border-bottom: 2px solid #E5E7EB;
-            margin-bottom: 24px;
+            display: inline-flex;
             gap: 4px;
+            padding: 5px;
+            background: rgba(255, 255, 255, 0.45);
+            border: 1px solid var(--color-border);
+            border-radius: var(--r-full);
+            margin-bottom: 24px;
         }
         .tab {
-            padding: 10px 24px;
-            font-size: 14px; font-weight: 500;
-            color: #6B7280; cursor: pointer;
+            padding: 9px 22px;
+            font-size: 14px; font-weight: 600;
+            color: var(--color-text-tertiary); cursor: pointer;
             border: none; background: none;
-            border-bottom: 3px solid transparent;
-            margin-bottom: -2px; transition: all 0.2s;
-            border-radius: 6px 6px 0 0;
+            border-radius: var(--r-full);
+            transition: all 0.25s var(--ease);
         }
-        .tab:hover { color: #4F6EF7; }
-        .tab.active { color: #4F6EF7; border-bottom-color: #4F6EF7; background: #EEF1FE; }
+        .tab:hover { color: var(--color-text); }
+        .tab.active { color: #fff; background: var(--color-primary-gradient); box-shadow: 0 4px 14px rgba(199,123,60,0.35); }
 
-        /* Profile View Card */
-        .card {
-            background: #fff;
-            border: 1px solid #E5E7EB;
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        }
-        .card-title {
-            font-size: 16px; font-weight: 600; color: #1E1E2E; margin-bottom: 20px;
-        }
+        .card-title { font-family: var(--display); font-size: 17px; font-weight: 700; color: var(--color-text); margin-bottom: 20px; }
 
         /* Stats Grid */
         .stats-grid {
@@ -56,55 +47,62 @@
             margin-bottom: 24px;
         }
         .stat-item {
-            background: #fff;
-            border: 1px solid #E5E7EB;
-            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.55);
+            backdrop-filter: blur(20px) saturate(150%);
+            -webkit-backdrop-filter: blur(20px) saturate(150%);
+            border: 1px solid var(--color-border);
+            border-radius: var(--r-lg);
             padding: 20px;
             text-align: center;
+            box-shadow: var(--shadow-card);
+            transition: transform 0.4s var(--ease), box-shadow 0.4s var(--ease);
         }
-        .stat-value { font-size: 28px; font-weight: 700; color: #4F6EF7; }
-        .stat-label { font-size: 13px; color: #6B7280; margin-top: 6px; }
+        .stat-item:hover { transform: translateY(-3px); box-shadow: var(--shadow-card-hover); }
+        .stat-value { font-family: var(--display); font-size: 30px; font-weight: 800; color: var(--color-primary); }
+        .stat-label { font-size: 13px; color: var(--color-text-tertiary); margin-top: 6px; }
 
         /* Profile Info Grid */
         .profile-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
+            gap: 16px;
         }
         .profile-item {
-            background: #F7F8FC;
-            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.40);
+            border: 1px solid var(--color-border-light);
+            border-radius: var(--r-md);
             padding: 16px 20px;
         }
         .profile-label {
             font-size: 12px;
-            color: #6B7280;
+            color: var(--color-text-tertiary);
             margin-bottom: 6px;
             font-weight: 500;
         }
         .profile-value {
             font-size: 16px;
-            font-weight: 500;
-            color: #1E1E2E;
+            font-weight: 600;
+            color: var(--color-text);
         }
 
         /* Tags */
         .tags-section { margin-top: 24px; }
         .tags-title {
-            font-size: 14px; font-weight: 600; color: #1E1E2E; margin-bottom: 12px;
+            font-size: 14px; font-weight: 600; color: var(--color-text); margin-bottom: 12px;
         }
         .tags-list { display: flex; gap: 8px; flex-wrap: wrap; }
         .tag {
             display: inline-block;
             padding: 6px 14px;
-            border-radius: 16px;
+            border-radius: var(--r-full);
             font-size: 13px;
             font-weight: 500;
+            border: 1px solid;
         }
-        .tag-success { background: #E8F5E9; color: #10B981; }
-        .tag-warning { background: #FFF3E0; color: #F59E0B; }
-        .tag-info { background: #EEF1FE; color: #4F6EF7; }
-        .tag-default { background: #F7F8FC; color: #6B7280; }
+        .tag-success { background: var(--color-success-bg); color: var(--color-success); border-color: var(--color-success-border); }
+        .tag-warning { background: var(--color-warning-bg); color: var(--color-warning); border-color: var(--color-warning-border); }
+        .tag-info { background: var(--color-primary-light); color: var(--color-primary); border-color: rgba(199,123,60,0.30); }
+        .tag-default { background: rgba(120,90,60,0.06); color: var(--color-text-tertiary); border-color: var(--color-border); }
 
         /* Form */
         .form-grid {
@@ -115,77 +113,60 @@
         .form-group { margin-bottom: 16px; }
         .form-label {
             display: block;
-            font-size: 14px; font-weight: 500;
-            margin-bottom: 6px;
+            font-size: 14px; font-weight: 500; color: var(--color-text-secondary);
+            margin-bottom: 7px;
         }
         .form-input, .form-select, .form-textarea {
             width: 100%;
-            padding: 10px 14px;
-            border: 1px solid #E5E7EB;
-            border-radius: 8px;
+            padding: 11px 15px;
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid var(--color-border);
+            border-radius: var(--r-md);
             font-size: 14px;
             outline: none;
-            transition: all 0.2s;
+            transition: all 0.25s var(--ease);
             font-family: inherit;
+            color: var(--color-text);
         }
         .form-input:focus, .form-select:focus, .form-textarea:focus {
-            border-color: #4F6EF7;
-            box-shadow: 0 0 0 3px rgba(25,118,210,0.1);
+            background: #fff;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(199,123,60,0.16);
         }
         .form-textarea { resize: vertical; min-height: 80px; }
         .form-full { grid-column: 1 / -1; }
 
         .btn-primary {
             padding: 12px 32px;
-            background: #4F6EF7;
+            background: var(--color-primary-gradient);
             color: #fff;
             border: none;
-            border-radius: 8px;
+            border-radius: var(--r-md);
             font-size: 15px; font-weight: 600;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: transform 0.25s var(--spring), box-shadow 0.3s var(--ease);
+            box-shadow: var(--shadow-button);
         }
-        .btn-primary:hover { background: #3B55D9; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(199,123,60,0.45); }
         .btn-secondary {
             padding: 12px 32px;
-            background: #fff;
-            color: #1E1E2E;
-            border: 1px solid #E5E7EB;
-            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.6);
+            color: var(--color-text);
+            border: 1px solid var(--color-border);
+            border-radius: var(--r-md);
             font-size: 15px; font-weight: 500;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.25s var(--ease);
         }
-        .btn-secondary:hover { border-color: #4F6EF7; color: #4F6EF7; }
+        .btn-secondary:hover { border-color: var(--color-primary); color: var(--color-primary); }
         .form-actions { display: flex; gap: 12px; margin-top: 24px; }
     </style>
 </head>
 <body>
+    <div class="aurora-bg"></div>
+    <div class="aurora-orb"></div>
+    <div class="aurora-grid"></div>
     <div class="layout">
-                <nav class="sidebar">
-            <a href="index.html" class="sidebar-logo">
-                <div class="sidebar-logo-icon">S</div>
-                智能学习
-            </a>
-            <div class="sidebar-section-title">主菜单</div>
-            <a href="index.html" class="nav-item"><span class="icon"><i data-lucide="home"></i></span>学习看板</a>
-            <a href="chat.html" class="nav-item"><span class="icon"><i data-lucide="message-square"></i></span>智能对话</a>
-            <a href="generate.html" class="nav-item"><span class="icon"><i data-lucide="sparkles"></i></span>资源生成</a>
-            <a href="library.html" class="nav-item"><span class="icon"><i data-lucide="library"></i></span>资源库</a>
-            <a href="pathway.html" class="nav-item"><span class="icon"><i data-lucide="share-2"></i></span>学习路径</a>
-            <a href="evaluate.html" class="nav-item"><span class="icon"><i data-lucide="clipboard-check"></i></span>学习评估</a>
-            <a href="profile.html" class="nav-item active"><span class="icon"><i data-lucide="circle-user"></i></span>个人中心</a>
-            <div class="sidebar-footer">
-                <div class="sidebar-user">
-                    <div class="sidebar-avatar" id="sidebar-avatar">?</div>
-                    <span class="user-info" id="user-info">加载中...</span>
-                </div>
-                <button class="btn-logout" data-action="logout">
-                    <i data-lucide="log-out" style="width:16px;height:16px;"></i>退出登录
-                </button>
-            </div>
-        </nav>
-
         <main class="main">
             <h1 class="page-title">我的学习画像</h1>
             <p class="page-subtitle">查看和管理您的个性化学习画像，系统将根据画像为您推荐最合适的学习资源和路径。</p>
@@ -242,7 +223,7 @@
 
                     <div class="tags-section">
                         <div class="tags-title">学习目标</div>
-                        <div style="background:#F7F8FC;border-radius:8px;padding:14px 16px;font-size:14px;color:#1E1E2E;line-height:1.6;" id="view-goal">暂无</div>
+                        <div style="background:#F2EBDF;border-radius:8px;padding:14px 16px;font-size:14px;color:#1E1E2E;line-height:1.6;" id="view-goal">暂无</div>
                     </div>
 
                     <div class="tags-section">
@@ -409,13 +390,15 @@
         import { showDialog } from './assets/dialog.js';
         import { registerActions } from './assets/button.js';
         import { initCommandPalette } from './assets/command.js';
+        import { initCapNav } from './assets/nav.js';
         import { isLoggedIn, getUserId, clearAuth, getProfile, updateProfile, getQuizAttempts, getLearningAnalytics } from './assets/api.js?v=2';
-        
+
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
         }
 
         const userId = getUserId();
+        initCapNav('profile');
 
         async function loadProfile() {
             const profile = await getProfile(userId);
@@ -555,7 +538,7 @@
                 series: [
                     {
                         name: '学习时长(分钟)', type: 'bar', data: minutes,
-                        itemStyle: { color: '#4F6EF7', borderRadius: [4, 4, 0, 0] },
+                        itemStyle: { color: '#C77B3C', borderRadius: [4, 4, 0, 0] },
                         barMaxWidth: 20,
                     },
                     {
@@ -584,16 +567,16 @@
                     shape: 'polygon',
                     splitNumber: 4,
                     axisName: { color: '#1E1E2E', fontSize: 11 },
-                    splitArea: { areaStyle: { color: ['#fff', '#F7F8FC', '#FAFBFF', '#EEF1FE'] } },
+                    splitArea: { areaStyle: { color: ['#fff', '#F2EBDF', '#FAF6EE', '#F5E9D8'] } },
                 },
                 series: [{
                     type: 'radar',
                     data: [{
                         value: radarData.values,
                         name: '知识掌握度',
-                        areaStyle: { color: 'rgba(25,118,210,0.2)' },
-                        lineStyle: { color: '#4F6EF7', width: 2 },
-                        itemStyle: { color: '#4F6EF7' },
+                        areaStyle: { color: 'rgba(199,123,60,0.2)' },
+                        lineStyle: { color: '#C77B3C', width: 2 },
+                        itemStyle: { color: '#C77B3C' },
                     }]
                 }]
             });
@@ -636,7 +619,7 @@
                 return;
             }
             const icons = { view: '👁️', quiz: '✏️', complete: '✅', stay: '⏱️' };
-            const colors = { view: '#4F6EF7', quiz: '#FB8C00', complete: '#10B981', stay: '#607D8B' };
+            const colors = { view: '#C77B3C', quiz: '#FB8C00', complete: '#10B981', stay: '#607D8B' };
             const totalCount = breakdown.reduce((s, b) => s + b.count, 0) || 1;
             container.innerHTML = breakdown.map(b => {
                 const pct = Math.round(b.count / totalCount * 100);
@@ -667,7 +650,7 @@
                 return;
             }
             const icons = { doc: '📄', mindmap: '🧠', quiz: '📝', code: '💻', summary: '📖' };
-            const colors = { doc: '#4F6EF7', mindmap: '#7B1FA2', quiz: '#FB8C00', code: '#00897B', summary: '#10B981' };
+            const colors = { doc: '#C77B3C', mindmap: '#7B1FA2', quiz: '#FB8C00', code: '#00897B', summary: '#10B981' };
             const totalCount = usage.reduce((s, u) => s + u.count, 0) || 1;
             container.innerHTML = usage.map(u => {
                 const pct = Math.round(u.count / totalCount * 100);
@@ -715,23 +698,23 @@
                 // 跳转链接
                 let linkHtml = '';
                 if (a.action === 'view' && a.resource_id) {
-                    linkHtml = `<a href="./library.html?preview=${a.resource_id}" style="font-size:12px;color:#4F6EF7;text-decoration:none;white-space:nowrap;" title="查看资源">查看 →</a>`;
+                    linkHtml = `<a href="./library.html?preview=${a.resource_id}" style="font-size:12px;color:#C77B3C;text-decoration:none;white-space:nowrap;" title="查看资源">查看 →</a>`;
                 } else if (a.action === 'quiz' && a.kp_id) {
-                    linkHtml = `<a href="./evaluate.html?tab=history&kp_id=${encodeURIComponent(a.kp_id)}" style="font-size:12px;color:#4F6EF7;text-decoration:none;white-space:nowrap;" title="查看答题历史">历史 →</a>`;
+                    linkHtml = `<a href="./evaluate.html?tab=history&kp_id=${encodeURIComponent(a.kp_id)}" style="font-size:12px;color:#C77B3C;text-decoration:none;white-space:nowrap;" title="查看答题历史">历史 →</a>`;
                 } else if (a.resource_id) {
-                    linkHtml = `<a href="./library.html?preview=${a.resource_id}" style="font-size:12px;color:#4F6EF7;text-decoration:none;white-space:nowrap;" title="查看资源">查看 →</a>`;
+                    linkHtml = `<a href="./library.html?preview=${a.resource_id}" style="font-size:12px;color:#C77B3C;text-decoration:none;white-space:nowrap;" title="查看资源">查看 →</a>`;
                 } else if (a.kp_id) {
-                    linkHtml = `<a href="./pathway.html?tab=pathways" style="font-size:12px;color:#4F6EF7;text-decoration:none;white-space:nowrap;" title="查看我的路径">路径 →</a>`;
+                    linkHtml = `<a href="./pathway.html?tab=pathways" style="font-size:12px;color:#C77B3C;text-decoration:none;white-space:nowrap;" title="查看我的路径">路径 →</a>`;
                 }
 
                 return `
-                    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#F7F8FC;border-radius:8px;">
+                    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#F2EBDF;border-radius:8px;">
                         <span style="font-size:18px;">${icon}</span>
                         <div style="flex:1;min-width:0;">
                             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                                 <span style="font-size:13px;font-weight:500;color:#1E1E2E;">${a.label}</span>
                                 ${kpInfo}
-                                ${dur ? `<span style="font-size:12px;color:#4F6EF7;background:#EEF1FE;padding:2px 8px;border-radius:10px;">⏱${dur}</span>` : ''}
+                                ${dur ? `<span style="font-size:12px;color:#C77B3C;background:#EEF1FE;padding:2px 8px;border-radius:10px;">⏱${dur}</span>` : ''}
                             </div>
                             ${resLabel ? `<div style="font-size:12px;color:#6B7280;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${resLabel}</div>` : ''}
                         </div>
