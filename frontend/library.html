@@ -7,6 +7,8 @@
     <script src="https://unpkg.com/lucide@0.460.0"></script>
     <link rel="stylesheet" href="./assets/styles.css">
     <link rel="stylesheet" href="./assets/assistant.css">
+    <link rel="stylesheet" href="./assets/aurora.css">
+    <link rel="stylesheet" href="./assets/aurora-bridge.css">
     <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
     <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
@@ -66,7 +68,7 @@
             flex: 1;
             max-width: 200px;
         }
-        .filter-input:focus { border-color: #4F6EF7; }
+        .filter-input:focus { border-color: #C77B3C; }
         .btn-refresh {
             padding: 8px 16px;
             background: var(--color-card);
@@ -76,7 +78,7 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        .btn-refresh:hover { border-color: #4F6EF7; color: #4F6EF7; }
+        .btn-refresh:hover { border-color: #C77B3C; color: #C77B3C; }
         .view-toggle {
             display: flex;
             gap: 4px;
@@ -91,8 +93,8 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        .view-btn.active { background: #4F6EF7; color: #fff; border-color: #4F6EF7; }
-        .view-btn:hover:not(.active) { border-color: #4F6EF7; }
+        .view-btn.active { background: #C77B3C; color: #fff; border-color: #C77B3C; }
+        .view-btn:hover:not(.active) { border-color: #C77B3C; }
 
         /* Card */
         .card {
@@ -103,7 +105,7 @@
             margin-bottom: 16px;
             transition: all 0.2s;
         }
-        .card:hover { border-color: #4F6EF7; box-shadow: 0 2px 8px rgba(25,118,210,0.08); }
+        .card:hover { border-color: #C77B3C; box-shadow: 0 2px 8px rgba(25,118,210,0.08); }
 
         /* Document Import Section */
         .import-section {
@@ -130,7 +132,7 @@
             text-align: center;
             transition: all 0.2s;
         }
-        .import-area:hover { border-color: #4F6EF7; background: #F7F8FC; }
+        .import-area:hover { border-color: #C77B3C; background: #F2EBDF; }
         .import-icon { width: 32px; height: 32px; margin-bottom: 8px; display: inline-flex; align-items: center; justify-content: center; }
         .import-text { font-size: 14px; color: #6B7280; }
         .import-form {
@@ -146,10 +148,10 @@
             font-size: 14px;
             outline: none;
         }
-        .form-input:focus { border-color: #4F6EF7; }
+        .form-input:focus { border-color: #C77B3C; }
         .btn-primary {
             padding: 10px 24px;
-            background: #4F6EF7;
+            background: #C77B3C;
             color: #fff;
             border: none;
             border-radius: 8px;
@@ -172,7 +174,7 @@
             margin-bottom: 10px;
             transition: all 0.2s;
         }
-        .doc-item:hover { border-color: #4F6EF7; }
+        .doc-item:hover { border-color: #C77B3C; }
         .doc-info { display: flex; align-items: center; gap: 12px; }
         .doc-icon { font-size: 24px; }
         .doc-name { font-weight: 500; font-size: 14px; margin-bottom: 2px; }
@@ -180,15 +182,15 @@
         .doc-actions { display: flex; gap: 8px; }
         .btn-build-kg {
             padding: 6px 14px;
-            background: #EEF1FE;
-            color: #4F6EF7;
+            background: #F5E9D8;
+            color: #C77B3C;
             border: none;
             border-radius: 6px;
             font-size: 13px;
             cursor: pointer;
             transition: all 0.2s;
         }
-        .btn-build-kg:hover { background: #4F6EF7; color: #fff; }
+        .btn-build-kg:hover { background: #C77B3C; color: #fff; }
         .btn-delete {
             padding: 6px 14px;
             background: var(--color-card);
@@ -213,11 +215,11 @@
             border-radius: 10px;
             transition: all 0.2s;
         }
-        .resource-item:hover { border-color: #4F6EF7; }
+        .resource-item:hover { border-color: #C77B3C; }
         .resource-info { display: flex; align-items: center; gap: 14px; }
         .resource-icon {
             width: 44px; height: 44px;
-            background: #EEF1FE;
+            background: #F5E9D8;
             border-radius: 10px;
             display: flex;
             align-items: center;
@@ -236,7 +238,7 @@
             border: 1px solid;
         }
         .btn-sm-outline { background: var(--color-card); color: #6B7280; border-color: var(--color-border); }
-        .btn-sm-outline:hover { border-color: #4F6EF7; color: #4F6EF7; }
+        .btn-sm-outline:hover { border-color: #C77B3C; color: #C77B3C; }
         .btn-sm-danger { background: var(--color-card); color: #EF4444; border-color: #FECACA; }
         .btn-sm-danger:hover { background: #EF4444; color: #fff; border-color: #EF4444; }
 
@@ -251,7 +253,7 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        .page-btn:hover { border-color: #4F6EF7; color: #4F6EF7; }
+        .page-btn:hover { border-color: #C77B3C; color: #C77B3C; }
         .page-info { font-size: 14px; color: #6B7280; }
 
         /* Empty State */
@@ -301,7 +303,7 @@
             color: var(--color-text);
         }
         .modal-body pre {
-            background: #F7F8FC;
+            background: #F2EBDF;
             border: 1px solid var(--color-border);
             border-radius: 8px;
             padding: 12px;
@@ -318,7 +320,7 @@
         .modal-body .md-rendered ul, .modal-body .md-rendered ol { padding-left: 24px; margin: 8px 0; }
         .modal-body .md-rendered pre { background: #f6f8fa; border-radius: 6px; padding: 12px; overflow-x: auto; }
         .modal-body .md-rendered code { font-family: 'Fira Code', Consolas, monospace; font-size: 13px; }
-        .modal-body .md-rendered blockquote { border-left: 4px solid #4F6EF7; padding-left: 12px; color: #555; margin: 8px 0; }
+        .modal-body .md-rendered blockquote { border-left: 4px solid #C77B3C; padding-left: 12px; color: #555; margin: 8px 0; }
         .preview-quiz-item {
             padding: 12px 14px;
             border: 1px solid var(--color-border);
@@ -328,7 +330,7 @@
         }
         .preview-quiz-q { font-weight: 600; margin-bottom: 8px; }
         .preview-quiz-opt { padding: 4px 0; color: #374151; }
-        .preview-quiz-ans { margin-top: 8px; color: #4F6EF7; font-size: 13px; }
+        .preview-quiz-ans { margin-top: 8px; color: #C77B3C; font-size: 13px; }
         .preview-quiz-exp { margin-top: 4px; color: #6B7280; font-size: 13px; }
         .preview-loading { text-align: center; color: #6B7280; padding: 30px 0; }
 
@@ -365,8 +367,8 @@
             display: inline-block;
             padding: 4px 10px;
             border-radius: 6px;
-            background: #EEF1FE;
-            color: #4F6EF7;
+            background: #F5E9D8;
+            color: #C77B3C;
             font-weight: 600;
             font-size: 13.5px;
         }
@@ -395,57 +397,24 @@
             color: #6B7280;
         }
         .anim-toolbar {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
+            display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
         }
         .anim-frame {
-            width: 100%;
-            height: 540px;
-            border: 1px solid var(--color-border);
-            border-radius: 8px;
-            background: #fff;
+            width: 100%; height: 540px; border: 1px solid var(--color-border);
+            border-radius: 8px; background: #fff;
         }
         .anim-src {
-            background: #0d1117;
-            color: #c9d1d9;
-            border-radius: 8px;
-            padding: 14px;
-            overflow: auto;
-            max-height: 540px;
-            font-family: 'Fira Code', Consolas, monospace;
-            font-size: 12.5px;
-            line-height: 1.5;
+            background: #0d1117; color: #c9d1d9; border-radius: 8px; padding: 14px;
+            overflow: auto; max-height: 540px;
+            font-family: 'Fira Code', Consolas, monospace; font-size: 12.5px; line-height: 1.5;
         }
     </style>
 </head>
 <body>
+    <div class="aurora-bg"></div>
+    <div class="aurora-orb"></div>
+    <div class="aurora-grid"></div>
     <div class="layout">
-                <nav class="sidebar">
-            <a href="index.html" class="sidebar-logo">
-                <div class="sidebar-logo-icon">S</div>
-                智能学习
-            </a>
-            <div class="sidebar-section-title">主菜单</div>
-            <a href="index.html" class="nav-item"><span class="icon"><i data-lucide="home"></i></span>学习看板</a>
-            <a href="chat.html" class="nav-item"><span class="icon"><i data-lucide="message-square"></i></span>智能对话</a>
-            <a href="generate.html" class="nav-item"><span class="icon"><i data-lucide="sparkles"></i></span>资源生成</a>
-            <a href="library.html" class="nav-item active"><span class="icon"><i data-lucide="library"></i></span>资源库</a>
-            <a href="pathway.html" class="nav-item"><span class="icon"><i data-lucide="share-2"></i></span>学习路径</a>
-            <a href="evaluate.html" class="nav-item"><span class="icon"><i data-lucide="clipboard-check"></i></span>学习评估</a>
-            <a href="profile.html" class="nav-item"><span class="icon"><i data-lucide="circle-user"></i></span>个人中心</a>
-            <div class="sidebar-footer">
-                <div class="sidebar-user">
-                    <div class="sidebar-avatar" id="sidebar-avatar">?</div>
-                    <span class="user-info" id="user-info">加载中...</span>
-                </div>
-                <button class="btn-logout" data-action="logout">
-                    <i data-lucide="log-out" style="width:16px;height:16px;"></i>退出登录
-                </button>
-            </div>
-        </nav>
-
         <main class="main">
             <h1 class="page-title">我的资源库</h1>
             <p class="page-subtitle">浏览、管理和搜索已生成的学习资源，预览内容或删除不需要的资源。</p>
@@ -589,12 +558,14 @@
         import { showDialog } from './assets/dialog.js';
         import { registerActions } from './assets/button.js';
         import { initCommandPalette } from './assets/command.js';
-        
+        import { initCapNav } from './assets/nav.js';
+
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
         }
 
         const userId = getUserId();
+        initCapNav('library');
         let currentPage = 1;
         let currentFilter = '';
         let currentSearch = '';
@@ -687,7 +658,7 @@
             btn.style.display = 'none';
             const statusEl = document.createElement('div');
             statusEl.className = 'kg-build-status';
-            statusEl.style.cssText = 'margin-top:12px;padding:12px;background:#EEF1FE;border-radius:8px;font-size:13px;color:#4F6EF7;';
+            statusEl.style.cssText = 'margin-top:12px;padding:12px;background:#F5E9D8;border-radius:8px;font-size:13px;color:#C77B3C;';
             statusEl.textContent = '构建中: ' + (initialStatus.progress || 0) + '% · ' + (initialStatus.stage || '处理中');
             btn.parentElement.appendChild(statusEl);
             pollKgBuildStatus(kpId, statusEl, btn);
@@ -720,7 +691,7 @@
             if (!await showDialog({ type: 'normal', title: '确定要为此文档构建知识图谱吗？', desc: '将根据此文档内容自动构建知识点', confirmText: '确认构建' })) return;
             const statusEl = document.createElement('div');
             statusEl.className = 'kg-build-status';
-            statusEl.style.cssText = 'margin-top:12px;padding:12px;background:#EEF1FE;border-radius:8px;font-size:13px;color:#4F6EF7;';
+            statusEl.style.cssText = 'margin-top:12px;padding:12px;background:#F5E9D8;border-radius:8px;font-size:13px;color:#C77B3C;';
             statusEl.textContent = '正在提交知识图谱构建任务...';
             const btn = document.querySelector(`[onclick="handleBuildKg('${kpId}')"]`);
             btn.parentElement.appendChild(statusEl);
@@ -887,7 +858,7 @@
                         const url = `http://localhost:8000/documents/file/${encodeURIComponent(fname)}`;
                         return `
                             <div style="margin-bottom:10px;color:#6B7280;font-size:13px;">文件：${escapeHtml(fname)}
-                                · <a href="${url}" target="_blank" style="color:#4F6EF7;text-decoration:none;">在新标签页打开</a>
+                                · <a href="${url}" target="_blank" style="color:#C77B3C;text-decoration:none;">在新标签页打开</a>
                             </div>
                             <iframe class="pdf-frame" src="${url}" title="PDF 预览"></iframe>
                             <div class="pdf-fallback">若浏览器未内置 PDF 查看器，请点击上方「在新标签页打开」。</div>
@@ -970,7 +941,6 @@
             if (type === 'animation') {
                 const cj = r.content_json || {};
                 let sketch = cj.code || '';
-                // fallback: 从 content 提取 js 代码块
                 if (!sketch && r.content) {
                     const m = r.content.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/i);
                     sketch = m ? m[1].trim() : r.content;
@@ -978,7 +948,6 @@
                 if (!sketch || sketch.indexOf('defineAnimation') === -1) {
                     return '<div style="color:#6B7280;">（暂无可渲染的动画）</div>';
                 }
-                // 用占位容器 + 工具栏；iframe 在 mountAnimation() 中挂载（沙箱渲染）
                 return `
                     <div class="anim-toolbar">
                         <button id="anim-viewsrc" class="btn-sm btn-sm-outline" type="button">查看源码</button>
@@ -991,21 +960,17 @@
             return `<pre>${escapeHtml(JSON.stringify(r, null, 2))}</pre>`;
         }
 
-        // 缓存 anim-runtime 源码（首次预览时拉取，内联进沙箱 iframe）
+        // 缓存 anim-runtime 源码
         let __animRuntimeSrc = null;
         async function getAnimRuntimeSrc() {
             if (__animRuntimeSrc !== null) return __animRuntimeSrc;
             try {
                 const resp = await fetch('./assets/anim-runtime.js');
                 __animRuntimeSrc = await resp.text();
-            } catch (e) {
-                __animRuntimeSrc = '';
-            }
+            } catch (e) { __animRuntimeSrc = ''; }
             return __animRuntimeSrc;
         }
 
-        // 在沙箱 iframe 中挂载动画。sandbox="allow-scripts" 且不含 allow-same-origin，
-        // 生成的 sketch 无法访问父页面 localStorage(JWT) 或同源 API。
         async function mountAnimation(r) {
             const frame = document.getElementById('anim-frame');
             if (!frame) return;
@@ -1016,9 +981,6 @@
                 sketch = m ? m[1].trim() : r.content;
             }
             const runtime = await getAnimRuntimeSrc();
-
-            // 看门狗：sketch 内若有同步死循环，无法被外部打断，但 p5 的 draw 循环
-            // 由 requestAnimationFrame 调度，单帧异常已在 runtime 内 try/catch 兜底。
             const srcdoc = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
   html,body{margin:0;padding:0;background:#fff;overflow:hidden;font-family:system-ui,-apple-system,'Microsoft YaHei',sans-serif;}
@@ -1046,12 +1008,8 @@ ${sketch}
 } catch(err){ window.onerror(err.message); }
 <\/script>
 </body></html>`;
-
             frame.srcdoc = srcdoc;
 
-            // 工具栏按钮转发到 iframe（playpause/replay 在 iframe 内部已绑定，
-            // 父页面这两个按钮只是占位说明；真正控制按钮在 iframe 内）。
-            // 这里仅处理"查看源码"切换，它属于父页面。
             const viewBtn = document.getElementById('anim-viewsrc');
             const srcPre = document.getElementById('anim-src');
             if (viewBtn && srcPre) {
@@ -1110,6 +1068,15 @@ ${sketch}
 
         // closePreview 已在上方独立 script 中定义
         window.handlePreview = handlePreview;
+
+        // 支持 URL 参数 ?type=doc|mindmap|quiz|code|summary 预设筛选（来自首页卫星卡）
+        const _typeParam = new URLSearchParams(window.location.search).get('type');
+        if (_typeParam) {
+            const _sel = document.getElementById('type-filter');
+            if (_sel && [...(_sel.options)].some(o => o.value === _typeParam)) {
+                _sel.value = _typeParam;
+            }
+        }
 
         loadStats();
         loadResources();

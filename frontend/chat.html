@@ -7,10 +7,8 @@
     <script src="https://unpkg.com/lucide@0.460.0"></script>
     <link rel="stylesheet" href="./assets/styles.css">
     <link rel="stylesheet" href="./assets/assistant.css">
-    <style>
-        /* 智能对话页已是AI聊天，隐藏悬浮助手按钮避免与输入框重叠 */
-        .ai-bot-fab, .ai-panel { display: none !important; }
-    </style>
+    <link rel="stylesheet" href="./assets/aurora.css">
+    <link rel="stylesheet" href="./assets/aurora-bridge.css">
     <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
     <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
@@ -18,10 +16,65 @@
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
     <style>
+        /* 智能对话页已是AI聊天，隐藏悬浮助手按钮避免与输入框重叠 */
+        .ai-bot-fab, .ai-panel { display: none !important; }
+
+        /* 动画演示资源（沙箱渲染） */
+        .anim-block { margin: 8px 0; }
+        .message.assistant.has-anim {
+            max-width: 880px;
+            width: calc(100% - 8px);
+        }
+        .message.assistant.has-anim .message-bubble { padding: 12px; }
+        .anim-toolbar {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+        }
+        .anim-frame {
+            width: 100%; height: 540px; border: 1px solid #E5E7EB;
+            border-radius: 10px; background: #fff;
+        }
+        .anim-src {
+            background: #0d1117; color: #c9d1d9; border-radius: 10px; padding: 14px;
+            overflow: auto; max-height: 540px;
+            font-family: 'Fira Code', Consolas, monospace; font-size: 12.5px; line-height: 1.5;
+        }
+        .btn-anim-src {
+            font-size: 13px; padding: 4px 12px; border: 1px solid #D1D5DB;
+            background: #fff; border-radius: 6px; cursor: pointer; color: #374151;
+        }
+        .btn-anim-src:hover { background: #F3F4F6; }
+
+        /* Voice Input */
+        .chat-voice-btn {
+            width: 42px; height: 42px;
+            background: #F5F7FA; color: #6B7280;
+            border: 1px solid #E0E6ED; border-radius: 50%;
+            font-size: 18px; cursor: pointer;
+            transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .chat-voice-btn:hover { background: #E8F5E9; color: #43A047; border-color: #43A047; }
+        .chat-voice-btn.recording {
+            background: #FFEBEE; color: #E53935; border-color: #E53935;
+            animation: voicePulse 1s ease-in-out infinite;
+        }
+        @keyframes voicePulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.4); }
+            50% { box-shadow: 0 0 0 8px rgba(229, 57, 53, 0); }
+        }
+        .voice-tip {
+            position: absolute; bottom: 54px; left: 50%;
+            transform: translateX(-50%); background: rgba(0,0,0,0.75);
+            color: #fff; padding: 6px 14px; border-radius: 16px;
+            font-size: 12px; pointer-events: none; opacity: 0; transition: opacity 0.2s;
+            white-space: nowrap;
+        }
+        .voice-tip.show { opacity: 1; }
+
         /* chat page overrides & specific styles */
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #F9FAFB;
+            font-family: var(--font);
+            background: var(--bg);
             color: var(--color-text);
             height: 100vh;
             overflow: hidden;
@@ -29,6 +82,7 @@
         .layout {
             display: flex;
             height: 100vh;
+            padding-top: 76px;   /* 为顶部悬浮胶囊导航留白 */
         }
 
         /* Chat Area */
@@ -36,55 +90,61 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            height: 100vh;
-            background: #F9FAFB;
-            margin-left: var(--sidebar-width);
+            height: calc(100vh - 76px);
+            background: transparent;
+            margin-left: 0;
+            min-width: 0;
         }
 
         /* Chat Header */
         .chat-header {
-            padding: 18px 28px;
-            border-bottom: 1px solid var(--color-border-light);
-            background: #fff;
+            padding: 16px 28px;
+            border-bottom: 1px solid var(--border-glass);
+            background: rgba(255, 255, 255, 0.55);
+            backdrop-filter: blur(20px) saturate(150%);
+            -webkit-backdrop-filter: blur(20px) saturate(150%);
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 13px;
         }
         .chat-header-icon {
-            width: 38px; height: 38px;
-            border-radius: 10px;
-            background: var(--color-primary-gradient);
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            width: 40px; height: 40px;
+            border-radius: 11px;
+            background: var(--neon);
+            display: grid;
+            place-items: center;
             color: #fff;
             flex-shrink: 0;
+            box-shadow: var(--shadow-neon), inset 0 0 12px rgba(255,255,255,0.3);
         }
+        .chat-header-icon i { width: 20px; height: 20px; }
         .chat-header-title {
-            font-size: 17px;
-            font-weight: 600;
-            color: var(--color-text);
+            font-family: var(--display);
+            font-size: 19px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            color: var(--text-1);
         }
         .chat-header-sub {
-            font-size: 12px;
-            color: var(--color-text-tertiary);
+            font-size: 12.5px;
+            color: var(--text-3);
             margin-top: 1px;
         }
 
         /* Onboarding Banner */
         .onboarding-banner {
-            padding: 12px 28px;
-            background: var(--color-primary-light);
-            border-bottom: 1px solid var(--color-border-light);
+            padding: 11px 28px;
+            background: rgba(199, 123, 60, 0.10);
+            border-bottom: 1px solid var(--border-glass);
             font-size: 13px;
-            color: var(--color-primary-hover);
+            color: var(--indigo);
         }
 
         /* Session Sidebar */
         .session-panel {
             width: 260px;
             border-right: 1px solid var(--color-border-light);
-            background: #FAFBFF;
+            background: rgba(255,255,255,0.35);
             display: flex;
             flex-direction: column;
             flex-shrink: 0;
@@ -135,7 +195,7 @@
             font-size: 13px;
             color: var(--color-text-secondary);
         }
-        .session-item:hover { background: #F0F4FF; color: var(--color-primary); }
+        .session-item:hover { background: #F5E9D8; color: var(--color-primary); }
         .session-item.active { background: var(--color-primary-light); color: var(--color-primary); font-weight: 600; }
         .session-title {
             font-size: 13px;
@@ -199,7 +259,7 @@
             line-height: 1.65;
         }
         .message.user .message-bubble {
-            background: #EEF1FE;
+            background: #F5E9D8;
             color: var(--color-text);
             border-bottom-right-radius: 6px;
         }
@@ -245,34 +305,6 @@
             border: 1px solid #ddd; padding: 6px 10px;
         }
         .message.assistant .message-bubble th { background: #f6f8fa; }
-
-        /* 动画演示资源（沙箱渲染） */
-        .anim-block { margin: 8px 0; }
-        /* 含动画的消息放宽，容纳 800px 画布 */
-        .message.assistant.has-anim {
-            max-width: 880px;
-            width: calc(100% - 8px);
-        }
-        .message.assistant.has-anim .message-bubble {
-            padding: 12px;
-        }
-        .anim-toolbar {
-            display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
-        }
-        .anim-frame {
-            width: 100%; height: 540px; border: 1px solid #E5E7EB;
-            border-radius: 10px; background: #fff;
-        }
-        .anim-src {
-            background: #0d1117; color: #c9d1d9; border-radius: 10px; padding: 14px;
-            overflow: auto; max-height: 540px;
-            font-family: 'Fira Code', Consolas, monospace; font-size: 12.5px; line-height: 1.5;
-        }
-        .btn-anim-src {
-            font-size: 13px; padding: 4px 12px; border: 1px solid #D1D5DB;
-            background: #fff; border-radius: 6px; cursor: pointer; color: #374151;
-        }
-        .btn-anim-src:hover { background: #F3F4F6; }
 
         /* AI Recommendations */
         .recommendations-panel {
@@ -363,9 +395,9 @@
             font-family: var(--font-family);
             outline: none;
             transition: all var(--transition-base);
-            background: #F9FAFB;
+            background: transparent;
         }
-        .chat-input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(79,110,247,0.08); background: #fff; }
+        .chat-input:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(199,123,60,0.14); background: #fff; }
         .chat-send {
             width: 44px;
             height: 44px;
@@ -382,49 +414,6 @@
         }
         .chat-send:hover { background: var(--color-primary-hover); transform: scale(1.05); }
 
-        /* Voice Input */
-        .chat-voice-btn {
-            width: 42px;
-            height: 42px;
-            background: #F5F7FA;
-            color: #6B7280;
-            border: 1px solid #E0E6ED;
-            border-radius: 50%;
-            font-size: 18px;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-        }
-        .chat-voice-btn:hover { background: #E8F5E9; color: #43A047; border-color: #43A047; }
-        .chat-voice-btn.recording {
-            background: #FFEBEE;
-            color: #E53935;
-            border-color: #E53935;
-            animation: voicePulse 1s ease-in-out infinite;
-        }
-        @keyframes voicePulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.4); }
-            50% { box-shadow: 0 0 0 8px rgba(229, 57, 53, 0); }
-        }
-        .voice-tip {
-            position: absolute;
-            bottom: 70px;
-            right: 90px;
-            background: #333;
-            color: #fff;
-            font-size: 12px;
-            padding: 6px 12px;
-            border-radius: 6px;
-            white-space: nowrap;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.2s;
-        }
-        .voice-tip.show { opacity: 1; }
-
         /* Chat Container Layout */
         .chat-container {
             flex: 1;
@@ -440,36 +429,39 @@
     </style>
 </head>
 <body>
+    <script>
+        // 转场入场：若来自看板「开始」，立即铺暖色光幕（在首帧绘制前，避免闪烁），随后褪去
+        (function () {
+            try {
+                if (sessionStorage.getItem('warp_in') === '1') {
+                    sessionStorage.removeItem('warp_in');
+                    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                    if (!reduce) {
+                        document.documentElement.classList.add('warp-entering');
+                        var v = document.createElement('div');
+                        v.className = 'warp-veil warp-in-veil';
+                        v.style.opacity = '1';
+                        document.addEventListener('DOMContentLoaded', function () {
+                            document.body.appendChild(v);
+                            var layout = document.querySelector('.layout');
+                            if (layout) layout.classList.add('warp-in');
+                            setTimeout(function () { v.remove(); }, 700);
+                        });
+                    }
+                }
+            } catch (_) {}
+        })();
+    </script>
+    <div class="aurora-bg"></div>
+    <div class="aurora-orb"></div>
+    <div class="aurora-grid"></div>
     <div class="layout">
-        <!-- Sidebar -->
-        <nav class="sidebar" style="flex-shrink:0;">
-            <a href="index.html" class="sidebar-logo">
-                <div class="sidebar-logo-icon">S</div>
-                智能学习
-            </a>
-            <div class="sidebar-section-title">主菜单</div>
-            <a href="index.html" class="nav-item"><span class="icon"><i data-lucide="home"></i></span>学习看板</a>
-            <a href="chat.html" class="nav-item active"><span class="icon"><i data-lucide="message-square"></i></span>智能对话</a>
-            <a href="generate.html" class="nav-item"><span class="icon"><i data-lucide="sparkles"></i></span>资源生成</a>
-            <a href="library.html" class="nav-item"><span class="icon"><i data-lucide="library"></i></span>资源库</a>
-            <a href="pathway.html" class="nav-item"><span class="icon"><i data-lucide="share-2"></i></span>学习路径</a>
-            <a href="evaluate.html" class="nav-item"><span class="icon"><i data-lucide="clipboard-check"></i></span>学习评估</a>
-            <a href="profile.html" class="nav-item"><span class="icon"><i data-lucide="circle-user"></i></span>个人中心</a>
-            <div class="sidebar-footer">
-                <div class="sidebar-user">
-                    <div class="sidebar-avatar" id="sidebar-avatar">?</div>
-                    <span class="user-info" id="user-info">加载中...</span>
-                </div>
-                <button class="btn-logout" data-action="logout">
-                    <i data-lucide="log-out" style="width:16px;height:16px;"></i>退出登录
-                </button>
-            </div>
-        </nav>
 
         <!-- Chat Container -->
         <div class="chat-area">
             <!-- Header -->
             <div class="chat-header">
+                <div class="chat-header-icon"><i data-lucide="sparkles"></i></div>
                 <div>
                     <div class="chat-header-title">智能对话</div>
                     <div class="chat-header-sub">描述您的学习需求，AI 将自动生成相应资源</div>
@@ -519,12 +511,14 @@
         import { registerActions } from './assets/button.js';
         import { initCommandPalette } from './assets/command.js';
         import { registerPageShortcuts } from './assets/shortcut.js';
+        import { initCapNav } from './assets/nav.js';
 
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
         }
 
         const userId = getUserId();
+        initCapNav('chat');
         let activeSessionId = null;
         let sessions = [];
 
@@ -609,56 +603,22 @@
             </div>`;
         }
 
-        // ---- 动画演示渲染（复用资源库沙箱 iframe 方案） ----
-        let __animRuntimeSrc = null;
-        async function getAnimRuntimeSrc() {
-            if (__animRuntimeSrc !== null) return __animRuntimeSrc;
-            try {
-                const resp = await fetch('./assets/anim-runtime.js');
-                __animRuntimeSrc = await resp.text();
-            } catch (e) { __animRuntimeSrc = ''; }
-            return __animRuntimeSrc;
-        }
-
-        // 检测文本中是否包含 defineAnimation 代码块
-        function extractAnimSketch(text) {
-            if (!text || text.indexOf('defineAnimation') === -1) return null;
-            const m = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/i);
-            if (m && m[1].indexOf('defineAnimation') !== -1) return m[1].trim();
-            return null;
-        }
-
-        // 挂载动画 iframe 到指定容器
+        // ---- 动画渲染 ----
         async function mountChatAnimation(container, sketch) {
             const frame = container.querySelector('.anim-frame');
             if (!frame) return;
-            const runtime = await getAnimRuntimeSrc();
-            const srcdoc = `<!DOCTYPE html><html><head><meta charset="utf-8">
-<style>
-  html,body{margin:0;padding:0;background:#fff;overflow:hidden;font-family:system-ui,-apple-system,'Microsoft YaHei',sans-serif;}
-  #anim-root{position:relative;}
-  #anim-canvas-holder{position:relative;}
-  #anim-controls{display:flex;gap:8px;padding:8px 4px 0;}
-  #anim-controls button{font-size:13px;padding:4px 12px;border:1px solid #D1D5DB;background:#fff;border-radius:6px;cursor:pointer;color:#374151;}
-  #anim-controls button:hover{background:#F3F4F6;}
-  .katex{font-size:1em;}
-</style>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-</head><body>
-<div id="anim-root"><div id="anim-canvas-holder"></div></div>
-<div id="anim-controls">
-  <button id="anim-playpause" type="button">⏸ 暂停</button>
-  <button id="anim-replay" type="button">↻ 重播</button>
-</div>
-<script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"><\/script>
-<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"><\/script>
+            // 加载 anim-runtime.js
+            let runtime = '';
+            try {
+                const resp = await fetch('./assets/anim-runtime.js');
+                if (resp.ok) runtime = await resp.text();
+            } catch (e) { /* fallback: 无 runtime */ }
+            const srcdoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+html,body{margin:0;overflow:hidden;width:100%;height:100%;background:#fff;}
+canvas{display:block;margin:0 auto;}
+</style></head><body>
 <script>${runtime}<\/script>
-<script>
-window.onerror=function(m){var e=document.getElementById('anim-root');if(e){e.innerHTML='<div style="padding:24px;color:#EF4444;font-size:14px">⚠️ 动画运行出错：'+m+'</div>';}return true;};
-try {
-${sketch}
-} catch(err){ window.onerror(err.message); }
-<\/script>
+<script>${sketch}<\/script>
 </body></html>`;
             frame.srcdoc = srcdoc;
 
@@ -675,7 +635,6 @@ ${sketch}
             }
         }
 
-        // 将 markdown 中的动画代码块替换为渲染占位 HTML
         function renderAnimBlock(sketch, idx) {
             return `<div class="anim-block" data-anim-idx="${idx}">
                 <div class="anim-toolbar">
@@ -728,7 +687,7 @@ ${sketch}
             const input = document.createElement('input');
             input.type = 'text';
             input.value = oldTitle === '新会话' ? '' : oldTitle;
-            input.style.cssText = 'width:100%;font-size:13px;padding:2px 4px;border:1px solid #4F6EF7;border-radius:4px;outline:none;background:#fff;color:#1A1A2E;';
+            input.style.cssText = 'width:100%;font-size:13px;padding:2px 4px;border:1px solid #C77B3C;border-radius:4px;outline:none;background:#fff;color:#1A1A2E;';
             el.replaceWith(input);
             input.focus();
             input.select();
@@ -1062,6 +1021,17 @@ ${sketch}
         window.loadSession = loadSession;
 
         loadSessions();
+
+        // 首页 AI 核心提问框跳转而来：?q=... 自动填入并发送
+        (function handleQueryParam() {
+            const q = new URLSearchParams(window.location.search).get('q');
+            if (!q) return;
+            const input = document.getElementById('chat-input');
+            if (input) input.value = q;
+            // 清掉地址栏参数，避免刷新重复发送
+            history.replaceState(null, '', window.location.pathname);
+            setTimeout(() => sendMessage(), 400);
+        })();
     </script>
     <script>lucide.createIcons();</script>
     <script src="./assets/tracker.js"></script>

@@ -7,6 +7,8 @@
     <script src="https://unpkg.com/lucide@0.460.0"></script>
     <link rel="stylesheet" href="./assets/styles.css">
     <link rel="stylesheet" href="./assets/assistant.css">
+    <link rel="stylesheet" href="./assets/aurora.css">
+    <link rel="stylesheet" href="./assets/aurora-bridge.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         .main {
@@ -120,7 +122,7 @@
         .btn-primary {
             width: 100%;
             padding: 12px;
-            background: #4F6EF7;
+            background: #C77B3C;
             color: #fff;
             border: none;
             border-radius: 8px;
@@ -133,7 +135,7 @@
         .btn-primary:disabled { background: #BDBDBD; cursor: not-allowed; }
         .advanced-toggle {
             font-size: 13px;
-            color: #4F6EF7;
+            color: #C77B3C;
             cursor: pointer;
             margin-top: 12px;
             display: flex;
@@ -143,7 +145,7 @@
         .advanced-options {
             margin-top: 12px;
             padding: 16px;
-            background: #F7F8FC;
+            background: #F2EBDF;
             border-radius: 8px;
             display: none;
         }
@@ -182,7 +184,7 @@
         .result-empty-text { font-size: 14px; }
         .result-item { margin-bottom: 24px; }
         .result-item-title { font-weight: 600; margin-bottom: 8px; color: #1E1E2E; }
-        .result-item-content { background: #F7F8FC; border-radius: 8px; padding: 16px; font-size: 14px; line-height: 1.6; }
+        .result-item-content { background: #F2EBDF; border-radius: 8px; padding: 16px; font-size: 14px; line-height: 1.6; }
         .result-actions { display: flex; gap: 12px; margin-top: 16px; }
         .btn-secondary {
             padding: 10px 20px;
@@ -221,32 +223,10 @@
     </style>
 </head>
 <body>
+    <div class="aurora-bg"></div>
+    <div class="aurora-orb"></div>
+    <div class="aurora-grid"></div>
     <div class="layout">
-        <!-- Sidebar -->
-                <nav class="sidebar">
-            <a href="index.html" class="sidebar-logo">
-                <div class="sidebar-logo-icon">S</div>
-                智能学习
-            </a>
-            <div class="sidebar-section-title">主菜单</div>
-            <a href="index.html" class="nav-item"><span class="icon"><i data-lucide="home"></i></span>学习看板</a>
-            <a href="chat.html" class="nav-item"><span class="icon"><i data-lucide="message-square"></i></span>智能对话</a>
-            <a href="generate.html" class="nav-item active"><span class="icon"><i data-lucide="sparkles"></i></span>资源生成</a>
-            <a href="library.html" class="nav-item"><span class="icon"><i data-lucide="library"></i></span>资源库</a>
-            <a href="pathway.html" class="nav-item"><span class="icon"><i data-lucide="share-2"></i></span>学习路径</a>
-            <a href="evaluate.html" class="nav-item"><span class="icon"><i data-lucide="clipboard-check"></i></span>学习评估</a>
-            <a href="profile.html" class="nav-item"><span class="icon"><i data-lucide="circle-user"></i></span>个人中心</a>
-            <div class="sidebar-footer">
-                <div class="sidebar-user">
-                    <div class="sidebar-avatar" id="sidebar-avatar">?</div>
-                    <span class="user-info" id="user-info">加载中...</span>
-                </div>
-                <button class="btn-logout" data-action="logout">
-                    <i data-lucide="log-out" style="width:16px;height:16px;"></i>退出登录
-                </button>
-            </div>
-        </nav>
-
         <!-- Main -->
         <main class="main">
             <h1 class="page-title">生成学习资源</h1>
@@ -390,12 +370,14 @@
         import { showDialog } from './assets/dialog.js';
         import { registerActions } from './assets/button.js';
         import { initCommandPalette } from './assets/command.js';
-        
+        import { initCapNav } from './assets/nav.js';
+
         if (!isLoggedIn()) {
             window.location.href = 'auth.html';
         }
 
         const userId = getUserId();
+        initCapNav('generate');
 
         // 解析 URL 参数
         const urlParams = new URLSearchParams(window.location.search);
@@ -690,7 +672,7 @@
                 subEl.innerHTML = batch.tasks.map(t => {
                     const label = TYPE_LABELS[t.resource_type] || t.resource_type;
                     const statusText = t.status === 'done' ? '完成' : t.status === 'failed' ? '失败' : `${t.progress}%`;
-                    const color = t.status === 'done' ? '#4CAF50' : t.status === 'failed' ? '#F44336' : '#4F6EF7';
+                    const color = t.status === 'done' ? '#4CAF50' : t.status === 'failed' ? '#F44336' : '#C77B3C';
                     return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
                         <span style="font-size:13px;min-width:60px;">${label}</span>
                         <div style="flex:1;height:6px;background:#E5E7EB;border-radius:3px;overflow:hidden;">
@@ -721,7 +703,7 @@
 
             tabBar.innerHTML = tasks.map((t, i) => {
                 const label = TYPE_LABELS[t.resource_type] || t.resource_type;
-                const isActive = i === 0 ? 'border-bottom:2px solid #4F6EF7;color:#4F6EF7;' : '';
+                const isActive = i === 0 ? 'border-bottom:2px solid #C77B3C;color:#C77B3C;' : '';
                 const icon = t.status === 'done' ? '&#10003;' : '&#10007;';
                 const iconColor = t.status === 'done' ? '#4CAF50' : '#F44336';
                 return `<button onclick="switchBatchTab(${i})" class="batch-tab-btn" data-idx="${i}" style="padding:8px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:500;${isActive}">
@@ -754,8 +736,8 @@
             const btns = document.querySelectorAll('.batch-tab-btn');
             btns.forEach(b => b.style.borderBottom = 'none');
             btns.forEach(b => b.style.color = '#1E1E2E');
-            btns[idx].style.borderBottom = '2px solid #4F6EF7';
-            btns[idx].style.color = '#4F6EF7';
+            btns[idx].style.borderBottom = '2px solid #C77B3C';
+            btns[idx].style.color = '#C77B3C';
             // Re-fetch tasks from last known state
             if (window._lastBatchTasks) {
                 showTabContent(window._lastBatchTasks, idx, document.getElementById('batch-tab-content'));
