@@ -246,6 +246,34 @@
         }
         .message.assistant .message-bubble th { background: #f6f8fa; }
 
+        /* 动画演示资源（沙箱渲染） */
+        .anim-block { margin: 8px 0; }
+        /* 含动画的消息放宽，容纳 800px 画布 */
+        .message.assistant.has-anim {
+            max-width: 880px;
+            width: calc(100% - 8px);
+        }
+        .message.assistant.has-anim .message-bubble {
+            padding: 12px;
+        }
+        .anim-toolbar {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+        }
+        .anim-frame {
+            width: 100%; height: 540px; border: 1px solid #E5E7EB;
+            border-radius: 10px; background: #fff;
+        }
+        .anim-src {
+            background: #0d1117; color: #c9d1d9; border-radius: 10px; padding: 14px;
+            overflow: auto; max-height: 540px;
+            font-family: 'Fira Code', Consolas, monospace; font-size: 12.5px; line-height: 1.5;
+        }
+        .btn-anim-src {
+            font-size: 13px; padding: 4px 12px; border: 1px solid #D1D5DB;
+            background: #fff; border-radius: 6px; cursor: pointer; color: #374151;
+        }
+        .btn-anim-src:hover { background: #F3F4F6; }
+
         /* AI Recommendations */
         .recommendations-panel {
             margin: 16px 0;
@@ -514,12 +542,22 @@
             });
         }
 
-        function renderMarkdown(text, videoRefs) {
+        function renderMarkdown(text, videoRefs, animSink) {
             if (!text || typeof marked === 'undefined') return escapeHtml(text || '');
             try {
                 const mathPlaceholders = [];
+                // 提取动画代码块（defineAnimation），替换为渲染占位
+                let preText = text;
+                if (animSink && preText.indexOf('defineAnimation') !== -1) {
+                    preText = preText.replace(/```(?:javascript|js)?\s*\n([\s\S]*?)```/gi, (full, body) => {
+                        if (body.indexOf('defineAnimation') === -1) return full;
+                        const idx = animSink.length;
+                        animSink.push(body.trim());
+                        return `\x00ANIM${idx}\x00`;
+                    });
+                }
                 // 保护 $$...$$ 块级公式
-                let processed = text.replace(/\$\$([\s\S]*?)\$\$/g, (m) => {
+                let processed = preText.replace(/\$\$([\s\S]*?)\$\$/g, (m) => {
                     mathPlaceholders.push(m);
                     return `\x00MATH${mathPlaceholders.length - 1}\x00`;
                 });
@@ -530,6 +568,10 @@
                 });
                 let html = marked.parse(processed);
                 html = html.replace(/\x00MATH(\d+)\x00/g, (_, idx) => mathPlaceholders[parseInt(idx)]);
+                // 还原动画占位为渲染容器
+                if (animSink && animSink.length) {
+                    html = html.replace(/\x00ANIM(\d+)\x00/g, (_, idx) => renderAnimBlock(animSink[parseInt(idx)], parseInt(idx)));
+                }
                 // 渲染 [v1] [v2] 视频引用为上标链接
                 if (videoRefs && videoRefs.length) {
                     html = html.replace(/\[v(\d+)\]/g, (_, n) => {
@@ -564,6 +606,84 @@
                         <span class="video-card-meta"><span class="video-card-source">${v.source === 'bilibili' ? 'B站' : v.source}</span></span>
                     </div>
                 </a>`).join('')}
+            </div>`;
+        }
+
+        // ---- 动画演示渲染（复用资源库沙箱 iframe 方案） ----
+        let __animRuntimeSrc = null;
+        async function getAnimRuntimeSrc() {
+            if (__animRuntimeSrc !== null) return __animRuntimeSrc;
+            try {
+                const resp = await fetch('./assets/anim-runtime.js');
+                __animRuntimeSrc = await resp.text();
+            } catch (e) { __animRuntimeSrc = ''; }
+            return __animRuntimeSrc;
+        }
+
+        // 检测文本中是否包含 defineAnimation 代码块
+        function extractAnimSketch(text) {
+            if (!text || text.indexOf('defineAnimation') === -1) return null;
+            const m = text.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/i);
+            if (m && m[1].indexOf('defineAnimation') !== -1) return m[1].trim();
+            return null;
+        }
+
+        // 挂载动画 iframe 到指定容器
+        async function mountChatAnimation(container, sketch) {
+            const frame = container.querySelector('.anim-frame');
+            if (!frame) return;
+            const runtime = await getAnimRuntimeSrc();
+            const srcdoc = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+  html,body{margin:0;padding:0;background:#fff;overflow:hidden;font-family:system-ui,-apple-system,'Microsoft YaHei',sans-serif;}
+  #anim-root{position:relative;}
+  #anim-canvas-holder{position:relative;}
+  #anim-controls{display:flex;gap:8px;padding:8px 4px 0;}
+  #anim-controls button{font-size:13px;padding:4px 12px;border:1px solid #D1D5DB;background:#fff;border-radius:6px;cursor:pointer;color:#374151;}
+  #anim-controls button:hover{background:#F3F4F6;}
+  .katex{font-size:1em;}
+</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+</head><body>
+<div id="anim-root"><div id="anim-canvas-holder"></div></div>
+<div id="anim-controls">
+  <button id="anim-playpause" type="button">⏸ 暂停</button>
+  <button id="anim-replay" type="button">↻ 重播</button>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"><\/script>
+<script>${runtime}<\/script>
+<script>
+window.onerror=function(m){var e=document.getElementById('anim-root');if(e){e.innerHTML='<div style="padding:24px;color:#EF4444;font-size:14px">⚠️ 动画运行出错：'+m+'</div>';}return true;};
+try {
+${sketch}
+} catch(err){ window.onerror(err.message); }
+<\/script>
+</body></html>`;
+            frame.srcdoc = srcdoc;
+
+            // 查看源码切换
+            const viewBtn = container.querySelector('.btn-anim-src');
+            const srcPre = container.querySelector('.anim-src');
+            if (viewBtn && srcPre) {
+                viewBtn.onclick = function() {
+                    const showing = srcPre.style.display !== 'none';
+                    srcPre.style.display = showing ? 'none' : 'block';
+                    frame.style.display = showing ? 'block' : 'none';
+                    viewBtn.textContent = showing ? '查看源码' : '返回动画';
+                };
+            }
+        }
+
+        // 将 markdown 中的动画代码块替换为渲染占位 HTML
+        function renderAnimBlock(sketch, idx) {
+            return `<div class="anim-block" data-anim-idx="${idx}">
+                <div class="anim-toolbar">
+                    <button class="btn-anim-src" type="button">查看源码</button>
+                    <span style="color:#9CA3AF;font-size:12px;">🎬 动画演示 · 播放控制在画面内</span>
+                </div>
+                <iframe class="anim-frame" sandbox="allow-scripts" title="教学动画"></iframe>
+                <pre class="anim-src" style="display:none;"><code>${escapeHtml(sketch)}</code></pre>
             </div>`;
         }
 
@@ -641,9 +761,10 @@
             }
             const parts = [];
             for (const m of messages) {
-                const content = m.role === 'assistant' ? renderMarkdown(m.content) : escapeHtml(m.content);
+                const content = m.role === 'assistant' ? renderMarkdown(m.content, m.extra && m.extra.video_refs, []) : escapeHtml(m.content);
+                const hasAnim = m.role === 'assistant' && content.indexOf('anim-block') !== -1;
                 parts.push(`
-                <div class="message ${m.role}">
+                <div class="message ${m.role}${hasAnim ? ' has-anim' : ''}">
                     <div class="message-bubble">${content}</div>
                     <div class="message-time">${formatTime(m.created_at)}</div>
                 </div>`);
@@ -662,9 +783,15 @@
                         { left: '\\[', right: '\\]', display: true },
                         { left: '\\(', right: '\\)', display: false }
                     ],
+                    ignoredClasses: ['anim-src'],
                     throwOnError: false
                 });
             }
+            // 挂载动画演示沙箱
+            area.querySelectorAll('.anim-block').forEach(block => {
+                const codeEl = block.querySelector('.anim-src code');
+                if (codeEl) mountChatAnimation(block, codeEl.textContent);
+            });
             area.scrollTop = area.scrollHeight;
         }
 

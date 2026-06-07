@@ -35,7 +35,7 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     kp_name = await resolve_kp_name(state, config)
     logger.info(f"[DocAgent] kp_name={kp_name}")
     # 检索相关文档
-    context, retrieved_texts = await retrieve_context(state, "DocAgent")
+    context, retrieved_texts = await retrieve_context(state, "DocAgent", config)
 
     # 更新 retrieved_docs
     state = state.model_copy(update={"retrieved_docs": retrieved_texts})

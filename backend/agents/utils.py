@@ -438,6 +438,7 @@ def _rrf_fusion(
 async def retrieve_context(
     state: AgentState,
     agent_label: str = "Agent",
+    config_dict: dict | None = None,
 ) -> tuple[str, list[str]]:
     """
     RAG 检索并格式化上下文，供各生成 Agent 复用。
@@ -451,12 +452,13 @@ async def retrieve_context(
 
     :param state:        AgentState（含 user_message, kp_id, chat_history, profile 等）
     :param agent_label:  Agent 名称标签（用于日志）
+    :param config_dict:  LangGraph configurable dict（含 db session，用于解析 kp_id → kp_name）
     :return:             (context_str, retrieved_texts)
     """
     import time
     from backend.rag.retriever import retrieve, retrieve_by_kp, retrieve_with_queries, retrieve_hybrid, format_context
 
-    kp_name = state.kp_id or "未知知识点"
+    kp_name = await resolve_kp_name(state, config_dict)
     user_id = str(state.user_id)
     cache_key = (kp_name, user_id)
 
