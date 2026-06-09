@@ -93,6 +93,7 @@ from backend.models.schemas import (
     StudentProfileIn,
     StudentProfileOut,
     TokenOut,
+    UserUpdate,
     UserCreate,
     UserOut,
     KGNodeType,
@@ -480,6 +481,72 @@ async def send_learning_report(
     return {"message": "学习报告邮件已发送"}
 
 
+@app.post("/study-plan/email", tags=["study-plan"])
+async def send_study_plan_email(
+    plan_id: int,
+    user_id: int,
+    db: AsyncSession = Depends(get_session),
+):
+    """将学习计划表发送到用户邮箱。"""
+    import asyncio as _asyncio
+    import backend.services.study_plan as sp
+
+    # 获取用户信息
+    user = (await db.execute(sa.select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if not user.email:
+        raise HTTPException(status_code=400, detail="未设置邮箱地址，请先在个人中心绑定邮箱")
+
+    # 获取学习计划
+    plan = await sp.get_study_plan(plan_id, user_id, db)
+    if not plan:
+        raise HTTPException(status_code=404, detail="学习计划不存在")
+
+    # 构建邮件数据：按日期分组 items
+    from collections import OrderedDict
+    items_by_date = OrderedDict()
+    for item in plan.items:
+        date_str = item.scheduled_date.isoformat() if item.scheduled_date else "未排期"
+        # 格式化日期为中文
+        d = item.scheduled_date
+        weekdays = ["一", "二", "三", "四", "五", "六", "日"]
+        label = f"{d.month}月{d.day}日 周{weekdays[d.weekday()]}"
+        if label not in items_by_date:
+            items_by_date[label] = []
+        resources_info = [
+            {"id": r.resource_id, "type": r.resource_type.value if hasattr(r.resource_type, 'value') else str(r.resource_type), "title": r.title}
+            for r in (item.resources or [])
+        ]
+        items_by_date[label].append({
+            "kp_name": item.kp_name,
+            "start_time": item.start_time,
+            "end_time": item.end_time,
+            "estimated_minutes": item.estimated_minutes or "-",
+            "order_index": item.order_index,
+            "is_completed": item.is_completed,
+            "notes": item.notes or "",
+            "resources": resources_info,
+            "missing_resource_types": [str(t) if not isinstance(t, str) else t for t in (item.missing_resource_types or [])],
+        })
+
+    plan_data = {
+        "title": plan.title,
+        "start_date": plan.start_date.isoformat() if plan.start_date else "",
+        "end_date": plan.end_date.isoformat() if plan.end_date else "",
+        "daily_time_minutes": plan.daily_time_minutes or "-",
+        "goal": plan.goal or "",
+        "items_by_date": items_by_date,
+    }
+
+    _asyncio.create_task(email_sender.send_study_plan(user.email, user.username, plan_data))
+    return {
+        "message": "学习计划表邮件已发送",
+        "email": user.email,
+        "plan_title": plan.title,
+    }
+
+
 # ===========================================================
 # 学生画像
 # ===========================================================
@@ -510,6 +577,38 @@ async def get_profile_history(
 ):
     """获取画像历史版本。"""
     return await profile_svc.get_profile_history(user_id, db)
+
+
+@app.put("/user/account", response_model=UserOut, tags=["user"])
+async def update_account(
+    user_id: int,
+    body: UserUpdate,
+    db: AsyncSession = Depends(get_session),
+):
+    """更新用户名和邮箱。"""
+    from backend.db.crud import select_one, update_by_id
+
+    updates = {}
+    if body.username is not None:
+        existing = await select_one(db, User, filters={"username": body.username})
+        if existing and existing.id != user_id:
+            raise HTTPException(status_code=409, detail="用户名已被占用")
+        updates["username"] = body.username
+    if body.email is not None:
+        if body.email != "":
+            existing = await select_one(db, User, filters={"email": body.email})
+            if existing and existing.id != user_id:
+                raise HTTPException(status_code=409, detail="邮箱已被占用")
+        updates["email"] = body.email if body.email != "" else None
+        updates["email_verified"] = False
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="没有需要更新的字段")
+
+    updated = await update_by_id(db, User, user_id, data=updates)
+    if not updated:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return updated
 
 
 # ===========================================================

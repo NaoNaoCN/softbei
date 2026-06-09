@@ -110,6 +110,14 @@ class EmailSender:
         html = render_learning_report(username, report_data)
         return await self.send(to, f"[学习系统] 您的学习报告（{report_data['date']}）", html)
 
+    async def send_study_plan(self, to: str, username: str, plan_data: dict) -> bool:
+        """发送学习计划表邮件。"""
+        from backend.email.templates import render_study_plan
+
+        html = render_study_plan(username, plan_data)
+        subject = f"[学习系统] 您的学习计划表 · {plan_data.get('title', '')}"
+        return await self.send(to, subject, html)
+
 
 # 模块级单例
 email_sender = EmailSender()

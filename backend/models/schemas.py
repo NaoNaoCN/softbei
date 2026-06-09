@@ -82,6 +82,11 @@ class UserOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class UserUpdate(BaseModel):
+    username: str | None = Field(default=None, min_length=2, max_length=64)
+    email: str | None = Field(default=None, max_length=256)
+
+
 class TokenOut(BaseModel):
     """
     这是登录成功后返回给前端的响应体。

@@ -380,9 +380,9 @@ email:
   smtp_username: "${SMTP_USERNAME}"
   smtp_password: "${SMTP_PASSWORD}"
   smtp_from: "${SMTP_FROM}"
-  smtp_use_tls: true
-  smtp_timeout: 30
-  max_retries: 3
-  verification_expire_minutes: 30
-  password_reset_expire_minutes: 15
-  rate_limit_send_per_hour: 5
+  smtp_use_tls: "${SMTP_USE_TLS-true}"
+  smtp_timeout: "${SMTP_TIMEOUT-30}"
+  max_retries: "${EMAIL_MAX_RETRIES-3}"
+  verification_expire_minutes: "${EMAIL_VERIFY_EXPIRE_MINUTES-30}"
+  password_reset_expire_minutes: "${EMAIL_PASSWORD_RESET_EXPIRE_MINUTES-15}"
+  rate_limit_send_per_hour: "${EMAIL_RATE_LIMIT_PER_HOUR-5}"

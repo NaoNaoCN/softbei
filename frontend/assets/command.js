@@ -30,7 +30,7 @@ const PAGE_COMMANDS = [
     { id: 'nav-chat', label: '智能对话', desc: 'Chat', icon: 'message-square', action: () => { window.location.href = 'chat.html'; } },
     { id: 'nav-generate', label: '资源生成', desc: 'Generate', icon: 'sparkles', action: () => { window.location.href = 'generate.html'; } },
     { id: 'nav-library', label: '资源库', desc: 'Library', icon: 'library', action: () => { window.location.href = 'library.html'; } },
-    { id: 'nav-pathway', label: '学习路径', desc: 'Pathway', icon: 'share-2', action: () => { window.location.href = 'pathway.html'; } },
+    { id: 'nav-pathway', label: '知识图谱', desc: 'Knowledge Graph', icon: 'share-2', action: () => { window.location.href = 'pathway.html'; } },
     { id: 'nav-evaluate', label: '学习评估', desc: 'Evaluate', icon: 'clipboard-check', action: () => { window.location.href = 'evaluate.html'; } },
     { id: 'nav-profile', label: '个人中心', desc: 'Profile', icon: 'circle-user', action: () => { window.location.href = 'profile.html'; } },
 ];

@@ -34,3 +34,10 @@ def render_learning_report(username: str, report_data: dict) -> str:
     return _env.get_template("learning_report.html").render(
         username=username, **report_data
     )
+
+
+def render_study_plan(username: str, plan_data: dict) -> str:
+    """渲染学习计划表邮件 HTML。"""
+    return _env.get_template("study_plan.html").render(
+        username=username, **plan_data
+    )

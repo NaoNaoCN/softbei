@@ -20,7 +20,7 @@ const NAV_ITEMS = [
     { page: 'chat',     href: 'chat.html',     icon: 'message-circle',  label: '智能对话' },
     { page: 'profile',  href: 'profile.html',  icon: 'user',            label: '我的画像' },
     { page: 'generate', href: 'generate.html', icon: 'sparkles',        label: '生成资源' },
-    { page: 'pathway',  href: 'pathway.html',  icon: 'map',             label: '学习路径' },
+    { page: 'pathway',  href: 'pathway.html',  icon: 'map',             label: '知识图谱' },
     { page: 'library',  href: 'library.html',  icon: 'book-open',       label: '资源库' },
     { page: 'evaluate', href: 'evaluate.html', icon: 'clipboard-check', label: '学习评估' },
 ];

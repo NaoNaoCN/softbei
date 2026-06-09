@@ -107,6 +107,15 @@ export async function updateProfile(user_id, data) {
     return resp?.json();
 }
 
+export async function updateAccount(user_id, data) {
+    const resp = await apiFetch(`/user/account?user_id=${encodeURIComponent(user_id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    return resp?.json();
+}
+
 // ===========================================================
 // 资源
 // ===========================================================
@@ -397,10 +406,11 @@ export async function postLearningRecord(user_id, data) {
     return resp?.json();
 }
 
-export async function getLearningRecords(user_id, { kp_id, limit } = {}) {
+export async function getLearningRecords(user_id, { kp_id, limit, skip } = {}) {
     let url = `/records?user_id=${encodeURIComponent(user_id)}`;
     if (kp_id) url += `&kp_id=${encodeURIComponent(kp_id)}`;
     if (limit) url += `&limit=${limit}`;
+    if (skip) url += `&skip=${skip}`;
     const resp = await apiFetch(url);
     return resp?.json();
 }
@@ -411,5 +421,16 @@ export async function getLearningRecords(user_id, { kp_id, limit } = {}) {
 
 export async function getLearningAnalytics(user_id) {
     const resp = await apiFetch(`/analytics/dashboard?user_id=${encodeURIComponent(user_id)}`);
+    return resp?.json();
+}
+
+// ===========================================================
+// 学习计划
+// ===========================================================
+
+export async function sendStudyPlanEmail(plan_id, user_id) {
+    const resp = await apiFetch(`/study-plan/email?plan_id=${plan_id}&user_id=${user_id}`, {
+        method: 'POST'
+    });
     return resp?.json();
 }
