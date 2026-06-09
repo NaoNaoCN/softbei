@@ -8,7 +8,6 @@
     <script src="https://unpkg.com/lucide@0.460.0"></script>
     <link rel="stylesheet" href="./assets/styles-v4.css">
     <style>
-        .app-body { max-width: 1100px; }
 
         /* Stats row — uses styles-v4 .stat-row / .stat-num / .stat-lbl */
 
@@ -183,7 +182,7 @@
         <div class="app-content">
         <div class="app-body">
             <h1 class="page-title">历史记录</h1>
-            <p class="section-desc">回溯学习历程，审视答题记录，追踪成长轨迹。</p>
+            <p class="page-subtitle">回溯学习历程，审视答题记录，追踪成长轨迹。</p>
 
             <!-- Tabs -->
             <div class="tab-bar">
@@ -297,11 +296,12 @@
             const quizAvg = quizTotal ? Math.round(quizCorrect / quizTotal * 100) : 0;
 
             document.getElementById('audit-stats').innerHTML = `
-                <div><div class="stat-num">${weekDays.size}</div><div class="stat-lbl">本周学习天数</div></div>
-                <div><div class="stat-num">${(totalSec / 3600).toFixed(1)}</div><div class="stat-lbl">累计时长 (h)</div></div>
-                <div><div class="stat-num">${quizTotal}</div><div class="stat-lbl">答题总数</div></div>
-                <div><div class="stat-num">${quizAvg}%</div><div class="stat-lbl">答题正确率</div></div>
+                <div class="stat-item"><i data-lucide="calendar-days" class="stat-icon"></i><div class="stat-num">${weekDays.size}</div><div class="stat-lbl">本周学习天数</div></div>
+                <div class="stat-item"><i data-lucide="clock" class="stat-icon"></i><div class="stat-num">${(totalSec / 3600).toFixed(1)}</div><div class="stat-lbl">累计时长 (h)</div></div>
+                <div class="stat-item"><i data-lucide="file-question" class="stat-icon"></i><div class="stat-num">${quizTotal}</div><div class="stat-lbl">答题总数</div></div>
+                <div class="stat-item"><i data-lucide="target" class="stat-icon"></i><div class="stat-num">${quizAvg}%</div><div class="stat-lbl">答题正确率</div></div>
             `;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
         }
 
         // ============================================================

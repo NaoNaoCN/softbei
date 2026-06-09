@@ -9,7 +9,6 @@
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <link rel="stylesheet" href="./assets/styles-v4.css">
     <style>
-        .app-body { max-width: 960px; }
 
         /* Tabs */
 
@@ -27,26 +26,16 @@
         /* section divider between rows */
         .dash-grid + .dash-grid { border-top: 1px solid var(--divider); padding-top: 28px; }
 
-        /* KPI bar */
-        .kpi-bar {
+        /* KPI bar — grid layout override for stat-row */
+        #kpi-bar {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 16px;
-            margin-bottom: 28px;
         }
-        .kpi-card { text-align: center; padding: 4px 0; }
-        .kpi-card-val {
-            font-family: var(--display); font-size: 28px; font-weight: 800;
-            color: var(--accent); line-height: 1.1;
-        }
-        .kpi-card-lbl { font-size: 12px; color: var(--text-3); margin-top: 4px; }
-        .kpi-delta { font-size: 11px; font-weight: 600; margin-top: 2px; }
-        .kpi-delta.up   { color: var(--success); }
-        .kpi-delta.down { color: var(--danger); }
-        .kpi-delta.flat { color: var(--text-3); }
+        #kpi-bar .stat-item { padding: 4px 0; }
 
         /* KPI bar bottom separator */
-        .kpi-bar + .dash-grid { border-top: 1px solid var(--divider); padding-top: 28px; }
+        #kpi-bar + .dash-grid { border-top: 1px solid var(--divider); padding-top: 28px; }
 
         /* Heatmap — GitHub-style compact */
         .hm-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
@@ -403,11 +392,11 @@
         @media (max-width: 960px) {
             .dash-grid, .dash-grid.heat-row { grid-template-columns: 1fr; gap: 0; }
             .dash-grid + .dash-grid { padding-top: 24px; }
-            .kpi-bar { grid-template-columns: repeat(2, 1fr); }
+            #kpi-bar { grid-template-columns: repeat(2, 1fr); }
             .forget-grid { grid-template-columns: 1fr; }
         }
         @media (max-width: 640px) {
-            .kpi-bar { grid-template-columns: 1fr; }
+            #kpi-bar { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -419,7 +408,7 @@
 <div class="app-body">
 
     <h1 class="page-title">学习评估</h1>
-    <p class="section-desc">查看学习数据，完成测验题目，发现薄弱知识点，针对性提升。</p>
+    <p class="page-subtitle">查看学习数据，完成测验题目，发现薄弱知识点，针对性提升。</p>
 
     <!-- Tabs -->
     <div class="tab-bar">
@@ -432,26 +421,30 @@
     <div id="tab-overview">
 
         <!-- KPI bar -->
-        <div class="kpi-bar">
-            <div class="kpi-card" id="kpi-streak-card">
-                <div class="kpi-card-val" id="kpi-streak-val">-</div>
-                <div class="kpi-card-lbl">连续学习 (天)</div>
-                <div class="kpi-delta flat" id="kpi-streak-delta"></div>
+        <div class="stat-row" id="kpi-bar">
+            <div class="stat-item" id="kpi-streak-card">
+                <i data-lucide="flame" class="stat-icon"></i>
+                <div class="stat-num" id="kpi-streak-val">-</div>
+                <div class="stat-lbl">连续学习 (天)</div>
+                <div class="stat-delta flat" id="kpi-streak-delta"></div>
             </div>
-            <div class="kpi-card" id="kpi-time-card">
-                <div class="kpi-card-val" id="kpi-time-val">-</div>
-                <div class="kpi-card-lbl">总学习 (分钟)</div>
-                <div class="kpi-delta flat" id="kpi-time-delta"></div>
+            <div class="stat-item" id="kpi-time-card">
+                <i data-lucide="clock" class="stat-icon"></i>
+                <div class="stat-num" id="kpi-time-val">-</div>
+                <div class="stat-lbl">总学习 (分钟)</div>
+                <div class="stat-delta flat" id="kpi-time-delta"></div>
             </div>
-            <div class="kpi-card" id="kpi-mastered-card">
-                <div class="kpi-card-val" id="kpi-mastered-val">-</div>
-                <div class="kpi-card-lbl">已掌握知识点</div>
-                <div class="kpi-delta flat" id="kpi-mastered-delta"></div>
+            <div class="stat-item" id="kpi-mastered-card">
+                <i data-lucide="brain" class="stat-icon"></i>
+                <div class="stat-num" id="kpi-mastered-val">-</div>
+                <div class="stat-lbl">已掌握知识点</div>
+                <div class="stat-delta flat" id="kpi-mastered-delta"></div>
             </div>
-            <div class="kpi-card" id="kpi-acc-card">
-                <div class="kpi-card-val" id="kpi-acc-val">-</div>
-                <div class="kpi-card-lbl">总正确率</div>
-                <div class="kpi-delta flat" id="kpi-acc-delta"></div>
+            <div class="stat-item" id="kpi-acc-card">
+                <i data-lucide="target" class="stat-icon"></i>
+                <div class="stat-num" id="kpi-acc-val">-</div>
+                <div class="stat-lbl">总正确率</div>
+                <div class="stat-delta flat" id="kpi-acc-delta"></div>
             </div>
         </div>
 
@@ -675,16 +668,16 @@
         const el = document.getElementById(elId);
         if (!el) return;
         const diff = newVal - oldVal;
-        if (oldVal === 0 && newVal === 0) { el.textContent = ''; el.className = 'kpi-delta flat'; return; }
+        if (oldVal === 0 && newVal === 0) { el.textContent = ''; el.className = 'stat-delta flat'; return; }
         if (diff > 0) {
             el.textContent = '+' + diff + (isPct ? '%' : ' ' + unit);
-            el.className = 'kpi-delta up';
+            el.className = 'stat-delta up';
         } else if (diff < 0) {
             el.textContent = diff + (isPct ? '%' : ' ' + unit);
-            el.className = 'kpi-delta down';
+            el.className = 'stat-delta down';
         } else {
             el.textContent = '持平';
-            el.className = 'kpi-delta flat';
+            el.className = 'stat-delta flat';
         }
     }
 

@@ -31,10 +31,10 @@
     // 引导步骤配置
     const steps = [
         {
-            selector: '.sidebar',
+            selector: '.topbar',
             title: '🧭 导航栏',
-            desc: '这是侧边栏导航，你可以快速切换到各个功能模块。接下来我们一个个介绍。',
-            position: 'right'
+            desc: '这是顶栏导航，你可以快速切换到各个功能模块。接下来我们一个个介绍。',
+            position: 'bottom'
         },
         {
             selector: '.stats-grid',
@@ -55,37 +55,37 @@
             position: 'left'
         },
         {
-            selector: '.nav-item[href="chat.html"]',
+            selector: '.topbar-link[data-key="chat"]',
             title: '💬 智能对话',
             desc: 'AI 学习伴侣！你可以随时向 AI 提问、讨论知识点、让它帮你解答疑惑或整理笔记。',
             position: 'right'
         },
         {
-            selector: '.nav-item[href="generate.html"]',
+            selector: '.topbar-link[data-key="generate"]',
             title: '✨ 资源生成',
             desc: '核心功能！选择知识点后，系统会为你自动生成学习文档、思维导图、测验题、代码示例等个性化资源。',
             position: 'right'
         },
         {
-            selector: '.nav-item[href="library.html"]',
+            selector: '.topbar-link[data-key="library"]',
             title: '📚 资源库',
             desc: '所有生成的学习资源都保存在这里，支持分类浏览、搜索、预览和重新学习。',
             position: 'right'
         },
         {
-            selector: '.nav-item[href="pathway.html"]',
+            selector: '.topbar-link[data-key="pathway"]',
             title: '🗺️ 学习路径',
             desc: '根据你的知识图谱，系统会规划个性化学习路径，帮你按顺序、有节奏地掌握知识。',
             position: 'right'
         },
         {
-            selector: '.nav-item[href="evaluate.html"]',
+            selector: '.topbar-link[data-key="evaluate"]',
             title: '📋 学习评估',
             desc: '定期评估你的学习效果！系统会分析薄弱知识点，并推荐针对性的复习计划。',
             position: 'right'
         },
         {
-            selector: '.nav-item[href="profile.html"]',
+            selector: '.topbar-link[data-key="profile"]',
             title: '📏 个人中心',
             desc: '在这里完善你的学习画像（专业、每日学习时间、认知风格等），系统会据此为你<strong>个性化推荐</strong>学习内容。',
             position: 'right'

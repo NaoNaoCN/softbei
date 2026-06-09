@@ -1,8 +1,8 @@
 /* ============================================================
-   nav.js — 持久化侧栏导航（全站共享外壳）v4
+   nav.js — 持久化顶栏导航（全站共享外壳）v4
 
-   架构：sidebar 是 body 的直接子元素，位于 #view 之外。
-   页面切换时 sidebar 保持不动，仅 #view 内容通过 fetch + DOM
+   架构：topbar 是 body 的直接子元素，位于 #view 之外。
+   页面切换时 topbar 保持不动，仅 #view 内容通过 fetch + DOM
    swap 原地替换，配合 document.startViewTransition() 实现
    同文档平滑过渡。
 
@@ -105,33 +105,33 @@ async function navigateTo(href, pushState = true) {
     }
 
     window.scrollTo({ top: 0, behavior: 'instant' });
-    // Update sidebar active state
-    updateSidebarActive(pageName);
+    // Update topbar active state
+    updateTopbarActive(pageName);
 }
 
 // ============================================================
-// 构建侧栏 HTML
+// 构建顶栏 HTML
 // ============================================================
-function buildSidebar(current) {
+function buildTopbar(current) {
     const links = NAV.map(n => `
-        <a href="${n.href}" class="sidebar-link${n.key === current ? ' active' : ''}" data-key="${n.key}">
+        <a href="${n.href}" class="topbar-link${n.key === current ? ' active' : ''}" data-key="${n.key}">
             <i data-lucide="${n.icon}"></i><span>${n.label}</span>
         </a>`).join('');
 
     return `
-        <aside class="sidebar">
-            <a href="index.html" class="sidebar-brand">
-                <span class="sidebar-brand-mark"><i data-lucide="atom"></i></span>
+        <header class="topbar">
+            <a href="index.html" class="topbar-brand">
+                <span class="topbar-brand-mark"><i data-lucide="atom"></i></span>
                 <span>智学实验室</span>
             </a>
-            <nav class="sidebar-nav">${links}</nav>
-        </aside>`;
+            <nav class="topbar-nav">${links}</nav>
+        </header>`;
 }
 
-function updateSidebarActive(current) {
-    const el = document.querySelector('.sidebar');
+function updateTopbarActive(current) {
+    const el = document.querySelector('.topbar');
     if (!el) return;
-    el.querySelectorAll('.sidebar-link').forEach(a => {
+    el.querySelectorAll('.topbar-link').forEach(a => {
         a.classList.toggle('active', a.dataset.key === current);
     });
 }
@@ -139,23 +139,23 @@ function updateSidebarActive(current) {
 // ============================================================
 // 入口
 // ============================================================
-let _sidebarEl = null;
+let _topbarEl = null;
 
 export function initSidebar(current) {
-    if (_sidebarEl) {
-        updateSidebarActive(current);
+    if (_topbarEl) {
+        updateTopbarActive(current);
         _currentKey = current;
         history.replaceState({ key: current }, '', window.location.href);
-        return _sidebarEl;
+        return _topbarEl;
     }
 
     const host = document.createElement('div');
-    host.innerHTML = buildSidebar(current);
-    _sidebarEl = host.firstElementChild;
-    document.body.insertBefore(_sidebarEl, document.body.firstChild);
+    host.innerHTML = buildTopbar(current);
+    _topbarEl = host.firstElementChild;
+    document.body.insertBefore(_topbarEl, document.body.firstChild);
 
     // Intercept clicks
-    _sidebarEl.addEventListener('click', (e) => {
+    _topbarEl.addEventListener('click', (e) => {
         const link = e.target.closest('a[href]');
         if (!link) return;
         const href = link.getAttribute('href');
@@ -173,7 +173,7 @@ export function initSidebar(current) {
         if (e.state?.key) navigateTo(e.state.key + '.html', false);
     });
 
-    return _sidebarEl;
+    return _topbarEl;
 }
 
 // Backward compatibility

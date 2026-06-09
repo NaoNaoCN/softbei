@@ -15,32 +15,29 @@
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
     <style>
         body { height: 100vh; overflow: hidden; }
-        .app-content { margin-left: 220px; height: 100vh; overflow: hidden; }
+        .app-content { height: 100vh; overflow: hidden; padding-top: 56px; }
 
         .ai-bot-fab, .ai-panel { display: none !important; }
 
-        /* Chat Area */
-        .chat-area { display: flex; flex-direction: column; height: 100vh; min-width: 0; }
+        /* Override app-body for full-height chat layout */
+        .app-body {
+            display: flex; flex-direction: column;
+            height: 100%; max-width: 960px;
+            padding: 40px 36px 60px;
+        }
 
-        /* Chat Header */
-        .chat-header {
-            padding: 14px 24px; border-bottom: 1px solid var(--divider);
-            background: #fff; display: flex; align-items: center; gap: 13px; flex-shrink: 0;
+        /* Chat body — fills remaining space, no heavy card wrapper */
+        .chat-body {
+            flex: 1; display: flex; flex-direction: column;
+            min-height: 0; border-radius: var(--r-md) var(--r-md) 0 0;
+            overflow: hidden;
         }
-        .chat-header-icon {
-            width: 40px; height: 40px; border-radius: 11px;
-            background: var(--accent); display: grid; place-items: center;
-            color: #fff; flex-shrink: 0;
-        }
-        .chat-header-icon i { width: 20px; height: 20px; }
-        .chat-header-title { font-family: var(--display); font-size: 18px; font-weight: 700; letter-spacing: -0.01em; color: var(--text-1); }
-        .chat-header-sub { font-size: 12px; color: var(--text-3); margin-top: 1px; }
 
         /* Onboarding Banner */
         .onboarding-banner {
             padding: 10px 24px; background: var(--accent-soft);
-            border-bottom: 1px solid var(--divider); font-size: 13px;
-            color: var(--accent); flex-shrink: 0; line-height: 1.5;
+            border-left: 1px solid var(--divider); border-right: 1px solid var(--divider);
+            font-size: 13px; color: var(--accent); flex-shrink: 0; line-height: 1.5;
         }
 
         /* Session Sidebar */
@@ -182,7 +179,8 @@
 
         /* Input Area */
         .input-area {
-            padding: 14px 24px; border-top: 1px solid var(--divider);
+            padding: 14px 24px; border: 1px solid var(--divider);
+            border-top: none; border-radius: 0 0 var(--r-md) var(--r-md);
             background: #fff; display: flex; gap: 10px; align-items: center; flex-shrink: 0;
         }
         .chat-input {
@@ -224,7 +222,10 @@
         .voice-tip.show { opacity: 1; }
 
         /* Chat Container */
-        .chat-container { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+        .chat-container {
+            flex: 1; display: flex; overflow: hidden; min-height: 0;
+            border: 1px solid var(--divider); border-bottom: none;
+        }
         .chat-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
 
         /* Batch progress card */
@@ -305,11 +306,9 @@
 
         /* Responsive */
         @media (max-width: 860px) {
-            .app-content { margin-left: 52px; }
             .session-panel { display: none; }
         }
         @media (max-width: 640px) {
-            .app-content { margin-left: 0; }
             .messages-area { padding: 16px; }
             .message { max-width: 90%; }
         }
@@ -342,46 +341,43 @@
 <div class="app-layout">
 <div class="app-content">
 
-<div class="chat-area">
-    <!-- Header -->
-    <div class="chat-header">
-        <div class="chat-header-icon"><i data-lucide="sparkles"></i></div>
-        <div>
-            <div class="chat-header-title">智能对话</div>
-            <div class="chat-header-sub">描述您的学习需求，AI 将自动生成相应资源</div>
-        </div>
-    </div>
+<div class="app-body">
+    <h1 class="page-title">智能对话</h1>
+    <p class="page-subtitle">描述您的学习需求，AI 将自动生成相应资源</p>
 
-    <!-- Onboarding Banner -->
-    <div class="onboarding-banner" id="onboarding-banner" style="display:flex;align-items:center;justify-content:space-between;">
-        <span>正在了解你的学习情况，请回答几个问题帮助我为你定制学习方案。</span>
-        <button onclick="dismissOnboarding()" style="background:none;border:none;cursor:pointer;color:var(--accent);padding:2px 6px;font-size:16px;line-height:1;border-radius:4px;opacity:0.7;" title="关闭">&times;</button>
-    </div>
+    <div class="chat-body">
 
-    <!-- Chat Main -->
-    <div class="chat-container">
-        <!-- Session Panel -->
-        <div class="session-panel">
-            <div class="session-header">
-                <button class="btn-new-chat">+ 新建会话</button>
-            </div>
-            <div class="session-list" id="session-list">
-                <div class="session-label">历史会话</div>
-                <div id="sessions-container"></div>
-            </div>
+        <!-- Onboarding Banner -->
+        <div class="onboarding-banner" id="onboarding-banner" style="display:flex;align-items:center;justify-content:space-between;">
+            <span>正在了解你的学习情况，请回答几个问题帮助我为你定制学习方案。</span>
+            <button onclick="dismissOnboarding()" style="background:none;border:none;cursor:pointer;color:var(--accent);padding:2px 6px;font-size:16px;line-height:1;border-radius:4px;opacity:0.7;" title="关闭">&times;</button>
         </div>
 
-        <!-- Messages + Input -->
-        <div class="chat-main">
-            <div class="messages-area" id="messages-area"></div>
+        <!-- Chat Main -->
+        <div class="chat-container">
+            <!-- Session Panel -->
+            <div class="session-panel">
+                <div class="session-header">
+                    <button class="btn-new-chat">+ 新建会话</button>
+                </div>
+                <div class="session-list" id="session-list">
+                    <div class="session-label">历史会话</div>
+                    <div id="sessions-container"></div>
+                </div>
+            </div>
 
-            <div class="input-area" style="position:relative;">
-                <input type="text" class="chat-input" id="chat-input" placeholder="输入消息...">
-                <button class="chat-voice-btn" id="voiceBtn" onclick="toggleVoiceInput()" title="语音输入">
-                    <i data-lucide="mic" style="width:18px;height:18px;"></i>
-                </button>
-                <button class="chat-send" data-action="send-message">&#9654;</button>
-                <div class="voice-tip" id="voiceTip">正在识别语音...</div>
+            <!-- Messages + Input -->
+            <div class="chat-main">
+                <div class="messages-area" id="messages-area"></div>
+
+                <div class="input-area" style="position:relative;">
+                    <input type="text" class="chat-input" id="chat-input" placeholder="输入消息...">
+                    <button class="chat-voice-btn" id="voiceBtn" onclick="toggleVoiceInput()" title="语音输入">
+                        <i data-lucide="mic" style="width:18px;height:18px;"></i>
+                    </button>
+                    <button class="chat-send" data-action="send-message">&#9654;</button>
+                    <div class="voice-tip" id="voiceTip" style="bottom:54px;">正在识别语音...</div>
+                </div>
             </div>
         </div>
     </div>

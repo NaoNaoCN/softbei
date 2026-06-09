@@ -14,9 +14,6 @@
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
     <style>
-        .app-body { max-width: 1100px; }
-        .page-subtitle { font-size: 14px; color: #6B7280; margin-bottom: 20px; }
-
         /* Old → v4 variable bridge */
         :root {
             --color-card: #fff;
@@ -62,30 +59,12 @@
         .form-input:focus { border-color: #C77B3C; }
 
         /* ===== Stats Strip ===== */
-        .resource-stats-strip {
-            display: flex;
-            gap: 32px;
-            padding: 16px 24px;
-            background: var(--glass, rgba(255,255,255,0.50));
-            backdrop-filter: blur(20px) saturate(150%);
-            border: 1px solid var(--border-glass, rgba(255,255,255,0.30));
-            border-radius: var(--r-lg, 16px);
-            box-shadow: var(--shadow-glass, 0 4px 20px rgba(120,84,44,0.06));
-            margin-bottom: 24px;
-            flex-wrap: wrap;
-        }
-        .resource-stats-item {
-            display: flex; align-items: baseline; gap: 6px;
+        #stats-bar .stat-item {
             cursor: pointer; transition: all 0.15s;
-            padding: 0 0 4px; border-bottom: 2px solid transparent;
+            padding: 8px 16px; border-radius: var(--r-md);
         }
-        .resource-stats-item:hover { color: var(--color-primary, #C77B3C); }
-        .resource-stats-item.active {
-            color: var(--color-primary, #C77B3C);
-            border-bottom-color: var(--color-primary, #C77B3C);
-        }
-        .resource-stats-value { font-family: var(--display, serif); font-size: 20px; font-weight: 700; color: var(--color-primary, #C77B3C); }
-        .resource-stats-label { font-size: 12px; color: var(--text-3, #9A8A76); }
+        #stats-bar .stat-item:hover { background: var(--bg-hover); }
+        #stats-bar .stat-item.active { background: var(--accent-soft); }
 
         /* ===== Filter Bar ===== */
         .filter-bar {
@@ -465,30 +444,36 @@
             <!-- Tab: Resources -->
             <div id="tab-resources">
             <!-- Stats Strip -->
-            <div class="resource-stats-strip" id="stats-bar">
-                <div class="resource-stats-item" data-type="doc" onclick="filterByType('doc')">
-                    <span class="resource-stats-value" id="stat-doc">-</span>
-                    <span class="resource-stats-label">学习文档</span>
+            <div class="stat-row" id="stats-bar">
+                <div class="stat-item" data-type="doc" onclick="filterByType('doc')">
+                    <i data-lucide="file-text" class="stat-icon"></i>
+                    <div class="stat-num" id="stat-doc">-</div>
+                    <div class="stat-lbl">学习文档</div>
                 </div>
-                <div class="resource-stats-item" data-type="mindmap" onclick="filterByType('mindmap')">
-                    <span class="resource-stats-value" id="stat-mindmap">-</span>
-                    <span class="resource-stats-label">思维导图</span>
+                <div class="stat-item" data-type="mindmap" onclick="filterByType('mindmap')">
+                    <i data-lucide="git-fork" class="stat-icon"></i>
+                    <div class="stat-num" id="stat-mindmap">-</div>
+                    <div class="stat-lbl">思维导图</div>
                 </div>
-                <div class="resource-stats-item" data-type="quiz" onclick="filterByType('quiz')">
-                    <span class="resource-stats-value" id="stat-quiz">-</span>
-                    <span class="resource-stats-label">测验</span>
+                <div class="stat-item" data-type="quiz" onclick="filterByType('quiz')">
+                    <i data-lucide="clipboard-list" class="stat-icon"></i>
+                    <div class="stat-num" id="stat-quiz">-</div>
+                    <div class="stat-lbl">测验</div>
                 </div>
-                <div class="resource-stats-item" data-type="code" onclick="filterByType('code')">
-                    <span class="resource-stats-value" id="stat-code">-</span>
-                    <span class="resource-stats-label">代码示例</span>
+                <div class="stat-item" data-type="code" onclick="filterByType('code')">
+                    <i data-lucide="code-2" class="stat-icon"></i>
+                    <div class="stat-num" id="stat-code">-</div>
+                    <div class="stat-lbl">代码示例</div>
                 </div>
-                <div class="resource-stats-item" data-type="summary" onclick="filterByType('summary')">
-                    <span class="resource-stats-value" id="stat-summary">-</span>
-                    <span class="resource-stats-label">知识总结</span>
+                <div class="stat-item" data-type="summary" onclick="filterByType('summary')">
+                    <i data-lucide="scroll-text" class="stat-icon"></i>
+                    <div class="stat-num" id="stat-summary">-</div>
+                    <div class="stat-lbl">知识总结</div>
                 </div>
-                <div class="resource-stats-item" data-type="animation" onclick="filterByType('animation')">
-                    <span class="resource-stats-value" id="stat-animation">-</span>
-                    <span class="resource-stats-label">动画演示</span>
+                <div class="stat-item" data-type="animation" onclick="filterByType('animation')">
+                    <i data-lucide="clapperboard" class="stat-icon"></i>
+                    <div class="stat-num" id="stat-animation">-</div>
+                    <div class="stat-lbl">动画演示</div>
                 </div>
             </div>
 
@@ -681,7 +666,7 @@
             var elAnim = document.getElementById('stat-animation');
             if (elAnim) elAnim.textContent = stats.animation || 0;
             // highlight active filter
-            document.querySelectorAll('.resource-stats-item').forEach(function(item) {
+            document.querySelectorAll('#stats-bar .stat-item').forEach(function(item) {
                 item.classList.toggle('active', item.dataset.type === currentFilter);
             });
         }
