@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Context
 
-第十五届中国软件杯 A3 赛题 — 个性化资源生成与学习多智能体系统。面向高等教育场景，通过 11 个 LangGraph Agent 协同为学生自动生成个性化学习资源。
+第十五届中国软件杯 A3 赛题 — 个性化资源生成与学习多智能体系统。面向高等教育场景，通过 12 个 LangGraph Agent 协同为学生自动生成个性化学习资源（含动画演示）。
 
 ## Commands
 
@@ -41,16 +41,16 @@ python -m backend.evaluation.golden_dataset --run
 
 **LLM & Config:** Provider/model configured in `configs/config.yaml` via `${ENV_VAR}` substitution. Currently uses `qwen3.6-plus-2026-04-02` (provider `qwen`) via DashScope. Multi-provider support (spark/deepseek/qwen/openai) in `backend/services/llm.py`. Agent system prompts in `configs/prompts.yaml`. Config is a module-level singleton: `from backend.config import config`.
 
-**Required env vars** (see `.env.example`): `LLM_API_KEY`, `JWT_SECRET`, `DATABASE_URL` (PostgreSQL, e.g. `postgresql+asyncpg://user:pass@localhost:5432/softbei`).
+**Required env vars** (see `.env.example`): `LLM_API_KEY`, `JWT_SECRET`, `DATABASE_URL` (PostgreSQL, e.g. `postgresql+asyncpg://user:pass@localhost:5432/softbei`). **Optional:** `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` (邮件服务，不配置则降级为本地文件模式).
 
 ### Agent Pipeline (LangGraph)
 
-`backend/agents/graph.py` defines an 11-node StateGraph. All agents share `AgentState` (Pydantic `BaseModel` in `backend/models/schemas.py`). The `db` session is injected via `config={"configurable": {"db": db}}`. Routing is **conditional, not parallel fan-out** — each run dispatches to a single generation agent based on `intent_type` + `resource_type`.
+`backend/agents/graph.py` defines a 12-node StateGraph. All agents share `AgentState` (Pydantic `BaseModel` in `backend/models/schemas.py`). The `db` session is injected via `config={"configurable": {"db": db}}`. Routing is **conditional, not parallel fan-out** — each run dispatches to a single generation agent based on `intent_type` + `resource_type`.
 
 1. `profile_agent` — extracts/accumulates student profile. Routes to END (ask follow-up) or `planner_agent` (profile sufficient).
 2. `planner_agent` — analyzes intent (`route_by_resource_type`), routes to one of the generation agents, `kg_agent`, `clarify_agent`, or `recommend_agent` (fallback).
 3. `clarify_agent` — asks a follow-up question, then → END (skips safety).
-4. `doc_agent`, `mindmap_agent`, `quiz_agent`, `code_agent`, `summary_agent` — generation agents, each → `safety_agent`.
+4. `doc_agent`, `mindmap_agent`, `quiz_agent`, `code_agent`, `summary_agent`, `anim_agent` — generation agents, each → `safety_agent`.
 5. `kg_agent` — knowledge-graph node, → `recommend_agent` (skips safety).
 6. `safety_agent` — content safety check → `recommend_agent`.
 7. `recommend_agent` → END.
@@ -62,7 +62,7 @@ Resource generation is triggered via `POST /generate` (single) / `POST /generate
 ### Database Layer
 
 - **PostgreSQL** via `asyncpg` driver. Schema managed by **Alembic** (`migrations/`).
-- ORM models in `backend/db/models.py`: `User`, `StudentProfile`, `ProfileHistory`, `ChatSession`, `ChatMessage`, `DocumentChunk` (pgvector store), `KGNode`, `KGEdge`, `ResourceMeta`, `GenerationBatch`, `GenerationTask`, `KGBuildTask`, `QuizItem`, `QuizAttempt`, `LearningPath`, `LearningPathItem`, `LearningRecord`
+- ORM models in `backend/db/models.py`: `User`, `StudentProfile`, `ProfileHistory`, `ChatSession`, `ChatMessage`, `DocumentChunk` (pgvector store), `KGNode`, `KGEdge`, `ResourceMeta`, `GenerationBatch`, `GenerationTask`, `KGBuildTask`, `QuizItem`, `QuizAttempt`, `LearningPath`, `LearningPathItem`, `LearningRecord`, `StudyPlan`, `StudyPlanItem`, `EmailVerification`
 - Generic async CRUD in `backend/db/crud.py`: `insert`, `select`, `select_one`, `update_by_id`, `delete_by_id`, `count`. Supports relation loading via `loadRelations` param.
 - Chat messages stored in static `chat_message` table.
 - Connection pool: `pool_size=10 + max_overflow=20`, `pool_pre_ping=True`.
@@ -125,7 +125,15 @@ All Agent system prompts live in `configs/prompts.yaml`. Template variables: con
 
 ### Frontend
 
-HTML/CSS/JS frontend in the `frontend/` directory, served via FastAPI StaticFiles at `/app`. Pages: `index`, `auth`, `chat`, `profile`, `generate`, `pathway`, `library`, `evaluate`. API layer in `frontend/assets/api.js`; other assets: `sidebar.js`, `command.js`, `dialog.js`, `toast.js`, `tracker.js` (page dwell-time tracking), `button.js`, `shortcut.js`, `styles.css`. Auth: JWT stored in localStorage, user_id passed as query param.
+HTML/CSS/JS frontend in the `frontend/` directory, served via FastAPI StaticFiles at `/app`. **Aurora UI** design system (`aurora.css` + `aurora-bridge.css`). Pages: `index`, `auth`, `chat`, `profile`, `generate`, `pathway`, `library`, `evaluate`, `forgot-password`, `reset-password`, `verify-email`. API layer in `frontend/assets/api.js`; other assets: `sidebar.js`, `command.js`, `dialog.js`, `toast.js`, `tracker.js` (page dwell-time tracking), `button.js`, `shortcut.js`, `nav.js`, `guide.js` (11-step onboarding), `assistant.js` + `assistant.css` (学习小助手：番茄钟/激励/微型对话), `anim-runtime.js` (p5.js 动画沙箱运行时). Auth: JWT stored in localStorage, user_id passed as query param. Voice input supported in chat.
+
+### Email Service
+
+`backend/email/` module: async SMTP sender (`aiosmtplib` + `tenacity` retry), Jinja2 HTML templates in `backend/templates/email/`. Features: email verification, password reset, learning report. SMTP 未配置时降级为本地文件模式（保存 HTML 到 `debug_emails/`）。
+
+### Study Plan Service
+
+`backend/services/study_plan/` module: generates personalized learning schedules. Pipeline: `collector.py` (gather KPs + mastery data) → `sequencer.py` (LLM-powered prerequisite ordering) → `scheduler.py` (time-slot allocation) → `resource_linker.py` (link existing resources to plan items). ORM: `StudyPlan` + `StudyPlanItem` tables. Config in `configs/config.yaml` under `study_plan:` section.
 
 ## Key Conventions
 
