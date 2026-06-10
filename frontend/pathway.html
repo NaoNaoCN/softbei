@@ -1544,6 +1544,7 @@
                 document.getElementById('detail-pathway-list').style.display = 'none';
                 // Refresh cached pathways
                 pathways = await getPathways(userId) || [];
+                _normalizePathwayIds(pathways);
                 populatePathwayOverlay();
             } catch(e) { showToast('添加失败: ' + (e.message || e), 'error'); }
         };
@@ -1560,8 +1561,8 @@
 
         // === 路径 Tab 切换 ===
         function selectPathway(pathId) {
-            activePathId = pathId;
-            activePathData = pathways.find(p => p.id === pathId);
+            activePathId = String(pathId);
+            activePathData = pathways.find(p => String(p.id) === String(pathId));
             expandedStepEl = null;
             renderPathwayTabs();
             renderRoadmap();
@@ -1574,14 +1575,14 @@
             let html = '';
             if (pathways.length <= MAX_VISIBLE) {
                 pathways.forEach(p => {
-                    const activeClass = activePathId === p.id ? ' active' : '';
+                    const activeClass = String(activePathId) === String(p.id) ? ' active' : '';
                     html += `<button class="tab-btn${activeClass}" onclick="selectPathway('${p.id}')">${escapeHtml(p.name || '未命名路径')}</button>`;
                 });
             } else {
                 // 前4个直接展示，其余折叠
                 for (let i = 0; i < 4; i++) {
                     const p = pathways[i];
-                    const activeClass = activePathId === p.id ? ' active' : '';
+                    const activeClass = String(activePathId) === String(p.id) ? ' active' : '';
                     html += `<button class="tab-btn${activeClass}" onclick="selectPathway('${p.id}')">${escapeHtml(p.name || '未命名路径')}</button>`;
                 }
                 // 更多菜单
@@ -1945,12 +1946,24 @@
         }
 
         // === 数据加载 ===
+        function _normalizePathwayIds(list) {
+            list.forEach(p => {
+                p.id = String(p.id);
+                if (p.items) {
+                    p.items.forEach(item => { item.id = String(item.id); });
+                }
+            });
+        }
+
         async function loadPathwaysData() {
             try {
                 pathways = await getPathways(userId) || [];
             } catch (e) {
                 pathways = [];
             }
+            // Normalize Snowflake BigInt IDs to strings (API returns number,
+            // HTML onclick passes as string, === strict comparison needs both string)
+            _normalizePathwayIds(pathways);
             // 如果当前选中的路径已被删除，切换到第一个
             if (activePathId && !pathways.find(p => p.id === activePathId)) {
                 activePathId = pathways.length ? pathways[0].id : null;
@@ -2027,9 +2040,22 @@
             if (btn) switchTab(btn, 'pathways');
         }
 
-        // === Expose to global ===
+        // === Expose to global (required: type="module" isolates scope, onclick needs window.*) ===
         window.switchTab = switchTab;
         window.loadKgGraph = loadKgGraph;
+        window.selectPathway = selectPathway;
+        window.toggleMorePathways = toggleMorePathways;
+        window.openPathwayDialog = openPathwayDialog;
+        window.closePathwayDialog = closePathwayDialog;
+        window.handleCreatePathwayFromDialog = handleCreatePathwayFromDialog;
+        window.handleRemoveItem = handleRemoveItem;
+        window.scrollToStep = scrollToStep;
+        window.toggleStepExpand = toggleStepExpand;
+        window.handleDragStart = handleDragStart;
+        window.handleDragOver = handleDragOver;
+        window.handleDragLeave = handleDragLeave;
+        window.handleDrop = handleDrop;
+        window.handleDragEnd = handleDragEnd;
         window.showCreatePathway = showCreatePathway;
         window.handleCreatePathway = handleCreatePathway;
         window.handleDeletePathway = handleDeletePathway;

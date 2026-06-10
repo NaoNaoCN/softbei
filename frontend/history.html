@@ -370,7 +370,7 @@
             ];
 
             records.forEach(r => {
-                const d = (r.recorded_at || '').slice(0, 10);
+                const d = parseAsUTC(r.recorded_at).toISOString().slice(0, 10);
                 if (d === today) { groups[0].records.push(r); }
                 else if (d === yesterday) { groups[1].records.push(r); }
                 else if (d >= weekStart.toISOString().slice(0, 10)) { groups[2].records.push(r); }
@@ -468,8 +468,18 @@
         // === Tab 2: 答题历史 (Quiz History) ===
         // ============================================================
 
+        // 后端用 datetime.utcnow() 存储的是 naive UTC，没有时区标记。
+        // 浏览器 new Date(naiveString) 会按本地时间解析，导致差 8 小时。
+        function parseAsUTC(ts) {
+            if (!ts) return new Date();
+            if (typeof ts === 'string' && !ts.endsWith('Z') && !/[+\-]\d{2}:\d{2}$/.test(ts)) {
+                return new Date(ts + 'Z');
+            }
+            return new Date(ts);
+        }
+
         function fmtDate(ts) {
-            const d = new Date(ts);
+            const d = parseAsUTC(ts);
             const now = new Date();
             const dateStr = d.toISOString().slice(0, 10);
             const todayStr = now.toISOString().slice(0, 10);
@@ -484,7 +494,7 @@
         function groupIntoSessions(attempts) {
             const sessions = [];
             for (const a of attempts) {
-                const t = new Date(a.created_at).getTime();
+                const t = parseAsUTC(a.created_at).getTime();
                 const last = sessions[sessions.length - 1];
                 if (!last || (last.lastTime - t) > 60000) {
                     sessions.push({ lastTime: t, dateLabel: fmtDate(a.created_at), items: [a] });

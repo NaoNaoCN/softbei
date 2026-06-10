@@ -63,6 +63,7 @@ class EmailSender:
                 password=self._password,
                 use_tls=self._use_tls,
                 timeout=self._timeout,
+                local_hostname="localhost",
             )
             logger.success("[Email] 发送成功: to={}, subject={}", to, subject)
             return True

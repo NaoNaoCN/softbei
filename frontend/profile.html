@@ -212,7 +212,7 @@
 <script type="module">
     import { showToast } from './assets/toast.js';
     import { registerPage, initSidebar } from './assets/nav.js';
-    import { isLoggedIn, getUserId, clearAuth, getProfile, updateProfile, getLearningAnalytics, updateAccount } from './assets/api.js?v=2';
+    import { isLoggedIn, getUserId, clearAuth, getProfile, updateProfile, getLearningAnalytics, updateAccount, getUser } from './assets/api.js?v=2';
 
     if (!isLoggedIn()) { window.location.href = 'auth.html'; }
     const userId = getUserId();
@@ -409,12 +409,13 @@
         on('btn-logout', 'click', handleLogout);
 
         try {
-            const [profile, analytics] = await Promise.all([
+            const [profile, analytics, user] = await Promise.all([
                 getProfile(userId),
                 getLearningAnalytics(userId),
+                getUser(userId),
             ]);
             profileData = profile;
-            fillAccount(profile);
+            fillAccount(user);
             fillProfileForm(profile);
             lucide.createIcons();
         } catch (e) {

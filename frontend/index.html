@@ -193,7 +193,7 @@
     </div>
 
     <script type="module">
-        import { isLoggedIn, getUserId, getLearningAnalytics } from './assets/api.js';
+        import { isLoggedIn, getUserId, getLearningAnalytics, getUser } from './assets/api.js';
         import { registerPage, initSidebar } from './assets/nav.js';
 
         if (!isLoggedIn()) { window.location.href = 'auth.html'; }
@@ -204,7 +204,11 @@
 
             // Greeting
             const h = new Date().getHours();
-            const name = userId ? userId.slice(0, 6) : '同学';
+            let name = '同学';
+            try {
+                const user = await getUser(userId);
+                if (user && user.username) name = user.username;
+            } catch (e) { /* ignore, use fallback */ }
             const greet = h < 6 ? '夜深了' : h < 9 ? '早上好' : h < 12 ? '上午好' : h < 14 ? '中午好' : h < 18 ? '下午好' : '晚上好';
             document.getElementById('greeting').innerHTML = greet + '，<span class="accent">' + name + '</span>';
             const d = new Date();

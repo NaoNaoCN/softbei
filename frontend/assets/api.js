@@ -116,6 +116,11 @@ export async function updateAccount(user_id, data) {
     return resp?.json();
 }
 
+export async function getUser(user_id) {
+    const resp = await apiFetch(`/user?user_id=${encodeURIComponent(user_id)}`);
+    return resp?.json();
+}
+
 // ===========================================================
 // 资源
 // ===========================================================

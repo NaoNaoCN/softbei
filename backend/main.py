@@ -605,10 +605,26 @@ async def update_account(
     if not updates:
         raise HTTPException(status_code=400, detail="没有需要更新的字段")
 
-    updated = await update_by_id(db, User, user_id, data=updates)
-    if not updated:
+    ok = await update_by_id(db, User, user_id, data=updates)
+    if not ok:
         raise HTTPException(status_code=404, detail="用户不存在")
-    return updated
+    # 重新查询获取更新后的完整 User 对象以匹配 UserOut schema
+    updated_user = await select_one(db, User, filters={"id": user_id})
+    return updated_user
+
+
+@app.get("/user", response_model=UserOut, tags=["user"])
+async def get_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_session),
+):
+    """获取用户基本信息（用户名、邮箱等）。"""
+    from backend.db.crud import select_one
+
+    user = await select_one(db, User, filters={"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return user
 
 
 # ===========================================================
