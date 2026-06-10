@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智学实验室 · 学习看板</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <script src="https://unpkg.com/lucide@0.460.0"></script>
+    <link rel="stylesheet" href="./assets/aurora.css">
+    <link rel="stylesheet" href="./assets/assistant.css">
+</head>
+<body>
+    <!-- 深空环境光 -->
+    <div class="aurora-bg"></div>
+    <div class="aurora-orb"></div>
+    <div class="aurora-grid"></div>
+
+    <main class="shell">
+
+        <!-- Hero 问候区 -->
+        <header class="hero rise">
+            <div>
+                <span class="eyebrow"><span class="dot"></span>AI LEARNING LAB · 多智能体系统</span>
+                <h1 id="greeting">欢迎回来，<span class="accent">同学</span></h1>
+                <div class="tagline" id="tagline">11 个智能体已就绪，今天想攻克哪个知识点？</div>
+            </div>
+            <div class="hero-date">
+                <div class="big" id="hero-date-big"></div>
+                <div id="hero-date-sub"></div>
+            </div>
+        </header>
+
+        <!-- 居中核心舞台 -->
+        <section class="stage">
+
+            <!-- 左列卫星卡片 -->
+            <div class="stage-col">
+                <div class="satellite rise d1">
+                    <article class="glass">
+                        <div class="glass-body stat">
+                            <div class="stat-top">
+                                <div class="stat-ico indigo"><i data-lucide="file-text"></i></div>
+                                <span class="stat-spark"><i data-lucide="chevron-down"></i></span>
+                            </div>
+                            <div>
+                                <div class="stat-val" id="stat-doc">-</div>
+                                <div class="stat-label">学习文档</div>
+                            </div>
+                        </div>
+                    </article>
+                    <div class="sat-pop">
+                        <div class="sat-pop-inner">
+                            <div class="sat-pop-head">学习文档 <span class="cnt" id="pop-doc-cnt">·</span></div>
+                            <div class="sat-pop-list" id="pop-doc-list" data-rtype="doc"></div>
+                            <div class="sat-pop-foot"><a href="library.html?type=doc">前往资源库 <i data-lucide="arrow-right"></i></a></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="satellite rise d2">
+                    <article class="glass">
+                        <div class="glass-body stat">
+                            <div class="stat-top">
+                                <div class="stat-ico amber"><i data-lucide="clipboard-list"></i></div>
+                                <span class="stat-spark"><i data-lucide="chevron-down"></i></span>
+                            </div>
+                            <div>
+                                <div class="stat-val" id="stat-quiz">-</div>
+                                <div class="stat-label">智能测验</div>
+                            </div>
+                        </div>
+                    </article>
+                    <div class="sat-pop">
+                        <div class="sat-pop-inner">
+                            <div class="sat-pop-head">智能测验 <span class="cnt" id="pop-quiz-cnt">·</span></div>
+                            <div class="sat-pop-list" id="pop-quiz-list" data-rtype="quiz"></div>
+                            <div class="sat-pop-foot"><a href="library.html?type=quiz">前往资源库 <i data-lucide="arrow-right"></i></a></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 中央 AI 智能核心区 -->
+            <div class="stage-center">
+                <article class="glass core rise d3">
+                    <div class="core-glow"></div>
+                    <div class="glass-body">
+                        <span class="eyebrow"><span class="dot"></span>11 AGENTS ONLINE</span>
+                        <div class="core-orb" style="margin-top:16px;"><i data-lucide="sparkles"></i></div>
+                        <h2>AI 智能核心</h2>
+                        <p>输入你的学习需求，多智能体协同为你生成文档、导图、测验与代码示例。</p>
+
+                        <div class="core-chips">
+                            <a class="core-chip" href="generate.html"><i data-lucide="wand-2"></i>生成资源</a>
+                            <a class="core-chip" href="pathway.html"><i data-lucide="route"></i>规划路径</a>
+                            <a class="core-chip" href="library.html"><i data-lucide="book-open"></i>我的资源库</a>
+                            <a class="core-chip" href="evaluate.html"><i data-lucide="bar-chart-3"></i>学习评估</a>
+                        </div>
+
+                        <form class="core-input" id="ask-form">
+                            <label class="core-field">
+                                <i data-lucide="message-circle"></i>
+                                <input id="ask-input" type="text" placeholder="例如：帮我讲解二叉树的层序遍历…" autocomplete="off">
+                            </label>
+                            <button class="btn btn-neon" type="submit"><i data-lucide="arrow-up-right"></i>开始</button>
+                        </form>
+                    </div>
+                </article>
+            </div>
+
+            <!-- 右列卫星卡片 -->
+            <div class="stage-col">
+                <div class="satellite rise d4">
+                    <article class="glass">
+                        <div class="glass-body stat">
+                            <div class="stat-top">
+                                <div class="stat-ico purple"><i data-lucide="git-branch"></i></div>
+                                <span class="stat-spark"><i data-lucide="chevron-down"></i></span>
+                            </div>
+                            <div>
+                                <div class="stat-val" id="stat-mindmap">-</div>
+                                <div class="stat-label">思维导图</div>
+                            </div>
+                        </div>
+                    </article>
+                    <div class="sat-pop">
+                        <div class="sat-pop-inner">
+                            <div class="sat-pop-head">思维导图 <span class="cnt" id="pop-mindmap-cnt">·</span></div>
+                            <div class="sat-pop-list" id="pop-mindmap-list" data-rtype="mindmap"></div>
+                            <div class="sat-pop-foot"><a href="library.html?type=mindmap">前往资源库 <i data-lucide="arrow-right"></i></a></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="satellite rise d5">
+                    <article class="glass">
+                        <div class="glass-body stat">
+                            <div class="stat-top">
+                                <div class="stat-ico emerald"><i data-lucide="route"></i></div>
+                                <span class="stat-spark"><i data-lucide="chevron-down"></i></span>
+                            </div>
+                            <div>
+                                <div class="stat-val" id="stat-paths">-</div>
+                                <div class="stat-label">学习路径</div>
+                            </div>
+                        </div>
+                    </article>
+                    <div class="sat-pop">
+                        <div class="sat-pop-inner">
+                            <div class="sat-pop-head">学习路径 <span class="cnt" id="pop-paths-cnt">·</span></div>
+                            <div class="sat-pop-list" id="pop-paths-list" data-rtype="path"></div>
+                            <div class="sat-pop-foot"><a href="pathway.html">前往学习路径 <i data-lucide="arrow-right"></i></a></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- 底部并排：动态 + 画像 -->
+        <section class="stage-foot">
+
+            <!-- 最近学习动态 -->
+            <article class="glass rise d6">
+                <div class="glass-body">
+                    <div class="card-head">
+                        <span class="ico"><i data-lucide="activity"></i></span>
+                        <div>
+                            <h3>最近学习动态</h3>
+                            <div class="sub">你的学习足迹时间线</div>
+                        </div>
+                    </div>
+                    <div id="recent-loading" class="loading-row"><span class="loader-dots"><span></span><span></span><span></span></span>读取动态…</div>
+                    <div id="recent-timeline" class="timeline hidden"></div>
+                    <div id="recent-empty" class="empty-row hidden">暂无学习动态，<a href="generate.html">生成你的第一份资源</a></div>
+                </div>
+            </article>
+
+            <!-- 我的学习画像 -->
+            <article class="glass rise d7">
+                <div class="glass-body">
+                    <div class="card-head">
+                        <span class="ico"><i data-lucide="user-cog"></i></span>
+                        <div>
+                            <h3>我的学习画像</h3>
+                            <div class="sub">智能体据此个性化生成</div>
+                        </div>
+                    </div>
+                    <div id="profile-loading" class="loading-row"><span class="loader-dots"><span></span><span></span><span></span></span>读取画像…</div>
+                    <div id="profile-content" class="hidden">
+                        <div class="prof-grid">
+                            <div class="prof-cell"><div class="prof-label">专业</div><div class="prof-value" id="prof-major">-</div></div>
+                            <div class="prof-cell"><div class="prof-label">每日学习</div><div class="prof-value" id="prof-daily">-</div></div>
+                            <div class="prof-cell"><div class="prof-label">认知风格</div><div class="prof-value" id="prof-cognitive">-</div></div>
+                            <div class="prof-cell"><div class="prof-label">学习目标</div><div class="prof-value" id="prof-goal">-</div></div>
+                        </div>
+                        <div class="prof-section-label">已掌握知识点</div>
+                        <div class="tag-row" id="prof-mastered"></div>
+                        <div class="prof-section-label" style="margin-top:14px;">待提升知识点</div>
+                        <div class="tag-row" id="prof-weak"></div>
+                    </div>
+                    <div id="profile-empty" class="empty-row hidden">尚未建立画像，<a href="profile.html">前往编辑</a></div>
+                </div>
+            </article>
+
+        </section>
+    </main>
+
+    <!-- SCRIPT_PLACEHOLDER -->
+    <script type="module">
+        import { isLoggedIn, getUserId, getResourceStats, getProfile, getPathways, getLearningRecords, getResources } from './assets/api.js';
+        import { initCommandPalette } from './assets/command.js';
+        import { initCapNav } from './assets/nav.js';
+
+        if (!isLoggedIn()) { window.location.href = 'auth.html'; }
+        const userId = getUserId();
+
+        initCapNav('index');
+        initCommandPalette();
+
+        // 问候语 + 日期
+        (function setGreeting() {
+            const h = new Date().getHours();
+            const name = userId ? userId.slice(0, 6) : '同学';
+            const greet = h < 6 ? '夜深了' : h < 9 ? '早上好' : h < 12 ? '上午好' : h < 14 ? '中午好' : h < 18 ? '下午好' : '晚上好';
+            document.getElementById('greeting').innerHTML = greet + '，<span class="accent">' + name + '</span>';
+            const d = new Date();
+            const week = ['周日','周一','周二','周三','周四','周五','周六'];
+            document.getElementById('hero-date-big').textContent = (d.getMonth()+1) + '月' + d.getDate() + '日 ' + week[d.getDay()];
+            document.getElementById('hero-date-sub').textContent = d.getFullYear() + ' · 智学实验室';
+        })();
+
+        // 核心提问框 → 放大转场动效 → 跳转对话页并带上问题
+        document.getElementById('ask-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const q = document.getElementById('ask-input').value.trim();
+            const target = q ? 'chat.html?q=' + encodeURIComponent(q) : 'chat.html';
+
+            // 尊重「减少动态效果」偏好：直接跳转
+            const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (reduce) { window.location.href = target; return; }
+
+            // 标记「来自转场」，供 chat 页播放入场动效
+            try { sessionStorage.setItem('warp_in', '1'); } catch (_) {}
+
+            // 铺一层暖色光幕，源页整体放大淡出
+            const veil = document.createElement('div');
+            veil.className = 'warp-veil warp-veil-show';
+            document.body.appendChild(veil);
+            document.querySelector('.shell')?.classList.add('warp-out');
+
+            // 光幕铺满时再跳转，衔接到目标页的暖光褪去
+            setTimeout(() => { window.location.href = target; }, 470);
+        });
+
+        // 数字递增动画
+        function animateCount(el, target) {
+            if (!el) return;
+            if (!target || target === 0) { el.textContent = target || '0'; return; }
+            const dur = 700, start = performance.now();
+            const step = (ts) => {
+                const p = Math.min((ts - start) / dur, 1);
+                el.textContent = Math.floor((1 - Math.pow(1 - p, 3)) * target);
+                if (p < 1) requestAnimationFrame(step); else el.textContent = target;
+            };
+            requestAnimationFrame(step);
+        }
+
+        async function loadStats() {
+            try {
+                const s = await getResourceStats(userId);
+                if (s) {
+                    animateCount(document.getElementById('stat-doc'), s.doc || 0);
+                    animateCount(document.getElementById('stat-mindmap'), s.mindmap || 0);
+                    animateCount(document.getElementById('stat-quiz'), s.quiz || 0);
+                }
+            } catch (e) { /* ignore */ }
+        }
+
+        async function loadPathways() {
+            try {
+                const p = await getPathways(userId);
+                if (p) animateCount(document.getElementById('stat-paths'), p.length || 0);
+            } catch (e) { /* ignore */ }
+        }
+
+        // ---------- 卫星卡片下拉浮层：悬停时懒加载具体资源 ----------
+        const RES_ICON = {
+            doc:     { i: 'file-text',      cls: 'indigo'  },
+            mindmap: { i: 'git-branch',     cls: 'purple'  },
+            quiz:    { i: 'clipboard-list', cls: 'amber'   },
+            code:    { i: 'code-2',         cls: 'indigo'  },
+            summary: { i: 'list',           cls: 'emerald' },
+            path:    { i: 'route',          cls: 'emerald' },
+        };
+        const TYPE_NAME = { doc:'学习文档', mindmap:'思维导图', quiz:'测验', code:'代码示例', summary:'要点总结', path:'学习路径' };
+
+        function popDate(t) {
+            if (!t) return '';
+            try { return new Date(t).toLocaleDateString('zh-CN'); } catch (e) { return ''; }
+        }
+        function setPop(domKey, rtype, items, href) {
+            const list = document.getElementById('pop-' + domKey + '-list');
+            const cnt = document.getElementById('pop-' + domKey + '-cnt');
+            if (!list) return;
+            if (cnt) cnt.textContent = items.length;
+            if (!items.length) {
+                list.innerHTML = '<div class="sat-pop-empty">暂无' + (TYPE_NAME[rtype] || '资源') + '，去生成一个吧</div>';
+                return;
+            }
+            const ic = RES_ICON[rtype] || RES_ICON.doc;
+            list.innerHTML = items.slice(0, 6).map(r => `
+                <a class="sat-pop-item" href="${href}">
+                    <span class="si stat-ico ${ic.cls}"><i data-lucide="${ic.i}"></i></span>
+                    <span class="st">
+                        <span class="st-title">${(r.title || r.name || '未命名').replace(/</g,'&lt;')}</span>
+                        <span class="st-meta">${(TYPE_NAME[rtype] || '')}${r.created_at ? ' · ' + popDate(r.created_at) : ''}</span>
+                    </span>
+                    <span class="sc"><i data-lucide="chevron-right"></i></span>
+                </a>`).join('');
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        async function fillResourcePop(rtype, href) {
+            try {
+                const data = await getResources(userId, { resource_type: rtype, limit: 6 });
+                const items = (data && data.items) ? data.items : (Array.isArray(data) ? data : []);
+                setPop(rtype, rtype, items, href);
+            } catch (e) {
+                setPop(rtype, rtype, [], href);
+            }
+        }
+        async function fillPathPop() {
+            try {
+                const p = await getPathways(userId);
+                setPop('paths', 'path', Array.isArray(p) ? p : [], 'pathway.html');
+            } catch (e) { setPop('paths', 'path', [], 'pathway.html'); }
+        }
+
+        // 懒加载：每个卫星卡首次悬停时拉取，之后缓存
+        function wirePop(rtype, loader) {
+            const list = document.getElementById('pop-' + rtype + '-list');
+            if (!list) return;
+            list.innerHTML = '<div class="sat-pop-loading"><span class="loader-dots"><span></span><span></span><span></span></span>读取中…</div>';
+            const sat = list.closest('.satellite');
+            let loaded = false;
+            const trigger = () => { if (loaded) return; loaded = true; loader(); };
+            sat.addEventListener('mouseenter', trigger);
+            sat.addEventListener('focusin', trigger);
+        }
+        function initPops() {
+            wirePop('doc',     () => fillResourcePop('doc', 'library.html?type=doc'));
+            wirePop('quiz',    () => fillResourcePop('quiz', 'library.html?type=quiz'));
+            wirePop('mindmap', () => fillResourcePop('mindmap', 'library.html?type=mindmap'));
+            wirePop('paths',   () => fillPathPop());
+        }
+
+        function timeAgo(t) {
+            if (!t) return '刚刚';
+            const min = Math.floor((Date.now() - new Date(t).getTime()) / 60000);
+            if (min < 1) return '刚刚';
+            if (min < 60) return min + '分钟前';
+            const hr = Math.floor(min / 60);
+            if (hr < 24) return hr + '小时前';
+            return Math.floor(hr / 24) + '天前';
+        }
+        function recordText(r) {
+            const map = { doc:'学习文档', mindmap:'思维导图', quiz:'测验', code:'代码示例', summary:'要点总结', animation:'动画演示' };
+            const name = map[r.resource_type] || r.resource_type || '资源';
+            const title = r.title || r.resource_title || r.kp_name || '';
+            return title ? '学习了' + name + '《<b>' + title + '</b>》' : '完成了一次' + name + '学习';
+        }
+
+        async function loadRecent() {
+            const loading = document.getElementById('recent-loading');
+            const tl = document.getElementById('recent-timeline');
+            const empty = document.getElementById('recent-empty');
+            try {
+                const records = await getLearningRecords(userId, { limit: 6 });
+                loading.classList.add('hidden');
+                if (!records || records.length === 0) { empty.classList.remove('hidden'); return; }
+                tl.classList.remove('hidden');
+                tl.innerHTML = records.slice(0, 6).map(r => `
+                    <div class="tl-item">
+                        <div class="tl-dot"></div>
+                        <div class="tl-time">${timeAgo(r.created_at || r.updated_at)}</div>
+                        <div class="tl-text">${recordText(r)}</div>
+                    </div>`).join('');
+            } catch (e) { loading.classList.add('hidden'); empty.classList.remove('hidden'); }
+        }
+
+        async function loadProfile() {
+            const loading = document.getElementById('profile-loading');
+            const content = document.getElementById('profile-content');
+            const empty = document.getElementById('profile-empty');
+            try {
+                const p = await getProfile(userId);
+                loading.classList.add('hidden');
+                if (!p) { empty.classList.remove('hidden'); return; }
+                content.classList.remove('hidden');
+                document.getElementById('prof-major').textContent = p.major || '未设置';
+                document.getElementById('prof-daily').textContent = p.daily_time_minutes ? p.daily_time_minutes + ' 分钟' : '未设置';
+                document.getElementById('prof-cognitive').textContent = p.cognitive_style || '未设置';
+                document.getElementById('prof-goal').textContent = p.learning_goal || '未设置';
+                const mastered = p.knowledge_mastered || [];
+                document.getElementById('prof-mastered').innerHTML = mastered.length
+                    ? mastered.map(k => '<span class="chip emerald">' + k + '</span>').join('')
+                    : '<span class="muted" style="font-size:13px;">暂无</span>';
+                const weak = p.knowledge_weak || [];
+                document.getElementById('prof-weak').innerHTML = weak.length
+                    ? weak.map(k => '<span class="chip amber">' + k + '</span>').join('')
+                    : '<span class="muted" style="font-size:13px;">暂无</span>';
+            } catch (e) { loading.classList.add('hidden'); empty.classList.remove('hidden'); }
+        }
+
+        loadStats();
+        loadPathways();
+        loadRecent();
+        loadProfile();
+        initPops();
+    </script>
+    <script>lucide.createIcons();</script>
+    <script src="./assets/tracker.js"></script>
+    <script src="./assets/guide.js"></script>
+    <script type="module" src="./assets/assistant.js"></script>
+</body>
+</html>

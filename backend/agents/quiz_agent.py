@@ -6,54 +6,31 @@ QuizAgent：生成多题型测验题目集合。
 from __future__ import annotations
 
 import json
-from typing import Any
 
-from loguru import logger  # noqa: F401
+from loguru import logger
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from backend.config import config as app_config
 from backend.models.schemas import AgentState, QuestionType
-from backend.agents.utils import resolve_kp_name
-from backend.rag.retriever import retrieve_by_kp, format_context
+from backend.agents.utils import resolve_kp_name, retrieve_context, parse_json_llm_response
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
-from backend.db.crud import insert_many
-from backend.db.models import QuizItem
 
-SYSTEM_PROMPT = """你是一位出题专家。
-请为以下知识点出 {count} 道题目，题型分布：
-- 单选题（single）：{single_count} 道
-- 多选题（multi）：{multi_count} 道
-- 填空题（fill）：{fill_count} 道
+from backend.config import prompts as _prompts
 
-以 JSON 数组返回，每道题格式：
-{{
-  "question_type": "single/multi/fill",
-  "difficulty": 1-5,
-  "stem": "题干",
-  "options": ["A. ...", "B. ..."],  // 填空题为 null
-  "answer": "A" 或 ["A","C"] 或 "答案文本",
-  "explanation": "解析"
-}}
-
-参考资料：
-{context}
-
-知识点：{kp_name}
-"""
+SYSTEM_PROMPT = _prompts.get("agents.quiz.system_prompt")
 
 
 def _get_question_counts(profile) -> tuple[int, int, int]:
     """根据画像决定题目数量分布。"""
     if not profile:
-        return 2, 1, 1
+        return tuple(app_config.generation.quiz.counts_default)
     # 根据薄弱知识点数量决定题目量
     weak_count = len(getattr(profile, "knowledge_weak", []) or [])
-    if weak_count > 5:
-        return 3, 2, 2
-    elif weak_count > 2:
-        return 2, 1, 1
-    return 2, 1, 1
+    if weak_count > app_config.generation.quiz.weak_threshold_high:
+        return tuple(app_config.generation.quiz.counts_high)
+    elif weak_count > app_config.generation.quiz.weak_threshold_mid:
+        return tuple(app_config.generation.quiz.counts_mid)
+    return tuple(app_config.generation.quiz.counts_default)
 
 
 async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
@@ -67,29 +44,31 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     """
     kp_name = await resolve_kp_name(state, config)
 
-    # 决定题目数量
-    total, single, multi = 4, 2, 1
-    fill = max(0, total - single - multi)
-    if state.profile:
+    # 决定题目数量分布
+    # 优先使用 state.question_type_counts（用户指定），否则使用 state.num_questions 按比例分配
+    if state.question_type_counts:
+        counts = state.question_type_counts
+        single = counts.get("single", 0)
+        multi = counts.get("multi", 0)
+        fill = counts.get("fill", 0)
+        total = single + multi + fill
+    elif state.num_questions:
+        total = state.num_questions
+        single = max(1, total // 2)
+        multi = max(1, total // 4)
+        fill = max(0, total - single - multi)
+    elif state.profile:
         total, single, multi = _get_question_counts(state.profile)
         fill = max(0, total - single - multi)
+    else:
+        total, single, multi = 4, 2, 1
+        fill = max(0, total - single - multi)
 
-    logger.info("[QuizAgent] kp_name=%s total=%d single=%d multi=%d fill=%d",
-                 kp_name, total, single, multi, fill)
+    logger.info("[QuizAgent] kp_name=%s total=%d single=%d multi=%d fill=%d"% (
+                 kp_name, total, single, multi, fill))
 
     # 检索相关文档
-    try:
-        chunks = await retrieve_by_kp(kp_name, n_results=5)
-        context = format_context(chunks, max_tokens=3000)
-        retrieved_texts = [c.text for c in chunks]
-        if chunks:
-            logger.info("[QuizAgent] RAG 检索到 %d 条参考资料", len(chunks))
-        else:
-            logger.warning("[QuizAgent] RAG 未检索到参考资料，降级为纯 LLM 生成")
-    except Exception as e:
-        logger.warning("[QuizAgent] RAG 检索异常: %s，降级为纯 LLM 生成", e)
-        context = "（暂无参考资料）"
-        retrieved_texts = []
+    context, retrieved_texts = await retrieve_context(state, "QuizAgent", config)
 
     # 更新 retrieved_docs
     state = state.model_copy(update={"retrieved_docs": retrieved_texts})
@@ -106,54 +85,22 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
 
     try:
         raw = await chat_completion(
-            [{"role": "user", "content": prompt}],
-            temperature=0.6,
-            max_tokens=3000,
+            [{"role": "system", "content": prompt}],
+            temperature=app_config.agents.quiz.temperature,
+            max_tokens=app_config.agents.quiz.max_tokens,
         )
 
         # 解析 JSON
-        cleaned = raw.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-            cleaned = cleaned.rsplit("```", 1)[0].strip()
+        cleaned = parse_json_llm_response(raw)
         questions = json.loads(cleaned)
-        logger.info("[QuizAgent] 题目生成成功，共 %d 题", len(questions))
+        logger.info("[QuizAgent] 题目生成成功，共 %d 题" % len(questions))
         draft = json.dumps(questions, ensure_ascii=False)
         state = state.model_copy(update={"draft_content": draft})
     except json.JSONDecodeError as e:
-        logger.warning("[QuizAgent] JSON 解析失败: %s，raw_preview=%.200s", e, raw if 'raw' in dir() else '')
+        logger.warning("[QuizAgent] JSON 解析失败: %s，raw_preview=%.200s" % (e, raw if 'raw' in dir() else ''))
         state = state.model_copy(update={"draft_content": "[]"})
     except Exception as e:
-        logger.error("[QuizAgent] 生成失败: %s", e)
+        logger.error("[QuizAgent] 生成失败: %s" % e)
         state = state.model_copy(update={"draft_content": f"题目生成失败：{e}"})
 
     return state
-
-
-async def save_quiz_items(
-    resource_id: str,
-    kp_id: str,
-    questions: list[dict[str, Any]],
-    db: AsyncSession,
-) -> None:
-    """将题目列表批量写入 quiz_item 表。"""
-    if not questions:
-        return
-
-    items_data = []
-    for i, q in enumerate(questions):
-        items_data.append({
-            "resource_id": resource_id,
-            "kp_id": kp_id,
-            "question_type": q.get("question_type", "single"),
-            "stem": q.get("stem", ""),
-            "options": q.get("options"),
-            "answer": str(q.get("answer", "")),
-            "explanation": q.get("explanation"),
-            "order_index": i,
-        })
-
-    try:
-        await insert_many(db, QuizItem, data_list=items_data)
-    except Exception:
-        raise

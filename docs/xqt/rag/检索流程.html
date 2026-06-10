@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAG 检索流程 — Mermaid 图解</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --border: #dee2e6;
+    --text: #212529;
+    --muted: #6c757d;
+    --accent: #2563eb;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+
+  h1 {
+    text-align: center;
+    font-size: 1.8rem;
+    margin-bottom: 0.3rem;
+    color: #1e293b;
+  }
+  .subtitle {
+    text-align: center;
+    color: var(--muted);
+    margin-bottom: 2rem;
+    font-size: 0.9rem;
+  }
+
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  }
+  .card h2 {
+    font-size: 1.15rem;
+    margin-bottom: 0.3rem;
+    color: #1e293b;
+    border-left: 4px solid var(--accent);
+    padding-left: 0.7rem;
+  }
+  .card .desc {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+  }
+
+  .mermaid {
+    display: flex;
+    justify-content: center;
+    overflow-x: auto;
+    font-size: 0.85rem;
+  }
+
+  .toc {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.2rem 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .toc h2 { font-size: 1rem; margin-bottom: 0.5rem; }
+  .toc ol { padding-left: 1.3rem; font-size: 0.9rem; line-height: 2; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin-top: 2rem;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>RAG 检索流程 — Mermaid 图解</h1>
+<p class="subtitle">基于 docs/design/rag/RETRIEVAL_FLOW.md · 最后更新 2026-05-27</p>
+
+<!-- ==================== TOC ==================== -->
+<div class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#s1">总体数据流（索引 + 检索）</a></li>
+    <li><a href="#s2">document_chunk 表结构</a></li>
+    <li><a href="#s3">索引阶段 — 切分策略分支</a></li>
+    <li><a href="#s4">索引阶段 — 写入流程（index_chunks）</a></li>
+    <li><a href="#s5">父子切割机制</a></li>
+    <li><a href="#s6">向量检索路径（retrieve）</a></li>
+    <li><a href="#s7">关键词检索路径（retrieve_keyword）</a></li>
+    <li><a href="#s8">混合检索路径（retrieve_hybrid + RRF）</a></li>
+    <li><a href="#s9">父块回填（_resolve_parent_chunks）</a></li>
+    <li><a href="#s10">元数据全链路</a></li>
+    <li><a href="#s11">完整查询生命周期</a></li>
+  </ol>
+</div>
+
+<!-- ==================== 1. 总体数据流 ==================== -->
+<div class="card" id="s1">
+  <h2>1. 总体数据流（索引 + 检索两阶段）</h2>
+  <p class="desc">索引阶段写入向量和关键词索引；检索阶段读取并融合排序。两阶段共享 document_chunk 表。</p>
+  <div class="mermaid">
+flowchart LR
+    subgraph INDEX["📥 索引阶段（写入）"]
+        A1["PDF/DOCX/MD 文件"] --> A2["loader.py<br/>解析 + 切分"]
+        A2 --> A3["TextChunk 列表<br/>（含 parent_chunk_id, is_parent）"]
+        A3 --> A4["indexer.py<br/>delete_by_doc_id → embed → upsert"]
+        A4 --> A5[("PostgreSQL<br/>document_chunk 表")]
+    end
+
+    subgraph RETRIEVE["📤 检索阶段（读取）"]
+        B1["用户查询 query"] --> B2["retriever.py<br/>retrieve / retrieve_hybrid"]
+        B2 --> B3["vector.py<br/>query_documents / query_keyword"]
+        B3 --> A5
+        A5 --> B4["_parse_results<br/>距离→分数, 阈值过滤"]
+        B4 --> B5["_rerank_by_keyword_overlap<br/>jieba 重排序 +0.25"]
+        B5 --> B6["_resolve_parent_chunks<br/>子块→父块回填 + 去重"]
+        B6 --> B7["truncate Top-5"]
+        B7 --> B8["format_context<br/>格式化为 LLM prompt"]
+    end
+
+    style A5 fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+    style B8 fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+  </div>
+</div>
+
+<!-- ==================== 2. 表结构 ==================== -->
+<div class="card" id="s2">
+  <h2>2. document_chunk 表 — 字段与检索角色的对应</h2>
+  <p class="desc">15 个字段中，embedding、text_search、is_parent、parent_chunk_id、metadata 是 RAG 核心。其余为管理和溯源字段。</p>
+  <div class="mermaid">
+erDiagram
+    document_chunk {
+        bigint id PK "Snowflake 主键"
+        varchar chunk_id UK "业务唯一标识 {doc_id}_{index}"
+        varchar doc_id "所属文档 ID"
+        varchar collection_name "集合名（knowledge_base）"
+        text text "原始文本内容"
+        vector embedding "1024维语义向量（HNSW索引）"
+        varchar source "原始文件路径"
+        int page "页码（PDF）"
+        varchar section "章节标题"
+        varchar user_id "用户隔离"
+        varchar parent_chunk_id "指向父块（子块用）"
+        boolean is_parent "是否为父块"
+        tsvector text_search "jieba分词全文检索向量（GIN索引）"
+        jsonb metadata "扩展元数据 {language,chunk_type,...}"
+        timestamp created_at "创建时间"
+    }
+
+    document_chunk ||--o{ document_chunk : "parent_chunk_id → 子块引用父块"
+
+  </div>
+</div>
+
+<!-- ==================== 3. 切分策略 ==================== -->
+<div class="card" id="s3">
+  <h2>3. 索引阶段 — 切分策略分支</h2>
+  <p class="desc">由 config.rag.parent_chunking.enabled 控制。当前默认 false（无父子切割）。</p>
+  <div class="mermaid">
+flowchart TD
+    START["load_file(path)"] --> DOCID["doc_id = Path.stem<br/>例: 'lecture1'"]
+    DOCID --> CONVERT["文件 → Markdown<br/>PDF: pymupdf4llm<br/>DOCX: python-docx"]
+    CONVERT --> PARSE["_parse_markdown_to_chunks()"]
+    PARSE --> CHECK{"config.rag<br/>parent_chunking.enabled<br/>?"}
+
+    CHECK -->|"false（当前默认）"| FLAT["_split_markdown_by_headers()<br/>按 ## / ### 标题分节"]
+    FLAT --> FLAT2["split_text(chunk_size=500)<br/>overlap=50，句边界感知"]
+    FLAT2 --> FLAT3["所有 chunk 都是子块<br/>is_parent=False<br/>无 parent_chunk_id"]
+
+    CHECK -->|"true"| PC["_parse_markdown_to_chunks_parent_child()"]
+    PC --> PC1["_split_markdown_by_headers()<br/>按标题分节"]
+    PC1 --> PC2["_split_into_parents(parent_max_chars=2000)<br/>段落边界优先，保留代码块/表格完整"]
+    PC2 --> PC3["split_text(chunk_size=500)<br/>每个父块切为多个子块"]
+    PC3 --> PC4["输出：父块 + 子块混合列表<br/>父块: is_parent=True<br/>子块: parent_chunk_id=父块ID"]
+
+    FLAT3 --> OUT["list[TextChunk]"]
+    PC4 --> OUT
+
+    style CHECK fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
+    style OUT fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+  </div>
+</div>
+
+<!-- ==================== 4. 写入流程 ==================== -->
+<div class="card" id="s4">
+  <h2>4. 索引阶段 — 写入流程（index_chunks）</h2>
+  <p class="desc">全量替换策略：先清空旧数据，父块不嵌入，子块批量嵌后一次写入。每批 ≤10 条（API_MAX_BATCH）。</p>
+  <div class="mermaid">
+flowchart TD
+    IN["list[TextChunk]"] --> STEP1["<b>Step 1: 全量替换</b><br/>收集 unique_doc_ids<br/>对每个 doc_id: delete_by_doc_id()"]
+    STEP1 --> SPLIT["分离父块 / 子块"]
+
+    SPLIT --> PARENT["<b>Step 2: 写入父块</b><br/>embedding = NULL<br/>不调 Embedding API"]
+    PARENT --> P_JIEBA["_tokenize_for_tsvector(text)<br/>jieba.lcut → 空格连接"]
+    P_JIEBA --> P_SQL["upsert_documents()<br/>to_tsvector('simple', tokens)<br/>is_parent = True"]
+
+    SPLIT --> CHILD["<b>Step 3: 写入子块（分批）</b><br/>每批 ≤ 10 条"]
+    CHILD --> C_EMBED["get_embeddings_batch(texts)<br/>→ DashScope text-embedding-v4<br/>→ 1024维向量"]
+    C_EMBED --> C_JIEBA["_tokenize_for_tsvector(text)<br/>jieba.lcut → 空格连接"]
+    C_JIEBA --> C_SQL["upsert_documents()<br/>embedding + to_tsvector('simple', tokens)<br/>is_parent = False<br/>parent_chunk_id = 父块ID"]
+    C_SQL --> NEXT{"还有批次?"}
+    NEXT -->|"是"| CHILD
+    NEXT -->|"否"| DONE["index_chunks 完成<br/>返回写入总数"]
+
+    P_SQL --> DONE
+
+    style STEP1 fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
+    style C_EMBED fill:#fce7f3,stroke:#ec4899,stroke-width:2px
+    style DONE fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+  </div>
+</div>
+
+<!-- ==================== 5. 父子切割 ==================== -->
+<div class="card" id="s5">
+  <h2>5. 父子切割机制（索引 ↔ 检索闭环）</h2>
+  <p class="desc">索引时父块（2000字）不嵌入；检索时子块（500字）精确匹配，再回填父块大上下文。两者通过 parent_chunk_id 关联。</p>
+  <div class="mermaid">
+flowchart TD
+    subgraph INDEX_PHASE["索引阶段"]
+        DOC["一篇文档<br/>（如 lecture1.pdf）"]
+        DOC --> PAR["切出 3 个父块<br/>lecture1_p0 (2000字)"]
+        DOC --> PAR2["lecture1_p1 (2000字)"]
+        DOC --> PAR3["lecture1_p2 (2000字)"]
+
+        PAR --> CH0["4 个子块 (500字/块)<br/>lecture1_0 → parent=lecture1_p0<br/>lecture1_1 → parent=lecture1_p0<br/>lecture1_2 → parent=lecture1_p0<br/>lecture1_3 → parent=lecture1_p0"]
+
+        CH0 -.->|"写入时"| DB[("document_chunk 表")]
+    end
+
+    subgraph RETRIEVAL_PHASE["检索阶段"]
+        Q["用户查询"] --> VEC["向量检索 HNSW<br/>WHERE is_parent=FALSE"]
+        VEC --> DB
+        DB --> CHILD_HIT["命中子块：lecture1_2<br/>score=0.82<br/>parent_chunk_id='lecture1_p0'"]
+        CHILD_HIT --> RESOLVE["_resolve_parent_chunks()"]
+        RESOLVE --> BATCH["批量查询父块<br/>SELECT text FROM document_chunk<br/>WHERE chunk_id IN ('lecture1_p0')<br/>AND is_parent=TRUE"]
+        BATCH --> FINAL["最终返回父块文本（2000字）<br/>score 保留子块的 0.82<br/>metadata: from_child_chunk=lecture1_2"]
+    end
+
+    style PAR fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+    style CH0 fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
+    style FINAL fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+  </div>
+</div>
+
+<!-- ==================== 6. 向量检索 ==================== -->
+<div class="card" id="s6">
+  <h2>6. 向量检索路径（retrieve）— 单路语义检索</h2>
+  <p class="desc">始终生效的默认路径。预取 3x 候选，经过 re-rank 和父块回填后截断到 Top-5。</p>
+  <div class="mermaid">
+flowchart TD
+    Q["query: '反向传播算法推导'"] --> EMB["get_embedding(query)<br/>→ 1024维向量"]
+    EMB --> DB["query_documents(embedding, n*3=15)<br/>SET LOCAL hnsw.ef_search=100"]
+    DB --> SQL["<b>SQL</b><br/>SELECT chunk_id, text, ...,<br/>  embedding &lt;=&gt; CAST(:emb AS vector) AS distance<br/>WHERE is_parent = FALSE<br/>ORDER BY distance<br/>LIMIT 15"]
+    SQL --> PARSE["_parse_results(raw, threshold=0.5)"]
+    PARSE --> SCORE["distance → score<br/>score = 1.0 - distance<br/>过滤 score &lt; 0.5"]
+    SCORE --> RERANK["_rerank_by_keyword_overlap(query)<br/>jieba.lcut → 关键词命中比例<br/>boost = min(overlap/len, 1.0) × 0.25"]
+    RERANK --> RESOLVE["_resolve_parent_chunks(chunks)<br/>子块→父块文本替换 + 去重"]
+    RESOLVE --> TOP5["truncate to n_results=5"]
+    TOP5 --> CTX["format_context()<br/>渲染为 LLM prompt 格式"]
+
+    style SQL fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+    style RERANK fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
+    style RESOLVE fill:#fce7f3,stroke:#ec4899,stroke-width:2px
+    style CTX fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+  </div>
+</div>
+
+<!-- ==================== 7. 关键词检索 ==================== -->
+<div class="card" id="s7">
+  <h2>7. 关键词检索路径（retrieve_keyword）— tsvector + jieba</h2>
+  <p class="desc">混合检索启用时作为第二路并行执行。词级精确匹配（"学习"不会误匹配"学生"），GIN 索引加速。</p>
+  <div class="mermaid">
+flowchart TD
+    Q["query: '反向传播算法推导'"] --> TOK["_tokenize_keywords(query)"]
+    TOK --> JIEBA["<b>jieba.lcut(cut_all=False) 精确模式</b><br/>['反向', '传播', '算法', '数学', '推导']"]
+    JIEBA --> FILTER["过滤停用词 + 单字<br/>_KEYWORD_STOP_WORDS 集合"]
+    FILTER --> KW["keywords = ['反向','传播','算法','数学','推导']"]
+    KW --> DB["query_keyword(keywords, n_results)"]
+    DB --> TSQ["构建 tsquery<br/>tsquery_str = '反向 &amp; 传播 &amp; 算法 &amp; 数学 &amp; 推导'"]
+    TSQ --> SQL["<b>SQL</b><br/>SELECT chunk_id, text, ...,<br/>  ts_rank(text_search, to_tsquery('simple', :tsquery)) AS rank<br/>WHERE is_parent = FALSE<br/>  AND text_search IS NOT NULL<br/>  AND text_search @@ to_tsquery('simple', :tsquery)<br/>ORDER BY rank DESC<br/>LIMIT :n"]
+    SQL --> PARSE["_parse_results(raw, threshold=0.0)"]
+    PARSE --> SCORE["distance = 1.0 - ts_rank →<br/>_parse_results 还原为<br/>score = 1.0 - (1.0 - rank) = rank"]
+    SCORE --> OUT["list[RetrievedChunk]<br/>按 ts_rank 降序"]
+
+    style JIEBA fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+    style SQL fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+    style OUT fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+  </div>
+</div>
+
+<!-- ==================== 8. 混合检索 ==================== -->
+<div class="card" id="s8">
+  <h2>8. 混合检索（retrieve_hybrid）— 并行双路 + RRF 融合</h2>
+  <p class="desc">当前 config.rag.hybrid.enabled=false，打开后两条路径并行执行，RRF 只看排名不看绝对分数，天然解决分数量纲不统一问题。</p>
+  <div class="mermaid">
+flowchart TD
+    Q["query"] --> GATHER("<b>asyncio.gather</b>")
+
+    GATHER -->|"并行"| VP["_vector_path()<br/>retrieve(n*3=15)<br/>HNSW <=> 余弦距离"]
+    GATHER -->|"并行"| KP["_keyword_path()<br/>retrieve_keyword(n*3=15)<br/>tsvector @@ tsquery"]
+
+    VP --> VR["向量路 Top-15<br/>score=cosine_similarity"]
+    KP --> KR["关键词路 Top-15<br/>score=ts_rank"]
+
+    VR --> RRF["<b>_rrf_fusion_cross_path()</b>"]
+    KR --> RRF
+
+    RRF --> RRF1["对每条路的每个 chunk：<br/>rrf_score = weight / (k + rank)"]
+    RRF1 --> RRF2["k=60, weight=1.0<br/>同 chunk_id 多路命中 → 累加 rrf_score"]
+    RRF2 --> RRF3["按 rrf_score 降序排列<br/>去重（保留更高原始分的 chunk 对象）"]
+    RRF3 --> MERGED["融合后 ~15 个去重 chunk"]
+
+    MERGED --> RERANK["_rerank_by_keyword_overlap(query)<br/>jieba 关键词重叠加权 +0.25"]
+    RERANK --> RESOLVE["_resolve_parent_chunks()<br/>子块→父块回填 + 去重"]
+    RESOLVE --> TOP5["truncate to n_results=5"]
+    TOP5 --> OUT["format_context()"]
+
+    style GATHER fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
+    style RRF fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+    style OUT fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+  </div>
+</div>
+
+<!-- ==================== 9. 父块回填 ==================== -->
+<div class="card" id="s9">
+  <h2>9. 父块回填（_resolve_parent_chunks）— 算法详解</h2>
+  <p class="desc">对所有检索路径生效。将精确匹配的小子块替换为上下文更完整的大父块，同一父块的多个子块只保留最高分。</p>
+  <div class="mermaid">
+flowchart TD
+    IN["输入：re-rank 后的子块列表<br/>（已按 score 降序）"]
+
+    IN --> S1["<b>Step 1: 收集 parent_chunk_id</b><br/>for c in chunks:<br/>  pid = c.metadata.get('parent_chunk_id')<br/>  if pid: child_to_parent[c.chunk_id] = pid"]
+
+    S1 --> CHECK{"有 parent_chunk_id?"}
+    CHECK -->|"无"| PASS["返回原始 chunks<br/>（向后兼容旧数据）"]
+
+    CHECK -->|"有"| S2["<b>Step 2: 批量查询父块文本</b><br/>SELECT chunk_id, text<br/>FROM document_chunk<br/>WHERE chunk_id = ANY(parent_ids)<br/>  AND is_parent = TRUE"]
+
+    S2 --> S3["<b>Step 3: 去重 + 回填</b><br/>seen_parents = set()"]
+
+    S3 --> LOOP["遍历 chunks（已按 score 降序）"]
+    LOOP --> DUP{"同一 parent_chunk_id<br/>已出现过？"}
+    DUP -->|"是（低分子块）"| SKIP["跳过（去重）"]
+    DUP -->|"否（最高分子块）"| FILL["用父块 text 替换子块 text<br/>保留子块的 score 和来源<br/>metadata.from_child_chunk = 子块ID"]
+    FILL --> SEEN["seen_parents.add(pid)"]
+
+    SKIP --> NEXT["下一个 chunk"]
+    SEEN --> NEXT
+    NEXT -->|"还有"| LOOP
+    NEXT -->|"完成"| SORT["按 score 降序排列<br/>返回回填后的列表"]
+
+    style S2 fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+    style FILL fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+  </div>
+</div>
+
+<!-- ==================== 10. 元数据全链路 ==================== -->
+<div class="card" id="s10">
+  <h2>10. 元数据全链路（metadata）— 从 loader 到 LLM</h2>
+  <p class="desc">language 和 course 在解析时自动填充，全链路透传至 format_context 渲染为中文标签。</p>
+  <div class="mermaid">
+flowchart LR
+    subgraph LOAD["loader.py 解析"]
+        A1["文档解析时"] --> A2["_detect_language()<br/>统计中英文字符比例<br/>→ 'zh' / 'en' / 'mixed'"]
+        A1 --> A3["Path.parent.name<br/>→ 'course' 课程名"]
+    end
+
+    subgraph INDEX["indexer.py 索引"]
+        B1["**c.metadata 展开<br/>{language: 'zh', course: 'math'}"]
+    end
+
+    subgraph DB["vector.py 写入"]
+        C1["_convert_metadata_to_columns()<br/>分离固定列 / 扩展字段"]
+        C2["扩展字段 → JSONB<br/>json.dumps(extra_meta)"]
+        C3["INSERT INTO document_chunk<br/>metadata = '{\"language\":\"zh\",\"course\":\"math\"}'"]
+    end
+
+    subgraph RET["retriever.py 检索"]
+        D1["_parse_results()<br/>fixed_keys 之外 → extra_meta"]
+        D2["RetrievedChunk<br/>.metadata = {'language':'zh','course':'math'}"]
+    end
+
+    subgraph CTX["format_context() 渲染"]
+        E1["chunk_type → 定义/定理/示例<br/>language → 中文/英文/中英混合<br/>difficulty → 入门/进阶/高级"]
+        E2["[1] （来源：math.pdf，第3页 [定义, 中文, 进阶]）"]
+    end
+
+    A2 --> B1
+    A3 --> B1
+    B1 --> C1
+    C1 --> C2 --> C3
+    C3 --> D1 --> D2
+    D2 --> E1 --> E2
+
+    style A2 fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+    style C3 fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+    style E2 fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+  </div>
+</div>
+
+<!-- ==================== 11. 完整生命周期 ==================== -->
+<div class="card" id="s11">
+  <h2>11. 完整查询生命周期 — "反向传播算法的数学推导"</h2>
+  <p class="desc">以混合检索启用（hybrid.enabled=true）+ 父子切割启用（parent_chunking.enabled=true）为前提，展示一条查询从输入到 LLM prompt 的完整路径。</p>
+  <div class="mermaid">
+flowchart TD
+    Q["<b>用户输入</b><br/>'反向传播算法的数学推导'"]
+
+    Q --> VEC["<b>向量路径</b><br/>text-embedding-v4 → 1024维<br/>HNSW &lt;=&gt; 余弦距离<br/>WHERE is_parent=FALSE<br/>预取 Top-15"]
+    Q --> KW["<b>关键词路径</b><br/>jieba.lcut → ['反向','传播','算法','数学','推导']<br/>tsquery: '反向 &amp; 传播 &amp; 算法 &amp; 数学 &amp; 推导'<br/>text_search @@ tsquery<br/>预取 Top-15"]
+
+    VEC --> VRES["向量路 12 个候选子块<br/>score = 1.0 - cosine_distance<br/>过滤 score&lt;0.5 噪声"]
+    KW --> KRES["关键词路 8 个候选子块<br/>score = ts_rank<br/>threshold=0.0, 全部保留"]
+
+    VRES --> RRF["<b>RRF 融合</b><br/>rrf = w/(60+rank)<br/>向量路 rank=1: 1/61=0.0164<br/>关键词路 rank=1: 1/61=0.0164<br/>同 chunk 双路命中 → 累加"]
+    KRES --> RRF
+
+    RRF --> MERGED["融合后 15 个去重子块"]
+
+    MERGED --> RERANK["<b>jieba 重排序</b><br/>overlap=命中数/5<br/>boost=overlap×0.25<br/>5词全命中 → +0.25"]
+
+    RERANK --> RESOLVE["<b>父块回填</b><br/>查 parent_chunk_id → 批量取父块文本<br/>同父块的多个子块 → 只留最高分<br/>子块 500字 → 父块 2000字"]
+
+    RESOLVE --> TOP5["<b>截断 Top-5</b>"]
+
+    TOP5 --> FORMAT["<b>format_context()</b>"]
+
+    FORMAT --> FINAL["<b>最终给 LLM 的 prompt 片段：</b><br/><br/>[1] （来源：math_intro.pdf，第3页，反向传播 [定义, 中文, 进阶]）<br/>反向传播算法是训练人工神经网络的核心算法，<br/>其基本思想是通过链式法则计算损失函数...（2000字父块全文）<br/><br/>[2] （来源：dl_notes.md，第7页 [示例, 中文]）<br/>以一个简单的两层网络为例...<br/><br/>..."]
+
+    style Q fill:#1e293b,color:#fff,stroke:#1e293b,stroke-width:2px
+    style RRF fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+    style RERANK fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
+    style RESOLVE fill:#fce7f3,stroke:#ec4899,stroke-width:2px
+    style FINAL fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+  </div>
+</div>
+
+<footer>
+  生成自 docs/design/rag/RETRIEVAL_FLOW.md · RAG 检索流程详解 · diagrams powered by Mermaid.js
+</footer>
+
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    themeCSS: `
+      .label { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC",sans-serif !important; }
+      .node rect, .node circle, .node polygon { stroke-width: 1.5px !important; }
+    `,
+    flowchart: {
+      useMaxWidth: true,
+      htmlLabels: true,
+      curve: 'basis',
+      padding: 12,
+    },
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学习评估 - 个性化学习助手</title>
+    <script src="https://unpkg.com/lucide@0.460.0"></script>
+    <link rel="stylesheet" href="./assets/styles.css">
+    <link rel="stylesheet" href="./assets/assistant.css">
+    <link rel="stylesheet" href="./assets/aurora.css">
+    <link rel="stylesheet" href="./assets/aurora-bridge.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        .main {
+            margin-left: var(--sidebar-width);
+            padding: 32px 40px;
+            flex: 1;
+        }
+        .page-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #C77B3C;
+            margin-bottom: 8px;
+            padding-bottom: 12px;
+            border-bottom: 3px solid #C77B3C;
+        }
+        .page-subtitle {
+            font-size: 14px;
+            color: #6B7280;
+            margin-bottom: 32px;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid var(--color-border);
+            margin-bottom: 24px;
+            gap: 4px;
+        }
+        .tab {
+            padding: 10px 24px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #6B7280;
+            cursor: pointer;
+            border: none;
+            background: none;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+            border-radius: 6px 6px 0 0;
+        }
+        .tab:hover { color: var(--color-primary); }
+        .tab.active {
+            color: var(--color-primary);
+            border-bottom-color: var(--color-primary);
+            background: var(--color-primary-light);
+        }
+
+        /* Card */
+        .card {
+            background: var(--color-card);
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--color-text);
+            margin-bottom: 16px;
+        }
+
+        /* Quiz Resource Select */
+        .resource-select {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+            align-items: center;
+        }
+        .resource-select select {
+            flex: 1;
+            padding: 10px 14px;
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            font-size: 14px;
+            background: var(--color-card);
+            cursor: pointer;
+            outline: none;
+        }
+        .btn-secondary {
+            padding: 10px 20px;
+            background: var(--color-card);
+            color: var(--color-text);
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-secondary:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
+        /* Quiz Item */
+        .quiz-item {
+            background: var(--color-card);
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+        .quiz-question {
+            font-weight: 500;
+            color: var(--color-text);
+            margin-bottom: 16px;
+            font-size: 15px;
+        }
+        .quiz-meta {
+            font-size: 13px;
+            color: #6B7280;
+            margin-bottom: 12px;
+        }
+        .quiz-options {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .quiz-option {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .quiz-option:hover { border-color: var(--color-primary); background: var(--color-bg); }
+        .quiz-option.selected { border-color: #C77B3C; background: #F5E9D8; }
+        .quiz-option.correct {
+            border-color: #10B981;
+            background: #E8F5E9;
+        }
+        .quiz-option.wrong {
+            border-color: #EF4444;
+            background: #FEF2F2;
+        }
+        .quiz-option-marker {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid var(--color-border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: #6B7280;
+        }
+        .quiz-option.selected .quiz-option-marker {
+            background: #C77B3C;
+            border-color: #C77B3C;
+            color: #fff;
+        }
+
+        /* Submit Bar */
+        .submit-bar {
+            display: flex;
+            gap: 12px;
+            padding: 16px 0;
+            border-top: 1px solid var(--color-border);
+            margin-top: 16px;
+        }
+        .btn-primary {
+            padding: 12px 32px;
+            background: #C77B3C;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-primary:hover { background: #3B55D9; }
+        .btn-primary:disabled { background: #BDBDBD; cursor: not-allowed; }
+
+        /* Score Display */
+        .score-display {
+            text-align: center;
+            padding: 40px;
+            border-radius: 12px;
+            margin: 20px 0;
+        }
+        .score-display.pass { background: #E8F5E9; border: 2px solid #10B981; }
+        .score-display.fail { background: #FEF2F2; border: 2px solid #EF4444; }
+        .score-value { font-size: 64px; font-weight: 700; }
+        .score-display.pass .score-value { color: #10B981; }
+        .score-display.fail .score-value { color: #EF4444; }
+        .score-detail { font-size: 16px; color: #6B7280; margin-top: 8px; }
+        .score-actions { margin-top: 24px; display: flex; justify-content: center; gap: 12px; }
+
+        /* History Table */
+        .table { width: 100%; border-collapse: collapse; }
+        .table th {
+            background: #F5E9D8;
+            color: #3B55D9;
+            font-weight: 600;
+            font-size: 13px;
+            text-align: left;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--color-border);
+        }
+        .table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--color-border);
+            font-size: 14px;
+        }
+        .result-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .result-badge.correct { background: #E8F5E9; color: #10B981; }
+        .result-badge.wrong { background: #FEF2F2; color: #EF4444; }
+
+        /* Weak Items */
+        .weak-item {
+            background: #fff;
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 12px;
+            border-left: 4px solid #EF4444;
+        }
+        .weak-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .weak-item-title {
+            font-weight: 600;
+            color: #EF4444;
+            font-size: 15px;
+        }
+        .weak-item-accuracy {
+            font-size: 14px;
+            color: #6B7280;
+        }
+        .weak-item-detail {
+            font-size: 14px;
+            color: #6B7280;
+            margin-bottom: 12px;
+        }
+        .weak-item-actions { display: flex; gap: 8px; }
+        .progress-bar { height: 6px; background: var(--color-border); border-radius: 3px; overflow: hidden; }
+        .progress-fill { height: 100%; background: #EF4444; border-radius: 3px; }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-box {
+            background: #fff;
+            border-radius: 12px;
+            padding: 28px;
+            max-width: 580px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+        }
+        .modal-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #9CA3AF;
+        }
+        .modal-close:hover { color: #374151; }
+        .detail-stem { font-size: 15px; line-height: 1.6; margin-bottom: 16px; font-weight: 500; }
+        .detail-options { list-style: none; padding: 0; margin: 0 0 16px; }
+        .detail-options li { padding: 8px 12px; border-radius: 8px; margin-bottom: 6px; font-size: 14px; border: 1px solid var(--color-border); }
+        .detail-options li.user-selected { border-color: #C77B3C; background: #F5E9D8; }
+        .detail-options li.correct-answer { border-color: #10B981; background: #E8F5E9; }
+        .detail-row { display: flex; gap: 16px; margin-bottom: 12px; font-size: 14px; }
+        .detail-label { font-weight: 600; color: #6B7280; min-width: 70px; }
+        .detail-answer-box { background: var(--color-bg); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+        .detail-explanation { font-size: 13px; color: #6B7280; background: #FFFBEB; border-radius: 8px; padding: 12px; margin-top: 12px; border-left: 3px solid #F59E0B; }
+        .detail-section-title { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .detail-badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 13px; font-weight: 500; }
+        .detail-badge.correct { background: #E8F5E9; color: #10B981; }
+        .detail-badge.wrong { background: #FEF2F2; color: #EF4444; }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6B7280;
+        }
+        .empty-icon { width: 48px; height: 48px; margin-bottom: 16px; opacity: 0.5; display: inline-flex; align-items: center; justify-content: center; }
+        .empty-text { font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="aurora-bg"></div>
+    <div class="aurora-orb"></div>
+    <div class="aurora-grid"></div>
+    <div class="layout">
+        <main class="main">
+            <h1 class="page-title">学习评估</h1>
+            <p class="page-subtitle">完成测验题目，检验学习效果，发现薄弱知识点，针对性提升。</p>
+
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab(this, 'exam')">进行测验</button>
+                <button class="tab" onclick="switchTab(this, 'history')">答题历史</button>
+                <button class="tab" onclick="switchTab(this, 'weak')">薄弱分析</button>
+            </div>
+
+            <!-- Tab: Exam -->
+            <div id="tab-exam">
+                <div class="card">
+                    <div class="card-title">选择测验资源</div>
+                    <div class="resource-select">
+                        <select id="quiz-select">
+                            <option value="">加载中...</option>
+                        </select>
+                        <button class="btn-secondary" id="btn-start-quiz" onclick="startQuiz()">开始测验</button>
+                    </div>
+                </div>
+
+                <div id="quiz-container" style="display:none;"></div>
+            </div>
+
+            <!-- Tab: History -->
+            <div id="tab-history" style="display:none;">
+                <div class="card">
+                    <div class="card-title">答题历史</div>
+                    <div id="history-list"></div>
+                </div>
+            </div>
+
+            <!-- Tab: Weak -->
+            <div id="tab-weak" style="display:none;">
+                <div id="weak-list"></div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        import { showToast } from './assets/toast.js';
+        import { showDialog } from './assets/dialog.js';
+        import { registerActions } from './assets/button.js';
+        import { initCommandPalette } from './assets/command.js';
+        import { initCapNav } from './assets/nav.js';
+        import { isLoggedIn, getUserId, clearAuth, getResources, getQuizItems, submitQuizAnswer, getQuizAttempts, postLearningRecord } from './assets/api.js';
+
+        if (!isLoggedIn()) {
+            window.location.href = 'auth.html';
+        }
+
+        const userId = getUserId();
+        initCapNav('evaluate');
+        let currentQuiz = [];
+        let userAnswers = {};
+        let currentResourceId = null;
+        let quizStartTime = null;  // 计时：开始做题时间
+
+        function switchTab(btn, tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('tab-exam').style.display = tab === 'exam' ? 'block' : 'none';
+            document.getElementById('tab-history').style.display = tab === 'history' ? 'block' : 'none';
+            document.getElementById('tab-weak').style.display = tab === 'weak' ? 'block' : 'none';
+            if (tab === 'exam') loadQuizResources();
+            else if (tab === 'history') loadHistory();
+            else if (tab === 'weak') loadWeakAnalysis();
+        }
+
+        async function loadQuizResources() {
+            try {
+                const data = await getResources(userId, { resource_type: 'quiz', limit: 100 });
+                const select = document.getElementById('quiz-select');
+                if (data && data.items && data.items.length) {
+                    select.innerHTML = data.items.map(r => `<option value="${r.id}">${r.title || r.id} (${r.created_at ? new Date(r.created_at).toLocaleDateString() : ''})</option>`).join('');
+                } else {
+                    select.innerHTML = '<option value="">暂无可用测验</option>';
+                }
+            } catch (e) {
+                console.error('加载测验资源失败:', e);
+                const select = document.getElementById('quiz-select');
+                select.innerHTML = '<option value="">加载失败，请刷新重试</option>';
+            }
+        }
+
+        async function startQuiz() {
+            const resourceId = document.getElementById('quiz-select').value;
+            if (!resourceId) return;
+            currentResourceId = resourceId;
+            userAnswers = {};
+            const data = await getQuizItems(resourceId, userId);
+            const container = document.getElementById('quiz-container');
+            if (!data || !data.length) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-icon"><i data-lucide="file-question"></i></div><div class="empty-text">该资源暂无题目</div></div>';
+                container.style.display = 'block';
+                return;
+            }
+            currentQuiz = data;
+            quizStartTime = Date.now();  // 开始计时
+            container.innerHTML = data.map((q, idx) => {
+                const qTypeLabel = q.question_type === 'multi' ? '多选题' : q.question_type === 'fill' ? '填空题' : '单选题';
+                let bodyHtml = '';
+                if (q.question_type === 'fill') {
+                    bodyHtml = `<div style="margin-top:12px;"><input type="text" class="quiz-fill-input" id="fill-${q.id}" placeholder="请输入答案" style="width:100%;padding:10px 14px;border:1px solid var(--color-border);border-radius:8px;font-size:14px;box-sizing:border-box;" oninput="onFillInput('${q.id}', this.value)"></div>`;
+                } else {
+                    bodyHtml = `<div class="quiz-options">
+                        ${(q.options || []).map((opt, oi) => `
+                            <div class="quiz-option" data-question="${q.id}" data-option="${oi}" onclick="selectOption(this, '${q.id}', ${q.question_type === 'multi' ? true : false})">
+                                <div class="quiz-option-marker">${String.fromCharCode(65 + oi)}</div>
+                                <span>${opt}</span>
+                            </div>
+                        `).join('')}
+                    </div>`;
+                }
+                return `<div class="quiz-item" id="quiz-${q.id}">
+                    <div class="quiz-meta">第 ${idx + 1} 题 · ${qTypeLabel} · ${q.difficulty || 5}分</div>
+                    <div class="quiz-question">${q.stem}</div>
+                    ${bodyHtml}
+                </div>`;
+            }).join('') + `
+                <div class="submit-bar">
+                    <button class="btn-primary" onclick="submitQuiz()">提交全部答案</button>
+                    <button class="btn-secondary" onclick="resetQuiz()">重置答题</button>
+                </div>
+            `;
+            container.style.display = 'block';
+        }
+
+        function onFillInput(questionId, value) {
+            userAnswers[questionId] = [value.trim()];
+        }
+
+        function selectOption(el, questionId, isMultiple) {
+            if (!isMultiple) {
+                document.querySelectorAll(`[data-question="${questionId}"]`).forEach(o => o.classList.remove('selected'));
+            }
+            el.classList.toggle('selected');
+            const letter = String.fromCharCode(65 + parseInt(el.dataset.option)); // 'A', 'B', 'C'...
+            if (isMultiple) {
+                userAnswers[questionId] = userAnswers[questionId] || [];
+                const idx = userAnswers[questionId].indexOf(letter);
+                if (idx >= 0) userAnswers[questionId].splice(idx, 1);
+                else userAnswers[questionId].push(letter);
+            } else {
+                userAnswers[questionId] = [letter];
+            }
+        }
+
+        async function submitQuiz() {
+            let correct = 0;
+            const submitted = [];
+            // 计算每题平均用时（秒）
+            const totalSec = quizStartTime ? Math.round((Date.now() - quizStartTime) / 1000) : 0;
+            const answeredCount = Object.keys(userAnswers).length || 1;
+            const perQuestionSec = Math.max(Math.round(totalSec / answeredCount), 5); // 最少 5 秒
+            for (const [qId, opts] of Object.entries(userAnswers)) {
+                const result = await submitQuizAnswer(userId, qId, opts.join(','), perQuestionSec);
+                const isCorrect = !!(result && result.is_correct);
+                if (isCorrect) correct++;
+                submitted.push({ qId, opts, isCorrect });
+            }
+
+            // 对答对题目的知识点记录 complete
+            const completedKps = new Set();
+            for (const s of submitted) {
+                if (!s.isCorrect) continue;
+                const q = currentQuiz.find(q => q.id === s.qId);
+                if (q && q.kp_id && !completedKps.has(q.kp_id)) {
+                    completedKps.add(q.kp_id);
+                    postLearningRecord(userId, { kp_id: q.kp_id, action: 'complete' }).catch(() => {});
+                }
+            }
+
+            // 先生成带答案和解析的完整 HTML
+            const quizHtml = currentQuiz.map((q, idx) => {
+                const submittedAns = submitted.find(s => s.qId === q.id);
+                const answerStr = String(q.answer || '');
+                const isMulti = q.question_type === 'multi';
+                const isFill = q.question_type === 'fill';
+                let correctOpts = isMulti
+                    ? (() => {
+                        try { return JSON.parse(answerStr); } catch {
+                            // 降级：逗号分隔的字母字符串
+                            return answerStr.split(/[,，\s]+/).filter(Boolean);
+                        }
+                    })()
+                    : [answerStr];
+
+                let bodyHtml = '';
+                if (isFill) {
+                    const userAns = submittedAns ? submittedAns.opts.join('') : '';
+                    bodyHtml = `<div style="margin-top:12px;padding:10px 14px;background:${submittedAns ? (submittedAns.isCorrect ? '#E8F5E9' : '#FEF2F2') : 'var(--color-bg)'};border-radius:8px;font-size:14px;"><strong>你的答案：</strong>${userAns || '(未作答)'} &nbsp; <strong>正确答案：</strong>${answerStr}</div>`;
+                } else {
+                    const optionsHtml = (q.options || []).map((opt, oi) => {
+                        const letter = String.fromCharCode(65 + oi);
+                        const isSelected = submittedAns && submittedAns.opts.includes(letter);
+                        const isCorrectOpt = correctOpts.map(String).includes(letter);
+                        let cls = 'quiz-option';
+                        if (submittedAns && isSelected && !submittedAns.isCorrect) cls += ' wrong';
+                        if (isCorrectOpt) cls += ' correct';
+                        return `<div class="${cls}">
+                            <div class="quiz-option-marker">${letter}</div>
+                            <span>${opt}</span>
+                        </div>`;
+                    }).join('');
+                    bodyHtml = `<div class="quiz-options">${optionsHtml}</div>`;
+                }
+
+                let resultText = submittedAns
+                    ? (submittedAns.isCorrect ? '✓ 回答正确' : '✗ 回答错误')
+                    : '○ 未作答';
+                const resultColor = submittedAns && submittedAns.isCorrect ? '#10B981' : submittedAns ? '#EF4444' : '#9CA3AF';
+                const explanationHtml = q.explanation
+                    ? `<div style="margin-top:10px;padding:12px;background:#F0F7FF;border-radius:8px;font-size:13px;color:#374151;line-height:1.6;border-left:4px solid #C77B3C;"><strong>解析：</strong>${q.explanation}</div>`
+                    : '';
+
+                const qTypeLabel = isMulti ? '多选题' : isFill ? '填空题' : '单选题';
+                return `<div class="quiz-item" id="quiz-${q.id}">
+                    <div class="quiz-meta" style="margin-bottom:12px;">
+                        <span style="color:${resultColor};font-weight:600;">${resultText}</span>
+                        <span style="color:#6B7280;"> · ${qTypeLabel} · ${q.difficulty || 5}分</span>
+                    </div>
+                    <div class="quiz-question">${q.stem}</div>
+                    ${bodyHtml}
+                    ${explanationHtml}
+                </div>`;
+            }).join('');
+
+            const total = currentQuiz.length;
+            const pct = total ? Math.round(correct / total * 100) : 0;
+            const container = document.getElementById('quiz-container');
+            container.innerHTML = quizHtml + `
+                <div class="score-display ${pct >= 60 ? 'pass' : 'fail'}" style="margin-top:24px;">
+                    <div class="score-value">${pct}</div>
+                    <div style="font-size:18px;font-weight:600;">/ 100</div>
+                    <div class="score-detail">${correct}/${total} 正确</div>
+                    <div class="score-actions">
+                        <button class="btn-secondary" onclick="loadHistory()">查看历史</button>
+                        <button class="btn-primary" onclick="location.href='pathway.html'">前往学习路径</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function resetQuiz() {
+            userAnswers = {};
+            document.querySelectorAll('.quiz-option').forEach(o => o.classList.remove('selected'));
+            document.querySelectorAll('.quiz-fill-input').forEach(i => i.value = '');
+        }
+
+        async function loadHistory() {
+            const attempts = await getQuizAttempts(userId) || [];
+            const list = document.getElementById('history-list');
+            if (!attempts.length) {
+                list.innerHTML = '<div class="empty-state"><div class="empty-icon"><i data-lucide="history"></i></div><div class="empty-text">暂无答题记录</div></div>';
+                return;
+            }
+            // 支持 URL 参数 kp_id 筛选
+            const filterKpId = new URLSearchParams(window.location.search).get('kp_id');
+            const filtered = filterKpId ? attempts.filter(a => a.kp_id === filterKpId) : attempts;
+            const filterInfo = filterKpId && filtered.length ? `<div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;"><span style="font-size:13px;color:#7B1FA2;background:#F3E5F5;padding:4px 12px;border-radius:12px;">📍 筛选: ${filtered[0].kp_name || filterKpId}</span><a href="./evaluate.html?tab=history" style="font-size:12px;color:#C77B3C;text-decoration:none;">查看全部</a></div>` : '';
+            const displayList = filtered.length ? filtered : attempts;
+            displayList.forEach(a => attemptsCache.set(a.id, a));
+            list.innerHTML = `
+                ${filterInfo}
+                <table class="table" id="history-table">
+                    <thead><tr><th>知识点</th><th>你的答案</th><th>结果</th><th>时间</th></tr></thead>
+                    <tbody>
+                        ${displayList.map(a => `
+                            <tr data-attempt-id="${a.id}" class="attempt-row" style="cursor:pointer">
+                                <td>${a.kp_name || a.kp_id || '-'}</td>
+                                <td>${a.user_answer || '-'}</td>
+                                <td><span class="result-badge ${a.is_correct ? 'correct' : 'wrong'}">${a.is_correct ? '正确' : '错误'}</span></td>
+                                <td>${a.created_at ? new Date(a.created_at).toLocaleString() : '-'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        async function loadWeakAnalysis() {
+            const attempts = await getQuizAttempts(userId) || [];
+            const byKp = {};
+            attempts.forEach(a => {
+                const kp = a.kp_name || a.kp_id || '未知';
+                if (!byKp[kp]) byKp[kp] = { total: 0, correct: 0, kp_id: a.kp_id || kp };
+                byKp[kp].total++;
+                if (a.is_correct) byKp[kp].correct++;
+            });
+            const weak = Object.entries(byKp)
+                .filter(([k, v]) => k !== '未知' && v.total > 0 && v.correct / v.total < 0.6)
+                .sort((a, b) => (a[1].correct / a[1].total) - (b[1].correct / b[1].total));
+            const list = document.getElementById('weak-list');
+            if (!weak.length) {
+                list.innerHTML = '<div class="empty-state"><div class="empty-icon"><i data-lucide="brain"></i></div><div class="empty-text">暂无薄弱知识点，继续保持！</div></div>';
+                return;
+            }
+            list.innerHTML = weak.map(([kp, v]) => {
+                const acc = Math.round(v.correct / v.total * 100);
+                const encodedKp = encodeURIComponent(kp);
+                return `
+                <div class="weak-item">
+                    <div class="weak-item-header">
+                        <div class="weak-item-title">${kp}</div>
+                        <div class="weak-item-accuracy">正确率 ${acc}% (${v.correct}/${v.total})</div>
+                    </div>
+                    <div class="progress-bar"><div class="progress-fill" style="width:${acc}%"></div></div>
+                    <div class="weak-item-actions" style="margin-top:12px;">
+                        <button class="btn-secondary" onclick="location.href='generate.html?kp=${encodedKp}&type=doc'">前往学习</button>
+                    </div>
+                </div>
+            `}).join('');
+        }
+
+        const attemptsCache = new Map();
+
+        function showAttemptDetail(a) {
+            const modal = document.getElementById('attempt-modal');
+            const content = document.getElementById('attempt-modal-content');
+            const isCorrect = a.is_correct;
+            const userAnswer = a.user_answer !== undefined && a.user_answer !== null ? String(a.user_answer) : '-';
+            const correctAnswer = a.answer !== undefined && a.answer !== null ? String(a.answer) : '-';
+            const qType = a.question_type === 'multi' ? '多选题' : (a.question_type === 'fill' ? '填空题' : '单选题');
+
+            let optionsHtml = '';
+            if (a.options && a.options.length) {
+                const userAnsList = userAnswer.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+                const correctAnsList = correctAnswer.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+                optionsHtml = '<div class="detail-section-title">选项</div><ul class="detail-options">' +
+                    a.options.map((opt, idx) => {
+                        const letter = String.fromCharCode(65 + idx);
+                        const isUser = userAnsList.includes(letter);
+                        const isCorrectOpt = correctAnsList.includes(letter);
+                        let cls = '';
+                        if (isCorrectOpt) cls = 'correct-answer';
+                        else if (isUser) cls = 'user-selected';
+                        return `<li class="${cls}">${opt}${isUser ? ' ← 你的答案' : ''}${isCorrectOpt ? ' ✓ 正确答案' : ''}</li>`;
+                    }).join('') + '</ul>';
+            }
+
+            const fillAnswerHtml = a.question_type === 'fill'
+                ? `<div class="detail-answer-box">
+                    <div class="detail-section-title">你的答案</div>
+                    <div style="font-size:14px;">${userAnswer}</div>
+                   </div>
+                   <div class="detail-answer-box">
+                    <div class="detail-section-title">正确答案</div>
+                    <div style="font-size:14px;font-weight:600;color:#10B981;">${correctAnswer}</div>
+                   </div>`
+                : '';
+
+            content.innerHTML = `
+                <div style="margin-bottom:16px;">
+                    <span style="font-size:13px;color:#6B7280;">${a.kp_name || a.kp_id || '未知知识点'} · ${qType}${a.difficulty ? ' · ' + a.difficulty + '分' : ''}</span>
+                    <span class="detail-badge ${isCorrect ? 'correct' : 'wrong'}" style="margin-left:8px;">${isCorrect ? '正确' : '错误'}</span>
+                </div>
+                <div class="detail-section-title">题目</div>
+                <div class="detail-stem">${a.stem || '(无题目内容)'}</div>
+                ${optionsHtml}
+                ${fillAnswerHtml}
+                ${a.explanation ? `<div class="detail-explanation"><strong>解析：</strong>${a.explanation}</div>` : ''}
+            `;
+            modal.classList.add('active');
+        }
+
+        // 注册操作
+        registerActions({
+            logout: () => { clearAuth(); window.location.href = 'auth.html'; },
+        });
+        initCommandPalette();
+
+        window.switchTab = switchTab;
+        window.selectOption = selectOption;
+        window.submitQuiz = submitQuiz;
+        window.resetQuiz = resetQuiz;
+        window.startQuiz = startQuiz;
+        window.loadHistory = loadHistory;
+        window.loadWeakAnalysis = loadWeakAnalysis;
+        window.showAttemptDetail = showAttemptDetail;
+
+        // 使用事件委托代替内联 onclick，避免 XSS 风险
+        document.getElementById('history-list').addEventListener('click', (e) => {
+            const row = e.target.closest('.attempt-row');
+            if (!row) return;
+            const attemptId = row.dataset.attemptId;
+            const attempt = attemptsCache.get(attemptId ? Number(attemptId) : null);
+            if (attempt) showAttemptDetail(attempt);
+        });
+        window.onFillInput = onFillInput;
+
+        // 支持 URL 参数自动切换 tab：?tab=history&kp_id=xxx
+        const urlParams = new URLSearchParams(window.location.search);
+        const initTab = urlParams.get('tab');
+        if (initTab === 'history') {
+            const historyBtn = document.querySelectorAll('.tab')[1];
+            if (historyBtn) switchTab(historyBtn, 'history');
+        } else if (initTab === 'weak') {
+            const weakBtn = document.querySelectorAll('.tab')[2];
+            if (weakBtn) switchTab(weakBtn, 'weak');
+        } else {
+            loadQuizResources();
+        }
+    </script>
+    <!-- Attempt Detail Modal -->
+    <div class="modal-overlay" id="attempt-modal" onclick="if(event.target===this)this.classList.remove('active')">
+        <div class="modal-box">
+            <button class="modal-close" onclick="document.getElementById('attempt-modal').classList.remove('active')">×</button>
+            <div id="attempt-modal-content"></div>
+        </div>
+    </div>
+    <script>lucide.createIcons();</script>
+    <script src="./assets/tracker.js"></script>
+    <script type="module" src="./assets/assistant.js"></script>
+</body>
+</html>

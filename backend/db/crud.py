@@ -7,11 +7,10 @@ from __future__ import annotations
 
 from typing import Any, Sequence, TypeVar
 
-from sqlalchemy import select as sa_select, delete as sa_delete, update as sa_update, func
+from sqlalchemy import select as sa_select, delete as sa_delete, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.db.database import get_session
 
 ModelT = TypeVar("ModelT")
 
@@ -21,6 +20,7 @@ async def insert(
     model: type[ModelT],
     data: dict[str, Any],
     commit: bool = True,
+    refresh: bool = True,
 ) -> ModelT:
     """
     插入单条记录。
@@ -30,6 +30,7 @@ async def insert(
         model: ORM 模型类
         data: 要插入的字段数据字典
         commit: 是否立即提交，默认 True
+        refresh: 是否在 commit 后刷新实例，默认 True（需要 DB 默认值时保持 True）
 
     Returns:
         新创建的模型实例
@@ -38,7 +39,8 @@ async def insert(
     session.add(instance)
     if commit:
         await session.commit()
-        await session.refresh(instance)
+        if refresh:
+            await session.refresh(instance)
     return instance
 
 
@@ -71,6 +73,7 @@ async def select(
     session: AsyncSession,
     model: type[ModelT],
     filters: dict[str, Any] | None = None,
+    where: Any | None = None,
     order_by: Any | None = None,
     limit: int | None = None,
     offset: int | None = None,
@@ -82,7 +85,8 @@ async def select(
     Args:
         session: 数据库会话
         model: ORM 模型类
-        filters: 过滤条件字典，键为字段名，值为过滤值
+        filters: 过滤条件字典，键为字段名，值为过滤值（仅支持 == 和 is None）
+        where: 额外 SQLAlchemy WHERE 表达式，支持 or_/in_/like/between 等复杂条件
         order_by: 排序字段，如 User.username 或 desc(User.id)
         limit: 返回条数限制
         offset: 跳过条数
@@ -118,6 +122,9 @@ async def select(
             else:
                 stmt = stmt.where(getattr(model, key) == value)
 
+    if where is not None:
+        stmt = stmt.where(where)
+
     if order_by is not None:
         stmt = stmt.order_by(order_by)
 
@@ -135,6 +142,7 @@ async def select_one(
     session: AsyncSession,
     model: type[ModelT],
     filters: dict[str, Any] | None = None,
+    where: Any | None = None,
     loadRelations: list[str] | None = None,
 ) -> ModelT | None:
     """
@@ -144,13 +152,14 @@ async def select_one(
         session: 数据库会话
         model: ORM 模型类
         filters: 过滤条件字典
+        where: 额外 SQLAlchemy WHERE 表达式
         loadRelations: 预加载的关系属性名列表
 
     Returns:
         模型实例或 None
     """
     results = await select(
-        session, model, filters=filters, limit=1, loadRelations=loadRelations
+        session, model, filters=filters, where=where, limit=1, loadRelations=loadRelations,
     )
     return results[0] if results else None
 
@@ -176,35 +185,6 @@ async def select_by_id(
     return await select_one(
         session, model, filters={"id": id}, loadRelations=loadRelations
     )
-
-
-async def count(
-    session: AsyncSession,
-    model: type[ModelT],
-    filters: dict[str, Any] | None = None,
-) -> int:
-    """
-    统计符合条件的记录数量。
-
-    Args:
-        session: 数据库会话
-        model: ORM 模型类
-        filters: 过滤条件字典
-
-    Returns:
-        记录数量
-    """
-    stmt = sa_select(func.count()).select_from(model)
-
-    if filters:
-        for key, value in filters.items():
-            if value is None:
-                stmt = stmt.where(getattr(model, key).is_(None))
-            else:
-                stmt = stmt.where(getattr(model, key) == value)
-
-    result = await session.execute(stmt)
-    return result.scalar() or 0
 
 
 async def update_(

@@ -7,30 +7,19 @@ from __future__ import annotations
 
 import json
 
-from loguru import logger  # noqa: F401
+from loguru import logger
 
+from backend.config import config as app_config
 from backend.models.schemas import AgentState
+from backend.agents.utils import parse_json_llm_response
 from backend.services import profile as profile_svc
 from backend.services.llm import chat_completion
 from backend.db.crud import select as db_select
 from langchain_core.runnables import RunnableConfig
 
-SYSTEM_PROMPT = """你是一位智能学习顾问。
-根据学生的当前画像和已学知识点，从知识图谱中推荐 3-5 个下一步应学习的知识点。
+from backend.config import prompts as _prompts
 
-学生画像：
-{profile}
-
-已学知识点（已掌握）：{mastered}
-薄弱知识点：{weak}
-学习目标：{goal}
-
-可选知识点（来自知识图谱）：
-{available_kps}
-
-以 JSON 数组返回，每项包含：
-{{"kp_id": "...", "kp_name": "...", "reason": "推荐原因"}}
-"""
+SYSTEM_PROMPT = _prompts.get("agents.recommend.system_prompt")
 
 
 async def run(state: AgentState, config: RunnableConfig) -> AgentState:
@@ -65,20 +54,29 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
         weak = getattr(state.profile, "knowledge_weak", []) or []
         goal = getattr(state.profile, "learning_goal", "") or ""
 
-    # 查询可用知识点
+    # 查询可用知识点（按当前用户过滤）
     available_kps = []
+    valid_kp_ids: set[str] = set()
     if db:
         try:
             from backend.db.models import KGNode
-            nodes = await db_select(db, KGNode)
+            from sqlalchemy import select as sa_select, or_
+            stmt = sa_select(KGNode).where(
+                or_(KGNode.user_id == state.user_id, KGNode.user_id == None)
+            )
+            result = await db.execute(stmt)
+            nodes = result.scalars().all()
             available_kps = [f"- {n.id}: {n.name}" for n in nodes]
-        except Exception:
+            logger.info(f"[RecommendAgent] 从数据库查询到 {len(available_kps)} 个可用知识点")
+            valid_kp_ids = {n.id for n in nodes}
+        except Exception as exc:
+            logger.warning(f"[RecommendAgent] 查询知识图谱失败: {exc}")
             available_kps = ["（知识点列表获取失败）"]
     else:
         available_kps = ["（无数据库连接）"]
 
     kp_list = "\n".join(available_kps) if available_kps else "（无可用知识点）"
-    logger.warning("[RecommendAgent] 开始推荐，available_kps=%d goal=%s", len(available_kps), goal or "未设定")
+    logger.info("[RecommendAgent] 开始推荐，available_kps=%d goal=%s" % (len(available_kps), goal or "未设定"))
 
     # 构造 prompt
     prompt = SYSTEM_PROMPT.format(
@@ -92,20 +90,24 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
     try:
         raw = await chat_completion(
             [{"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=2000,
+            temperature=app_config.agents.recommend.temperature,
+            max_tokens=app_config.agents.recommend.max_tokens,
         )
         # 去除 LLM 可能返回的 markdown 代码块包裹
-        cleaned = raw.strip()
-        if cleaned.startswith("```"):
-            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
-            cleaned = cleaned.rsplit("```", 1)[0].strip()
+        cleaned = parse_json_llm_response(raw)
         recommendations = json.loads(cleaned)
-        logger.warning("[RecommendAgent] 推荐生成成功，共 %d 条", len(recommendations) if isinstance(recommendations, list) else 0)
+        logger.info(f"[RecommendAgent] 推荐生成成功，共 {len(recommendations) if isinstance(recommendations, list) else 0} 条")
 
         # 确保是列表
         if not isinstance(recommendations, list):
             recommendations = []
+
+        # 过滤掉 kp_id 不在知识图谱中的虚假推荐
+        if valid_kp_ids:
+            valid_recs = [r for r in recommendations if r.get("kp_id") in valid_kp_ids]
+            if len(valid_recs) < len(recommendations):
+                logger.warning(f"[RecommendAgent] 过滤掉 {len(recommendations) - len(valid_recs)} 条无效推荐（kp_id 不存在于知识图谱）")
+            recommendations = valid_recs
 
         # 更新 state
         new_metadata = dict(state.metadata) if state.metadata else {}
@@ -137,12 +139,12 @@ async def run(state: AgentState, config: RunnableConfig) -> AgentState:
                 "final_content": "根据你的学习画像，推荐以下学习路径：\n\n" + readable,
             })
     except json.JSONDecodeError as e:
-        logger.warning("[RecommendAgent] JSON 解析失败: %s，raw_preview=%.200s", e, raw if 'raw' in dir() else '')
+        logger.warning(f"[RecommendAgent] JSON 解析失败: {e}，raw_preview={raw if 'raw' in dir() else ''}")
         new_metadata = dict(state.metadata) if state.metadata else {}
         new_metadata["recommendations"] = []
         state = state.model_copy(update={"metadata": new_metadata})
     except Exception as e:
-        logger.error("[RecommendAgent] 推荐生成失败: %s", e)
+        logger.error(f"[RecommendAgent] 推荐生成失败: {e}")
         new_metadata = dict(state.metadata) if state.metadata else {}
         new_metadata["recommendations"] = []
         state = state.model_copy(update={"metadata": new_metadata})

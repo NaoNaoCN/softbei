@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>资源库 - 个性化学习助手</title>
+    <script src="https://unpkg.com/lucide@0.460.0"></script>
+    <link rel="stylesheet" href="./assets/styles.css">
+    <link rel="stylesheet" href="./assets/assistant.css">
+    <link rel="stylesheet" href="./assets/aurora.css">
+    <link rel="stylesheet" href="./assets/aurora-bridge.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        .main { margin-left: var(--sidebar-width); padding: 32px 40px; flex: 1; }
+        .page-title {
+            font-size: 28px; font-weight: 700; color: var(--color-primary);
+            margin-bottom: 8px; padding-bottom: 12px; border-bottom: 3px solid var(--color-primary);
+        }
+        .page-subtitle { font-size: 14px; color: #6B7280; margin-bottom: 32px; }
+
+        /* Stats Bar */
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-item {
+            background: var(--color-card);
+            border: 1px solid var(--color-border);
+            border-radius: 10px;
+            padding: 16px;
+            text-align: center;
+        }
+        .stat-value { font-size: 28px; font-weight: 700; color: var(--color-primary); }
+        .stat-label { font-size: 12px; color: var(--color-text-tertiary); margin-top: 4px; }
+
+        /* Filter Bar */
+        .filter-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .filter-select {
+            padding: 8px 14px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            font-size: 14px;
+            background: var(--color-card);
+            cursor: pointer;
+            outline: none;
+            min-width: 120px;
+        }
+        .filter-input {
+            padding: 8px 14px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            flex: 1;
+            max-width: 200px;
+        }
+        .filter-input:focus { border-color: #C77B3C; }
+        .btn-refresh {
+            padding: 8px 16px;
+            background: var(--color-card);
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-refresh:hover { border-color: #C77B3C; color: #C77B3C; }
+        .view-toggle {
+            display: flex;
+            gap: 4px;
+            margin-left: auto;
+        }
+        .view-btn {
+            padding: 8px 14px;
+            border: 1px solid var(--color-border);
+            background: var(--color-card);
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .view-btn.active { background: #C77B3C; color: #fff; border-color: #C77B3C; }
+        .view-btn:hover:not(.active) { border-color: #C77B3C; }
+
+        /* Card */
+        .card {
+            background: var(--color-card);
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            transition: all 0.2s;
+        }
+        .card:hover { border-color: #C77B3C; box-shadow: 0 2px 8px rgba(25,118,210,0.08); }
+
+        /* Document Import Section */
+        .import-section {
+            background: var(--color-card);
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        .import-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--color-text);
+            margin-bottom: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .import-area {
+            border: 2px dashed var(--color-border);
+            border-radius: 12px;
+            padding: 32px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .import-area:hover { border-color: #C77B3C; background: #F2EBDF; }
+        .import-icon { width: 32px; height: 32px; margin-bottom: 8px; display: inline-flex; align-items: center; justify-content: center; }
+        .import-text { font-size: 14px; color: #6B7280; }
+        .import-form {
+            display: none;
+            margin-top: 16px;
+        }
+        .form-row { display: flex; gap: 12px; margin-bottom: 12px; }
+        .form-input {
+            flex: 1;
+            padding: 10px 14px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+        }
+        .form-input:focus { border-color: #C77B3C; }
+        .btn-primary {
+            padding: 10px 24px;
+            background: #C77B3C;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-primary:hover { background: #3B55D9; }
+
+        /* Document List */
+        .doc-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 16px;
+            background: var(--color-card);
+            border: 1px solid var(--color-border);
+            border-radius: 10px;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+        }
+        .doc-item:hover { border-color: #C77B3C; }
+        .doc-info { display: flex; align-items: center; gap: 12px; }
+        .doc-icon { font-size: 24px; }
+        .doc-name { font-weight: 500; font-size: 14px; margin-bottom: 2px; }
+        .doc-meta { font-size: 12px; color: #6B7280; }
+        .doc-actions { display: flex; gap: 8px; }
+        .btn-build-kg {
+            padding: 6px 14px;
+            background: #F5E9D8;
+            color: #C77B3C;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-build-kg:hover { background: #C77B3C; color: #fff; }
+        .btn-delete {
+            padding: 6px 14px;
+            background: var(--color-card);
+            color: #EF4444;
+            border: 1px solid #FECACA;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-delete:hover { background: #EF4444; color: #fff; border-color: #EF4444; }
+
+        /* Resource List */
+        .resource-list { display: flex; flex-direction: column; gap: 12px; }
+        .resource-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px;
+            background: var(--color-card);
+            border: 1px solid var(--color-border);
+            border-radius: 10px;
+            transition: all 0.2s;
+        }
+        .resource-item:hover { border-color: #C77B3C; }
+        .resource-info { display: flex; align-items: center; gap: 14px; }
+        .resource-icon {
+            width: 44px; height: 44px;
+            background: #F5E9D8;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+        }
+        .resource-title { font-weight: 500; font-size: 14px; margin-bottom: 3px; }
+        .resource-meta { font-size: 12px; color: #6B7280; }
+        .resource-actions { display: flex; gap: 8px; }
+        .btn-sm {
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid;
+        }
+        .btn-sm-outline { background: var(--color-card); color: #6B7280; border-color: var(--color-border); }
+        .btn-sm-outline:hover { border-color: #C77B3C; color: #C77B3C; }
+        .btn-sm-danger { background: var(--color-card); color: #EF4444; border-color: #FECACA; }
+        .btn-sm-danger:hover { background: #EF4444; color: #fff; border-color: #EF4444; }
+
+        /* Pagination */
+        .pagination { display: flex; justify-content: center; align-items: center; gap: 16px; padding: 24px 0; }
+        .page-btn {
+            padding: 8px 16px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            background: var(--color-card);
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .page-btn:hover { border-color: #C77B3C; color: #C77B3C; }
+        .page-info { font-size: 14px; color: #6B7280; }
+
+        /* Empty State */
+        .empty-state { text-align: center; padding: 60px 20px; color: #6B7280; }
+        .empty-icon { width: 48px; height: 48px; margin-bottom: 16px; opacity: 0.5; display: inline-flex; align-items: center; justify-content: center; }
+        .empty-text { font-size: 14px; }
+
+        /* Preview Modal */
+        .modal-mask {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-mask.active { display: flex; }
+        .modal {
+            background: var(--color-card);
+            width: min(880px, 92vw);
+            max-height: 86vh;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--color-border);
+        }
+        .modal-title { font-size: 16px; font-weight: 600; color: var(--color-text); }
+        .modal-close {
+            background: transparent; border: none; cursor: pointer;
+            color: #6B7280; font-size: 20px; line-height: 1;
+            width: 28px; height: 28px; border-radius: 6px;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .modal-close:hover { background: var(--color-bg); color: var(--color-text); }
+        .modal-body {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+            font-size: 14px;
+            line-height: 1.7;
+            color: var(--color-text);
+        }
+        .modal-body pre {
+            background: #F2EBDF;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            padding: 12px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 13px;
+            color: var(--color-text);
+        }
+        .modal-body .md-text { white-space: pre-wrap; word-break: break-word; }
+        .modal-body .md-rendered { line-height: 1.7; word-break: break-word; }
+        .modal-body .md-rendered h1, .modal-body .md-rendered h2, .modal-body .md-rendered h3 { margin: 16px 0 8px; }
+        .modal-body .md-rendered p { margin: 8px 0; }
+        .modal-body .md-rendered ul, .modal-body .md-rendered ol { padding-left: 24px; margin: 8px 0; }
+        .modal-body .md-rendered pre { background: #f6f8fa; border-radius: 6px; padding: 12px; overflow-x: auto; }
+        .modal-body .md-rendered code { font-family: 'Fira Code', Consolas, monospace; font-size: 13px; }
+        .modal-body .md-rendered blockquote { border-left: 4px solid #C77B3C; padding-left: 12px; color: #555; margin: 8px 0; }
+        .preview-quiz-item {
+            padding: 12px 14px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            background: #FAFBFD;
+        }
+        .preview-quiz-q { font-weight: 600; margin-bottom: 8px; }
+        .preview-quiz-opt { padding: 4px 0; color: #374151; }
+        .preview-quiz-ans { margin-top: 8px; color: #C77B3C; font-size: 13px; }
+        .preview-quiz-exp { margin-top: 4px; color: #6B7280; font-size: 13px; }
+        .preview-loading { text-align: center; color: #6B7280; padding: 30px 0; }
+
+        /* Mindmap Tree */
+        .mm-tree, .mm-tree ul {
+            list-style: none;
+            padding-left: 18px;
+            position: relative;
+        }
+        .mm-tree { padding-left: 0; }
+        .mm-tree li {
+            position: relative;
+            padding: 4px 0 4px 16px;
+            font-size: 14px;
+            color: var(--color-text);
+        }
+        .mm-tree li::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 14px;
+            width: 10px; height: 1px;
+            background: #B0BEC5;
+        }
+        .mm-tree li::after {
+            content: '';
+            position: absolute;
+            left: 0; top: 0;
+            width: 1px; height: 100%;
+            background: var(--color-border);
+        }
+        .mm-tree > li::after { display: none; }
+        .mm-tree li:last-child::after { height: 14px; }
+        .mm-node {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 6px;
+            background: #F5E9D8;
+            color: #C77B3C;
+            font-weight: 600;
+            font-size: 13.5px;
+        }
+        .mm-tree li li .mm-node {
+            background: var(--color-bg);
+            color: var(--color-text);
+            font-weight: 500;
+        }
+        .mm-tree li li li .mm-node {
+            background: transparent;
+            color: #374151;
+            font-weight: 400;
+            padding: 2px 0;
+        }
+
+        /* PDF iframe */
+        .pdf-frame {
+            width: 100%;
+            height: 70vh;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+        }
+        .pdf-fallback {
+            margin-top: 10px;
+            font-size: 13px;
+            color: #6B7280;
+        }
+        .anim-toolbar {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+        }
+        .anim-frame {
+            width: 100%; height: 540px; border: 1px solid var(--color-border);
+            border-radius: 8px; background: #fff;
+        }
+        .anim-src {
+            background: #0d1117; color: #c9d1d9; border-radius: 8px; padding: 14px;
+            overflow: auto; max-height: 540px;
+            font-family: 'Fira Code', Consolas, monospace; font-size: 12.5px; line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="aurora-bg"></div>
+    <div class="aurora-orb"></div>
+    <div class="aurora-grid"></div>
+    <div class="layout">
+        <main class="main">
+            <h1 class="page-title">我的资源库</h1>
+            <p class="page-subtitle">浏览、管理和搜索已生成的学习资源，预览内容或删除不需要的资源。</p>
+
+            <!-- Stats Bar -->
+            <div class="stats-bar" id="stats-bar">
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-doc">-</div>
+                    <div class="stat-label">学习文档</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-mindmap">-</div>
+                    <div class="stat-label">思维导图</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-quiz">-</div>
+                    <div class="stat-label">测验</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-code">-</div>
+                    <div class="stat-label">代码示例</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-summary">-</div>
+                    <div class="stat-label">知识总结</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="stat-animation">-</div>
+                    <div class="stat-label">动画演示</div>
+                </div>
+            </div>
+
+            <!-- Document Import -->
+            <div class="import-section">
+                <div class="import-title" onclick="document.getElementById('import-form').style.display=document.getElementById('import-form').style.display=='none'?'block':'none'">
+                    <span>上传文档</span>
+                    <span id="import-arrow">▼</span>
+                </div>
+                <div class="import-area" onclick="document.getElementById('file-input').click()">
+                    <div class="import-icon"><i data-lucide="file-plus"></i></div>
+                    <div class="import-text">点击选择文档或拖拽到此处上传（PDF/DOCX/MD/TXT）</div>
+                    <input type="file" id="file-input" accept=".pdf,.docx,.doc,.md,.txt" style="display:none" onchange="handleFileSelect(this)">
+                </div>
+                <div class="import-form" id="import-form">
+                    <div class="form-row">
+                        <input type="text" class="form-input" id="import-title" placeholder="文档标题（可选）">
+                        <button class="btn-primary" id="import-btn" onclick="handleImport()">开始导入</button>
+                    </div>
+                    <div id="import-status" style="font-size:13px;color:#6B7280;display:none;"></div>
+                </div>
+            </div>
+
+            <!-- Filter Bar -->
+            <div class="filter-bar">
+                <select class="filter-select" id="type-filter">
+                    <option value="">全部类型</option>
+                    <option value="doc">学习文档</option>
+                    <option value="mindmap">思维导图</option>
+                    <option value="quiz">测验</option>
+                    <option value="code">代码示例</option>
+                    <option value="summary">知识总结</option>
+                    <option value="animation">动画演示</option>
+                </select>
+                <input type="text" class="filter-input" id="search-input" placeholder="搜索资源标题...">
+                <button class="btn-refresh" onclick="loadResources()">刷新</button>
+            </div>
+
+            <!-- Resource List -->
+            <div class="resource-list" id="resource-list"></div>
+
+            <!-- Pagination -->
+            <div class="pagination" id="pagination"></div>
+        </main>
+    </div>
+
+    <!-- Preview Modal -->
+    <div class="modal-mask" id="preview-modal" onclick="if(event.target===this)closePreview()">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title" id="preview-title">资源预览</div>
+                <button class="modal-close" onclick="closePreview()">&times;</button>
+            </div>
+            <div class="modal-body" id="preview-body">
+                <div class="preview-loading">加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 浏览时长上报逻辑（独立全局脚本） -->
+    <script>
+        // 全局变量存储计时状态（比 dataset 更可靠）
+        window.__previewStartTime = 0;
+        window.__previewResourceId = '';
+        window.__previewKpId = '';
+
+        function closePreview() {
+            var modal = document.getElementById('preview-modal');
+            modal.classList.remove('active');
+            var startTime = window.__previewStartTime;
+            var resourceId = window.__previewResourceId;
+            var kpId = window.__previewKpId || '';
+            console.log('[closePreview] startTime=' + startTime + ', resourceId=' + resourceId);
+            if (startTime && resourceId) {
+                var durationSec = Math.round((Date.now() - startTime) / 1000);
+                console.log('[closePreview] durationSec=' + durationSec);
+                if (durationSec >= 1) {
+                    var uid = localStorage.getItem('user_id');
+                    if (uid) {
+                        var payload = { resource_id: resourceId, action: 'view', duration_seconds: durationSec };
+                        if (kpId && kpId.indexOf('kp_') === 0) payload.kp_id = kpId;
+                        var token = localStorage.getItem('access_token');
+                        var headers = { 'Content-Type': 'application/json' };
+                        if (token) headers['Authorization'] = 'Bearer ' + token;
+                        console.log('[closePreview] posting:', JSON.stringify(payload));
+                        fetch('/records?user_id=' + encodeURIComponent(uid), {
+                            method: 'POST',
+                            headers: headers,
+                            body: JSON.stringify(payload),
+                            keepalive: true
+                        }).then(function(r) {
+                            console.log('[closePreview] response status:', r.status);
+                        }).catch(function(e) {
+                            console.error('[closePreview] fetch error:', e);
+                        });
+                    }
+                }
+            }
+            window.__previewStartTime = 0;
+            window.__previewResourceId = '';
+            window.__previewKpId = '';
+        }
+        document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closePreview(); });
+        window.addEventListener('beforeunload', function() {
+            if (window.__previewStartTime && window.__previewResourceId) closePreview();
+        });
+    </script>
+
+    <script type="module">
+        import { isLoggedIn, getUserId, clearAuth, getResourceStats, getResources, getResource, deleteResource, importDocumentAsync, getImportStatus, buildKg, getKgBuildStatusByDoc, postLearningRecord } from './assets/api.js?v=3';
+        import { showToast } from './assets/toast.js';
+        import { showDialog } from './assets/dialog.js';
+        import { registerActions } from './assets/button.js';
+        import { initCommandPalette } from './assets/command.js';
+        import { initCapNav } from './assets/nav.js';
+
+        if (!isLoggedIn()) {
+            window.location.href = 'auth.html';
+        }
+
+        const userId = getUserId();
+        initCapNav('library');
+        let currentPage = 1;
+        let currentFilter = '';
+        let currentSearch = '';
+        const pageSize = 20;
+        let allResources = [];  // store for build kg
+
+        const TYPE_MAP = { doc: '学习文档', mindmap: '思维导图', quiz: '测验', code: '代码示例', summary: '知识总结', animation: '动画演示' };
+        const ICON_MAP = { doc: '<i data-lucide="file-text"></i>', mindmap: '<i data-lucide="git-branch"></i>', quiz: '<i data-lucide="file-question"></i>', code: '<i data-lucide="terminal"></i>', summary: '<i data-lucide="layout-list"></i>', animation: '<i data-lucide="play-circle"></i>' };
+
+        async function loadStats() {
+            const stats = await getResourceStats(userId);
+            if (!stats) return;
+            document.getElementById('stat-doc').textContent = stats.doc || 0;
+            document.getElementById('stat-mindmap').textContent = stats.mindmap || 0;
+            document.getElementById('stat-quiz').textContent = stats.quiz || 0;
+            document.getElementById('stat-code').textContent = stats.code || 0;
+            document.getElementById('stat-summary').textContent = stats.summary || 0;
+            var elAnim = document.getElementById('stat-animation');
+            if (elAnim) elAnim.textContent = stats.animation || 0;
+        }
+
+        async function loadResources() {
+            currentFilter = document.getElementById('type-filter').value;
+            currentSearch = document.getElementById('search-input').value;
+            const data = await getResources(userId, { resource_type: currentFilter, skip: (currentPage - 1) * pageSize, limit: pageSize });
+            const list = document.getElementById('resource-list');
+            if (!data || !data.items || !data.items.length) {
+                list.innerHTML = '<div class="empty-state"><div class="empty-icon"><i data-lucide="folder-x"></i></div><div class="empty-text">暂无资源</div></div>';
+                document.getElementById('pagination').innerHTML = '';
+                return;
+            }
+            let items = data.items;
+            if (currentSearch) {
+                items = items.filter(r => r.title && r.title.includes(currentSearch));
+            }
+            list.innerHTML = items.map(r => `
+                <div class="resource-item">
+                    <div class="resource-info">
+                        <div class="resource-icon">${ICON_MAP[r.resource_type] || '<i data-lucide="file-text"></i>'}</div>
+                        <div>
+                            <div class="resource-title">${r.title || '未命名'}</div>
+                            <div class="resource-meta">${TYPE_MAP[r.resource_type] || r.resource_type} · ${r.created_at ? new Date(r.created_at).toLocaleDateString('zh-CN') : ''}</div>
+                        </div>
+                    </div>
+                    <div class="resource-actions">
+                        ${r.resource_type === 'doc' ? `<button class="btn-build-kg" onclick="handleBuildKg('${r.kp_id}')">构建知识图谱</button>` : ''}
+                        <button class="btn-sm btn-sm-outline" onclick="handlePreview('${r.id}','${r.resource_type}')">预览</button>
+                        ${r.resource_type === 'quiz' ? '<button class="btn-sm btn-sm-outline" onclick="location.href=\'evaluate.html\'">测验</button>' : ''}
+                        <button class="btn-sm btn-sm-danger" onclick="handleDelete('${r.id}')">删除</button>
+                    </div>
+                </div>
+            `).join('');
+
+            const total = data.total || 0;
+            const totalPages = Math.ceil(total / pageSize);
+            document.getElementById('pagination').innerHTML = `
+                <button class="page-btn" onclick="changePage(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>上一页</button>
+                <span class="page-info">第 ${currentPage} / ${totalPages} 页</span>
+                <button class="page-btn" onclick="changePage(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>下一页</button>
+            `;
+            lucide.createIcons();
+
+            // 检查是否有正在进行的 KG 构建任务并恢复进度显示
+            const docItems = items.filter(r => r.resource_type === 'doc' && r.kp_id);
+            if (docItems.length) checkRunningKgBuilds(docItems);
+        }
+
+        function changePage(p) {
+            currentPage = p;
+            loadResources();
+        }
+
+        // 恢复正在进行的 KG 构建进度
+        async function checkRunningKgBuilds(docItems) {
+            for (const r of docItems) {
+                try {
+                    const s = await getKgBuildStatusByDoc(r.kp_id);
+                    if (s && (s.status === 'running' || s.status === 'pending')) {
+                        showKgBuildProgress(r.kp_id, s);
+                    }
+                } catch(e) { /* ignore */ }
+            }
+        }
+
+        function showKgBuildProgress(kpId, initialStatus) {
+            const btn = document.querySelector(`[onclick="handleBuildKg('${kpId}')"]`);
+            if (!btn) return;
+            // 避免重复添加
+            if (btn.parentElement.querySelector('.kg-build-status')) return;
+            btn.style.display = 'none';
+            const statusEl = document.createElement('div');
+            statusEl.className = 'kg-build-status';
+            statusEl.style.cssText = 'margin-top:12px;padding:12px;background:#F5E9D8;border-radius:8px;font-size:13px;color:#C77B3C;';
+            statusEl.textContent = '构建中: ' + (initialStatus.progress || 0) + '% · ' + (initialStatus.stage || '处理中');
+            btn.parentElement.appendChild(statusEl);
+            pollKgBuildStatus(kpId, statusEl, btn);
+        }
+
+        function pollKgBuildStatus(kpId, statusEl, btn) {
+            const poll = async () => {
+                try {
+                    const s = await getKgBuildStatusByDoc(kpId);
+                    if (!s) return setTimeout(poll, 3000);
+                    if (s.status === 'done' || s.status === 'completed') {
+                        statusEl.textContent = '✓ 知识图谱构建完成！';
+                        statusEl.style.background = '#E8F5E9';
+                        statusEl.style.color = '#10B981';
+                    } else if (s.status === 'failed') {
+                        statusEl.textContent = '✗ 构建失败: ' + (s.error_message || '未知错误');
+                        statusEl.style.background = '#FEF2F2';
+                        statusEl.style.color = '#EF4444';
+                        if (btn) btn.style.display = '';
+                    } else {
+                        statusEl.textContent = '构建中: ' + (s.progress || 0) + '% · ' + (s.stage || '处理中');
+                        setTimeout(poll, 3000);
+                    }
+                } catch(e) { setTimeout(poll, 5000); }
+            };
+            setTimeout(poll, 3000);
+        }
+
+        async function handleBuildKg(kpId) {
+            if (!await showDialog({ type: 'normal', title: '确定要为此文档构建知识图谱吗？', desc: '将根据此文档内容自动构建知识点', confirmText: '确认构建' })) return;
+            const statusEl = document.createElement('div');
+            statusEl.className = 'kg-build-status';
+            statusEl.style.cssText = 'margin-top:12px;padding:12px;background:#F5E9D8;border-radius:8px;font-size:13px;color:#C77B3C;';
+            statusEl.textContent = '正在提交知识图谱构建任务...';
+            const btn = document.querySelector(`[onclick="handleBuildKg('${kpId}')"]`);
+            btn.parentElement.appendChild(statusEl);
+            btn.style.display = 'none';
+            try {
+                const result = await buildKg(kpId, userId);
+                if (result && result.task_id) {
+                    statusEl.textContent = '任务已提交，正在构建...';
+                    pollKgBuildStatus(kpId, statusEl, btn);
+                } else {
+                    throw new Error(result?.detail || '提交失败');
+                }
+            } catch (e) {
+                statusEl.textContent = '✗ 提交失败: ' + e.message;
+                statusEl.style.background = '#FEF2F2';
+                statusEl.style.color = '#EF4444';
+                btn.style.display = '';
+            }
+        }
+
+        const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.doc', '.md', '.txt'];
+
+        function handleFileSelect(input) {
+            if (input.files[0]) {
+                const name = input.files[0].name.toLowerCase();
+                const ext = '.' + name.split('.').pop();
+                if (!SUPPORTED_EXTENSIONS.includes(ext)) {
+                    showToast('不支持的文件格式：' + ext, 'error');
+                    input.value = '';
+                    return;
+                }
+                document.querySelector('.import-form').style.display = 'block';
+                document.querySelector('.import-text').textContent = input.files[0].name;
+            }
+        }
+
+        async function handleImport() {
+            const fileInput = document.getElementById('file-input');
+            const file = fileInput.files[0];
+            if (!file) return;
+            const title = document.getElementById('import-title').value.trim();
+            console.log('[handleImport] title value:', JSON.stringify(title));
+            const btn = document.getElementById('import-btn');
+            const status = document.getElementById('import-status');
+            btn.disabled = true;
+            btn.textContent = '导入中...';
+            status.style.display = 'block';
+            status.textContent = '正在上传并解析文档...';
+            try {
+                const result = await importDocumentAsync(userId, file, title);
+                if (result && result.task_id) {
+                    status.textContent = '文档已提交，正在后台处理...';
+                    // Poll
+                    const poll = async () => {
+                        const s = await getImportStatus(result.task_id);
+                        if (!s) return setTimeout(poll, 2000);
+                        if (s.status === 'done') {
+                            status.textContent = '导入完成！';
+                            btn.disabled = false;
+                            btn.textContent = '开始导入';
+                            loadResources();
+                        } else if (s.status === 'failed') {
+                            status.textContent = '导入失败: ' + (s.error_message || '');
+                            btn.disabled = false;
+                            btn.textContent = '开始导入';
+                        } else {
+                            status.textContent = s.status_message || '处理中...';
+                            setTimeout(poll, 2000);
+                        }
+                    };
+                    poll();
+                } else {
+                    throw new Error(result?.detail || '导入失败');
+                }
+            } catch (e) {
+                status.textContent = '导入失败: ' + e.message;
+                btn.disabled = false;
+                btn.textContent = '开始导入';
+            }
+        }
+
+        window.handleDelete = handleDelete;
+        window.handleBuildKg = handleBuildKg;
+        async function handleDelete(resourceId) {
+            const ok = await showDialog({ type: 'danger', title: '确定删除此资源？', desc: '删除后可在5秒内撤销', confirmText: '确认删除' });
+            if (!ok) return;
+            try {
+                await deleteResource(resourceId, userId);
+                loadResources();
+                loadStats();
+            } catch (e) {
+                showToast('删除失败: ' + e.message, 'error');
+            }
+        }
+        window.handleFileSelect = handleFileSelect;
+        window.handleImport = handleImport;
+        window.changePage = changePage;
+
+        // 注册操作
+        registerActions({
+            logout: () => { clearAuth(); window.location.href = 'auth.html'; },
+        });
+
+        // 初始化命令面板
+        initCommandPalette();
+
+        // ---- marked.js 配置：代码块使用 highlight.js 高亮 ----
+        if (typeof marked !== 'undefined') {
+            marked.setOptions({
+                highlight: function(code, lang) {
+                    if (lang && hljs.getLanguage(lang)) {
+                        return hljs.highlight(code, { language: lang }).value;
+                    }
+                    return hljs.highlightAuto(code).value;
+                },
+                breaks: true,
+                gfm: true
+            });
+        }
+
+        // ---- 资源预览 ----
+        function escapeHtml(s) {
+            if (s === null || s === undefined) return '';
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function renderMindmapTree(node) {
+            if (!node || typeof node !== 'object') return '';
+            // 兼容 {tree: {...}} 外层包裹
+            if (node.tree && !node.name && !node.children) node = node.tree;
+            const name = node.name || node.title || node.label || '未命名';
+            const children = Array.isArray(node.children) ? node.children : [];
+            const childHtml = children.length
+                ? `<ul>${children.map(c => renderMindmapTree(c)).join('')}</ul>`
+                : '';
+            return `<li><span class="mm-node">${escapeHtml(name)}</span>${childHtml}</li>`;
+        }
+
+        function extractPdfFilename(content) {
+            if (!content || typeof content !== 'string') return null;
+            // 优先精确匹配导入描述：已导入 PDF：xxx.pdf（兼容全/半角冒号）
+            const re1 = new RegExp('已导入\\s*PDF\\s*[\uff1a:]\\s*(.+?\\.pdf)', 'i');
+            let m = content.match(re1);
+            if (m) return m[1].trim();
+            // 降级：取第一个 .pdf 前的连续非分隔符文本（排除全/半角冒号与空白）
+            const re2 = new RegExp('([^\\s/\\\\:\uff1a*?"<>|]+\\.pdf)', 'i');
+            m = content.match(re2);
+            return m ? m[1].trim() : null;
+        }
+
+        function renderPreview(r) {
+            const type = r.resource_type;
+            if (type === 'doc' || type === 'summary') {
+                const text = r.content || '（暂无内容）';
+                // doc 类型优先识别 PDF：这里 content 通常是「已导入 PDF：xxx.pdf，共 N 个文本块」
+                if (type === 'doc') {
+                    const fname = extractPdfFilename(text);
+                    if (fname) {
+                        const url = `http://localhost:8000/documents/file/${encodeURIComponent(fname)}`;
+                        return `
+                            <div style="margin-bottom:10px;color:#6B7280;font-size:13px;">文件：${escapeHtml(fname)}
+                                · <a href="${url}" target="_blank" style="color:#C77B3C;text-decoration:none;">在新标签页打开</a>
+                            </div>
+                            <iframe class="pdf-frame" src="${url}" title="PDF 预览"></iframe>
+                            <div class="pdf-fallback">若浏览器未内置 PDF 查看器，请点击上方「在新标签页打开」。</div>
+                        `;
+                    }
+                }
+                // 使用 marked.js 渲染 markdown（保护 LaTeX 公式不被 marked 破坏）
+                if (typeof marked !== 'undefined' && marked.parse) {
+                    try {
+                        const mathPlaceholders = [];
+                        // 先保护 $$...$$ 块级公式
+                        let processed = text.replace(/\$\$([\s\S]*?)\$\$/g, (m) => {
+                            mathPlaceholders.push(m);
+                            return `\x00MATH${mathPlaceholders.length - 1}\x00`;
+                        });
+                        // 再保护 $...$ 行内公式（不匹配转义的 \$）
+                        processed = processed.replace(/(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)/g, (m) => {
+                            mathPlaceholders.push(m);
+                            return `\x00MATH${mathPlaceholders.length - 1}\x00`;
+                        });
+                        let html = marked.parse(processed);
+                        // 还原公式占位符
+                        html = html.replace(/\x00MATH(\d+)\x00/g, (_, idx) => mathPlaceholders[parseInt(idx)]);
+                        return `<div class="md-rendered">${html}</div>`;
+                    } catch (e) {
+                        console.warn('marked.parse failed:', e);
+                    }
+                }
+                return `<div class="md-text">${escapeHtml(text)}</div>`;
+            }
+            if (type === 'code') {
+                const cj = r.content_json || {};
+                let code = cj.code || '';
+                let lang = cj.language || '';
+                // fallback: 从 content 中提取代码块
+                if (!code && r.content) {
+                    const raw = r.content;
+                    const blockMatch = raw.match(/```(\w*)\s*\n([\s\S]*?)```/);
+                    if (blockMatch) {
+                        lang = blockMatch[1] || 'python';
+                        code = blockMatch[2].trim();
+                    } else {
+                        code = raw;
+                    }
+                }
+                code = code || '（暂无代码）';
+                const langLabel = lang ? `<div style="color:#6B7280;font-size:12px;margin-bottom:8px;">语言：${escapeHtml(lang)}</div>` : '';
+                // 使用 highlight.js 语法高亮
+                let highlighted;
+                try {
+                    highlighted = lang && hljs.getLanguage(lang)
+                        ? hljs.highlight(code, { language: lang }).value
+                        : hljs.highlightAuto(code).value;
+                } catch (e) {
+                    highlighted = escapeHtml(code);
+                }
+                return `${langLabel}<pre><code class="hljs">${highlighted}</code></pre>`;
+            }
+            if (type === 'mindmap') {
+                const cj = r.content_json || {};
+                // 根节点可能被 {tree: {...}} 包裹
+                const root = cj.tree && !cj.name ? cj.tree : cj;
+                if (!root || (!root.name && !Array.isArray(root.children))) {
+                    return '<div style="color:#6B7280;">（暂无内容）</div>';
+                }
+                return `<ul class="mm-tree">${renderMindmapTree(root)}</ul>`;
+            }
+            if (type === 'quiz') {
+                const items = (r.content_json && r.content_json.items) || [];
+                if (!items.length) return '<div style="color:#6B7280;">（暂无题目）</div>';
+                return items.map((q, i) => {
+                    const opts = Array.isArray(q.options)
+                        ? q.options.map((o, idx) => `<div class="preview-quiz-opt">${String.fromCharCode(65 + idx)}. ${escapeHtml(o)}</div>`).join('')
+                        : '';
+                    const ans = q.answer !== undefined ? `<div class="preview-quiz-ans">参考答案：${escapeHtml(Array.isArray(q.answer) ? q.answer.join(', ') : q.answer)}</div>` : '';
+                    const exp = q.explanation ? `<div class="preview-quiz-exp">解析：${escapeHtml(q.explanation)}</div>` : '';
+                    return `<div class="preview-quiz-item"><div class="preview-quiz-q">${i + 1}. ${escapeHtml(q.question || q.stem || '')}</div>${opts}${ans}${exp}</div>`;
+                }).join('');
+            }
+            if (type === 'animation') {
+                const cj = r.content_json || {};
+                let sketch = cj.code || '';
+                if (!sketch && r.content) {
+                    const m = r.content.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/i);
+                    sketch = m ? m[1].trim() : r.content;
+                }
+                if (!sketch || sketch.indexOf('defineAnimation') === -1) {
+                    return '<div style="color:#6B7280;">（暂无可渲染的动画）</div>';
+                }
+                return `
+                    <div class="anim-toolbar">
+                        <button id="anim-viewsrc" class="btn-sm btn-sm-outline" type="button">查看源码</button>
+                        <span style="color:#9CA3AF;font-size:12px;">播放控制在动画画面内</span>
+                    </div>
+                    <iframe id="anim-frame" class="anim-frame" sandbox="allow-scripts" title="教学动画"></iframe>
+                    <pre id="anim-src" class="anim-src" style="display:none;"><code>${escapeHtml(sketch)}</code></pre>
+                `;
+            }
+            return `<pre>${escapeHtml(JSON.stringify(r, null, 2))}</pre>`;
+        }
+
+        // 缓存 anim-runtime 源码
+        let __animRuntimeSrc = null;
+        async function getAnimRuntimeSrc() {
+            if (__animRuntimeSrc !== null) return __animRuntimeSrc;
+            try {
+                const resp = await fetch('./assets/anim-runtime.js');
+                __animRuntimeSrc = await resp.text();
+            } catch (e) { __animRuntimeSrc = ''; }
+            return __animRuntimeSrc;
+        }
+
+        async function mountAnimation(r) {
+            const frame = document.getElementById('anim-frame');
+            if (!frame) return;
+            const cj = r.content_json || {};
+            let sketch = cj.code || '';
+            if (!sketch && r.content) {
+                const m = r.content.match(/```(?:javascript|js)?\s*\n([\s\S]*?)```/i);
+                sketch = m ? m[1].trim() : r.content;
+            }
+            const runtime = await getAnimRuntimeSrc();
+            const srcdoc = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+  html,body{margin:0;padding:0;background:#fff;overflow:hidden;font-family:system-ui,-apple-system,'Microsoft YaHei',sans-serif;}
+  #anim-root{position:relative;}
+  #anim-canvas-holder{position:relative;}
+  #anim-controls{display:flex;gap:8px;padding:8px 4px 0;}
+  #anim-controls button{font-size:13px;padding:4px 12px;border:1px solid #D1D5DB;background:#fff;border-radius:6px;cursor:pointer;color:#374151;}
+  #anim-controls button:hover{background:#F3F4F6;}
+  .katex{font-size:1em;}
+</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+</head><body>
+<div id="anim-root"><div id="anim-canvas-holder"></div></div>
+<div id="anim-controls">
+  <button id="anim-playpause" type="button">⏸ 暂停</button>
+  <button id="anim-replay" type="button">↻ 重播</button>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.9.0/lib/p5.min.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"><\/script>
+<script>${runtime}<\/script>
+<script>
+window.onerror=function(m){var e=document.getElementById('anim-root');if(e){e.innerHTML='<div style="padding:24px;color:#EF4444;font-size:14px">⚠️ 动画运行出错：'+m+'</div>';}return true;};
+try {
+${sketch}
+} catch(err){ window.onerror(err.message); }
+<\/script>
+</body></html>`;
+            frame.srcdoc = srcdoc;
+
+            const viewBtn = document.getElementById('anim-viewsrc');
+            const srcPre = document.getElementById('anim-src');
+            if (viewBtn && srcPre) {
+                viewBtn.onclick = function () {
+                    const showing = srcPre.style.display !== 'none';
+                    srcPre.style.display = showing ? 'none' : 'block';
+                    frame.style.display = showing ? 'block' : 'none';
+                    viewBtn.textContent = showing ? '查看源码' : '返回动画';
+                };
+            }
+        }
+
+        async function handlePreview(resourceId, resourceType) {
+            const modal = document.getElementById('preview-modal');
+            const body = document.getElementById('preview-body');
+            const titleEl = document.getElementById('preview-title');
+            titleEl.textContent = '资源预览';
+            body.innerHTML = '<div class="preview-loading">加载中...</div>';
+            modal.classList.add('active');
+            // 将计时信息存在全局变量上
+            window.__previewStartTime = Date.now();
+            window.__previewResourceId = resourceId;
+            window.__previewKpId = '';
+            console.log('[handlePreview] started, resourceId=' + resourceId + ', startTime=' + window.__previewStartTime);
+            try {
+                const r = await getResource(resourceId, userId);
+                if (!r || r.detail) {
+                    body.innerHTML = `<div style="color:#EF4444;">加载失败：${escapeHtml(r?.detail || '未知错误')}</div>`;
+                    return;
+                }
+                titleEl.textContent = `${TYPE_MAP[r.resource_type] || r.resource_type} · ${r.title || '未命名'}`;
+                body.innerHTML = renderPreview(r);
+                if (r.kp_id) {
+                    window.__previewKpId = r.kp_id;
+                }
+                // 动画类型：挂载沙箱 iframe
+                if (r.resource_type === 'animation') {
+                    mountAnimation(r);
+                }
+                // 渲染 LaTeX 公式
+                if (typeof renderMathInElement !== 'undefined') {
+                    renderMathInElement(body, {
+                        delimiters: [
+                            { left: '$$', right: '$$', display: true },
+                            { left: '$', right: '$', display: false },
+                            { left: '\\[', right: '\\]', display: true },
+                            { left: '\\(', right: '\\)', display: false }
+                        ],
+                        throwOnError: false
+                    });
+                }
+            } catch (e) {
+                body.innerHTML = `<div style="color:#EF4444;">加载失败：${escapeHtml(e.message)}</div>`;
+            }
+        }
+
+        // closePreview 已在上方独立 script 中定义
+        window.handlePreview = handlePreview;
+
+        // 支持 URL 参数 ?type=doc|mindmap|quiz|code|summary 预设筛选（来自首页卫星卡）
+        const _typeParam = new URLSearchParams(window.location.search).get('type');
+        if (_typeParam) {
+            const _sel = document.getElementById('type-filter');
+            if (_sel && [...(_sel.options)].some(o => o.value === _typeParam)) {
+                _sel.value = _typeParam;
+            }
+        }
+
+        loadStats();
+        loadResources();
+
+        // 支持 URL 参数 ?preview=resourceId 自动打开资源预览
+        const _previewId = new URLSearchParams(window.location.search).get('preview');
+        if (_previewId) {
+            setTimeout(() => handlePreview(_previewId), 300);
+        }
+    </script>
+    <script>lucide.createIcons();</script>
+    <script src="./assets/tracker.js"></script>
+    <script type="module" src="./assets/assistant.js"></script>
+</body>
+</html>

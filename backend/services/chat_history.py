@@ -5,16 +5,12 @@ backend/services/chat_history.py
 
 from __future__ import annotations
 
-import logging
 from typing import Optional
 
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-logger = logging.getLogger(__name__)
-
-# 默认参数
-DEFAULT_MAX_TURNS = 10  # 最多保留最近 N 轮（1轮 = 1 user + 1 assistant）
-DEFAULT_MAX_TOKENS = 4000  # 历史部分的 token 预算
+from backend.config import config
 
 
 def estimate_tokens(text: str) -> int:
@@ -24,13 +20,13 @@ def estimate_tokens(text: str) -> int:
     """
     cn_chars = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
     other_chars = len(text) - cn_chars
-    return int(cn_chars / 1.5 + other_chars / 4)
+    return int(cn_chars / config.chat.token_estimation.cn_chars_per_token + other_chars / config.chat.token_estimation.en_chars_per_token)
 
 
 def truncate_history(
     history: list[dict[str, str]],
-    max_turns: int = DEFAULT_MAX_TURNS,
-    max_tokens: int = DEFAULT_MAX_TOKENS,
+    max_turns: int | None = None,
+    max_tokens: int | None = None,
 ) -> list[dict[str, str]]:
     """
     截断对话历史，确保不超过 token 预算。
@@ -40,18 +36,21 @@ def truncate_history(
     2. 从最近往前累加 token，超出预算时截断
     3. 保证返回的历史从 user 消息开始（不会出现孤立的 assistant 消息）
     """
+    _max_turns = max_turns if max_turns is not None else config.chat.max_turns
+    _max_tokens = max_tokens if max_tokens is not None else config.chat.history_max_tokens
+
     if not history:
         return []
 
     # Step 1: 按轮数截断（保留最近 max_turns 轮）
-    truncated = history[-(max_turns * 2):]
+    truncated = history[-(_max_turns * 2):]
 
     # Step 2: 按 token 预算从后往前保留
     total_tokens = 0
     keep_from = 0
     for i in range(len(truncated) - 1, -1, -1):
         msg_tokens = estimate_tokens(truncated[i].get("content", ""))
-        if total_tokens + msg_tokens > max_tokens:
+        if total_tokens + msg_tokens > _max_tokens:
             keep_from = i + 1
             break
         total_tokens += msg_tokens
@@ -66,37 +65,39 @@ def truncate_history(
 
 
 async def load_chat_history(
-    session_id: str,
+    session_id: int,
     db: AsyncSession,
-    max_turns: int = DEFAULT_MAX_TURNS,
-    max_tokens: int = DEFAULT_MAX_TOKENS,
+    max_turns: int | None = None,
+    max_tokens: int | None = None,
 ) -> list[dict[str, str]]:
     """
-    从动态会话表加载历史消息并截断。
+    从 ChatMessage 表加载历史消息并截断。
 
-    :param session_id: 会话 UUID 字符串
+    :param session_id: 会话 ID（Snowflake BIGINT）
     :param db: 数据库会话
     :param max_turns: 最大保留轮数
     :param max_tokens: 历史 token 预算
     :return: 截断后的历史消息列表
     """
-    from backend.db.crud import select_by_id
-    from backend.db.dynamic_chat import read_messages
-    from backend.db.models import ChatSession
-    import uuid as uuid_mod
+    from backend.db.crud import select as db_select
+    from backend.db.models import ChatMessage
 
     try:
-        # session_id 可能是字符串，需要转为 UUID
-        sid = uuid_mod.UUID(session_id) if isinstance(session_id, str) else session_id
-        session = await select_by_id(db, ChatSession, sid)
-        if not session or not session.messages_table:
-            return []
+        _max_turns = max_turns if max_turns is not None else config.chat.max_turns
+        # DB 层取最近 N×4 条消息作为截断缓冲，避免加载全量历史
+        db_limit = _max_turns * 4
 
-        messages = await read_messages(session.messages_table)
+        messages = await db_select(
+            db, ChatMessage,
+            filters={"session_id": session_id},
+            order_by=ChatMessage.created_at.desc(),
+            limit=db_limit,
+        )
         if not messages:
             return []
 
-        history = [{"role": m["role"], "content": m["content"]} for m in messages]
+        # 恢复时间正序供 truncate_history 处理
+        history = [{"role": m.role, "content": m.content} for m in reversed(messages)]
         return truncate_history(history, max_turns, max_tokens)
 
     except Exception as e:

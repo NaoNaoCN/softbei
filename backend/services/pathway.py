@@ -5,7 +5,6 @@ backend/services/pathway.py
 
 from __future__ import annotations
 
-import uuid
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +17,7 @@ from backend.db.crud import (
     delete,
     delete_by_id,
 )
-from backend.db.models import LearningPath, LearningPathItem, KGNode
+from backend.db.models import LearningPath, LearningPathItem, LearningRecord, KGNode
 from backend.models.schemas import (
     LearningPathCreate,
     LearningPathUpdate,
@@ -34,7 +33,7 @@ from backend.models.schemas import (
 # ----------------------------------------------------------
 
 async def get_pathway(
-    path_id: uuid.UUID,
+    path_id: int,
     db: AsyncSession,
 ) -> Optional[LearningPathOut]:
     """按 ID 获取单条学习路径。"""
@@ -49,7 +48,7 @@ async def get_pathway(
 
 
 async def list_pathways(
-    user_id: uuid.UUID,
+    user_id: int,
     db: AsyncSession,
 ) -> list[LearningPathOut]:
     """列举用户的所有学习路径。"""
@@ -62,7 +61,7 @@ async def list_pathways(
 
 
 async def create_pathway(
-    user_id: uuid.UUID,
+    user_id: int,
     data: LearningPathCreate,
     db: AsyncSession,
 ) -> LearningPathOut:
@@ -81,8 +80,8 @@ async def create_pathway(
 
 
 async def update_pathway(
-    path_id: uuid.UUID,
-    user_id: uuid.UUID,
+    path_id: int,
+    user_id: int,
     data: LearningPathUpdate,
     db: AsyncSession,
 ) -> Optional[LearningPathOut]:
@@ -106,8 +105,8 @@ async def update_pathway(
 
 
 async def delete_pathway(
-    path_id: uuid.UUID,
-    user_id: uuid.UUID,
+    path_id: int,
+    user_id: int,
     db: AsyncSession,
 ) -> bool:
     """
@@ -128,8 +127,8 @@ async def delete_pathway(
 # ----------------------------------------------------------
 
 async def add_pathway_item(
-    path_id: uuid.UUID,
-    user_id: uuid.UUID,
+    path_id: int,
+    user_id: int,
     data: LearningPathItemCreate,
     db: AsyncSession,
 ) -> Optional[LearningPathItemOut]:
@@ -139,16 +138,25 @@ async def add_pathway_item(
     if not path:
         return None
 
-    # 校验 kp_id 在知识图谱中存在
+    # 查找节点，确保属于当前用户或公共节点
     kp_node = await select_one(db, KGNode, filters={"id": data.kp_id})
-    if not kp_node:
-        return None
+    resolved_kp_id = data.kp_id
+
+    if kp_node and kp_node.user_id and kp_node.user_id != user_id:
+        # 节点属于其他用户，尝试按名称查找当前用户的同名节点
+        own_node = await select_one(db, KGNode, filters={"name": kp_node.name, "user_id": user_id})
+        if own_node:
+            resolved_kp_id = own_node.id
+            kp_node = own_node
+        # 如果找不到同名节点，仍使用原 ID（FK 约束允许跨用户引用）
+
+    kp_name = kp_node.name if kp_node else data.kp_id
 
     item = await insert(
         db, LearningPathItem,
         data={
             "path_id": path_id,
-            "kp_id": data.kp_id,
+            "kp_id": resolved_kp_id,
             "order_index": data.order_index,
         },
     )
@@ -156,14 +164,14 @@ async def add_pathway_item(
         id=item.id,
         order_index=item.order_index,
         kp_id=item.kp_id,
-        kp_name=item.kp_id,  # kp.name 需额外查询，此处先用 kp_id
+        kp_name=kp_name,
         is_completed=item.is_completed,
     )
 
 
 async def update_pathway_item(
-    item_id: uuid.UUID,
-    user_id: uuid.UUID,
+    item_id: int,
+    user_id: int,
     data: LearningPathItemUpdate,
     db: AsyncSession,
 ) -> Optional[LearningPathItemOut]:
@@ -185,14 +193,23 @@ async def update_pathway_item(
         return _item_to_out(item)
 
     await update_by_id(db, LearningPathItem, item_id, update_data)
+
+    # 标记完成时，同步写入 LearningRecord 以便"已学习视图"能识别
+    if data.is_completed:
+        await insert(db, LearningRecord, data={
+            "user_id": user_id,
+            "kp_id": item.kp_id,
+            "action": "complete",
+        })
+
     # 重新查询以获取更新后的数据
     updated = await select_one(db, LearningPathItem, filters={"id": item_id}, loadRelations=["kp"])
     return _item_to_out(updated)
 
 
 async def remove_pathway_item(
-    item_id: uuid.UUID,
-    user_id: uuid.UUID,
+    item_id: int,
+    user_id: int,
     db: AsyncSession,
 ) -> bool:
     """从学习路径移除一个知识点项。"""

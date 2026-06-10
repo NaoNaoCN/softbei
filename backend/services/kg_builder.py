@@ -1,6 +1,6 @@
 """
 backend/services/kg_builder.py
-知识图谱自动构建服务：从 ChromaDB 文本块中提取知识点和关系，写入 KGNode + KGEdge。
+知识图谱自动构建服务：从向量库文本块中提取知识点和关系，写入 KGNode + KGEdge。
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import hashlib
 import json
 import re
 
-from loguru import logger  # noqa: F401
+from loguru import logger
 from collections import defaultdict
 from typing import Any
 
@@ -21,46 +21,15 @@ from backend.db.models import KGEdge, KGNode
 from backend.db.vector import get_documents_by_doc_id
 from backend.models.schemas import KGNodeType, KGRelation
 from backend.services.llm import chat_completion
+from backend.config import config, prompts as _prompts
 
 # ----------------------------------------------------------
 # Prompts
 # ----------------------------------------------------------
 
-NODE_EXTRACT_PROMPT = """你是一位知识图谱构建专家。请从以下教材文本中提取知识点节点。
+NODE_EXTRACT_PROMPT = _prompts.get("kg_builder.node_extract")
 
-要求：
-- 提取所有出现的知识概念，按层级分类
-- type 必须是以下之一：Chapter, KnowledgePoint, SubPoint, Concept（不要使用 Course）
-- 节点命名规则：
-  - 必须去除章节编号（如"第7章"、"7.1"、"10.1.2"等前缀），只保留纯粹的知识点名称
-  - 示例："10.1 注意力机制" → "注意力机制"，"第3章 线性回归" → "线性回归"，"7.1.2 小批量随机梯度下降" → "小批量随机梯度下降"
-- 每个节点包含 name（简短名称，无编号）、type、description（一句话描述）
-- 返回 JSON 数组格式
-
-文本内容：
-{text}
-
-请返回 JSON 数组，格式如下（只返回 JSON，不要其他内容）：
-[{{"name": "...", "type": "...", "description": "..."}}]"""
-
-EDGE_EXTRACT_PROMPT = """你是一位知识图谱构建专家。请根据以下知识点列表，推断它们之间的关系。
-
-知识点列表：
-{nodes_text}
-
-关系类型说明：
-- IS_PART_OF: A 是 B 的组成部分（章节属于课程，知识点属于章节）
-- REQUIRES: A 的学习需要先掌握 B（前置依赖）
-- RELATED_TO: A 和 B 有关联但无层级或依赖关系
-- CONTAINS: A 包含 B（与 IS_PART_OF 方向相反）
-
-要求：
-- source 和 target 必须是上面列表中的知识点名称（精确匹配）
-- relation 必须是 IS_PART_OF / REQUIRES / RELATED_TO / CONTAINS 之一
-- 只返回 JSON 数组
-
-请返回 JSON 数组：
-[{{"source": "...", "target": "...", "relation": "..."}}]"""
+EDGE_EXTRACT_PROMPT = _prompts.get("kg_builder.edge_extract")
 
 # ---------- TOC 路径专用 Prompt ----------
 
@@ -101,22 +70,7 @@ def _build_toc_node_prompt(section_name: str, text: str, llm_types: list[str]) -
 请返回 JSON 数组（只返回 JSON，不要其他内容）：
 [{{"name": "...", "type": "...", "description": "..."}}]"""
 
-EDGE_EXTRACT_CROSS_PROMPT = """你是一位知识图谱构建专家。以下知识点来自不同章节，层级关系（IS_PART_OF / CONTAINS）已自动生成。
-
-请只推断以下两种跨章节关系：
-- REQUIRES: A 的学习需要先掌握 B（前置依赖）
-- RELATED_TO: A 和 B 有关联但无层级或依赖关系
-
-知识点列表：
-{nodes_text}
-
-要求：
-- source 和 target 必须是上面列表中的知识点名称（精确匹配）
-- relation 只能是 REQUIRES 或 RELATED_TO
-- 只返回 JSON 数组
-
-请返回 JSON 数组：
-[{{"source": "...", "target": "...", "relation": "..."}}]"""
+EDGE_EXTRACT_CROSS_PROMPT = _prompts.get("kg_builder.edge_extract_cross")
 
 
 # ----------------------------------------------------------
@@ -139,10 +93,15 @@ def _clean_node_name(name: str) -> str:
 def _parse_json_response(raw: str) -> list[dict]:
     """解析 LLM 返回的 JSON（处理 markdown 代码块包裹）。"""
     cleaned = raw.strip()
+    if not cleaned:
+        return []
     if cleaned.startswith("```"):
         cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
         cleaned = cleaned.rsplit("```", 1)[0].strip()
-    return json.loads(cleaned)
+    if not cleaned:
+        return []
+    result = json.loads(cleaned)
+    return result if isinstance(result, list) else []
 
 
 def _group_by_page(documents: list[str], metadatas: list[dict]) -> list[str]:
@@ -163,25 +122,22 @@ def _group_by_page(documents: list[str], metadatas: list[dict]) -> list[str]:
         page_text = "\n".join(page_groups[page])
         batch.append(page_text)
         batch_len += len(page_text)
-        if batch_len > 12000:  # ~12000 字符一批（约 8-10 页）
+        if batch_len > config.knowledge_graph.batch_chars_limit:
             grouped.append("\n\n".join(batch))
             batch = []
             batch_len = 0
     if batch:
         grouped.append("\n\n".join(batch))
 
-    # 如果批次仍然过多，均匀采样控制在 30 批以内
-    MAX_BATCHES = 30
-    if len(grouped) > MAX_BATCHES:
-        step = len(grouped) / MAX_BATCHES
-        sampled = [grouped[int(i * step)] for i in range(MAX_BATCHES)]
+    # 如果批次仍然过多，均匀采样控制在 max_batches 批以内
+    max_batches = config.knowledge_graph.max_batches
+    if len(grouped) > max_batches:
+        step = len(grouped) / max_batches
+        sampled = [grouped[int(i * step)] for i in range(max_batches)]
         logger.info(f"[KG] 批次过多({len(grouped)})，采样为 {len(sampled)} 批")
         grouped = sampled
 
     return grouped
-
-
-_TOC_MAX_ITEMS = 100  # 目录项数量阈值，超过则裁剪深层级
 
 
 def _trim_toc_by_level(toc: list[dict]) -> list[dict]:
@@ -189,17 +145,18 @@ def _trim_toc_by_level(toc: list[dict]) -> list[dict]:
     逐级审查目录项数量，找到不超过阈值的最大 level 截止。
     例如 level<=3 有 90 项，level<=4 有 800+ 项，则截止到 level 3。
     """
-    if len(toc) <= _TOC_MAX_ITEMS:
+    max_items = config.knowledge_graph.toc_max_items
+    if len(toc) <= max_items:
         return toc
 
     max_level = max(item["level"] for item in toc)
     for cutoff in range(1, max_level + 1):
         count = sum(1 for item in toc if item["level"] <= cutoff)
-        if count > _TOC_MAX_ITEMS:
+        if count > max_items:
             # 回退到上一级
             final_level = max(cutoff - 1, 1)
             trimmed = [item for item in toc if item["level"] <= final_level]
-            logger.info(f"[KG-TOC] 目录项 {len(toc)} 个超过阈值 {_TOC_MAX_ITEMS}，截止到 level {final_level}（{len(trimmed)} 项）")
+            logger.info(f"[KG-TOC] 目录项 {len(toc)} 个超过阈值 {max_items}，截止到 level {final_level}（{len(trimmed)} 项）")
             return trimmed
 
     return toc
@@ -276,10 +233,10 @@ def _group_by_toc(
             combined = "\n".join(texts)
             sections.append({"section": name, "text": combined, "type": node_type})
 
-    # 合并过短的 section（< 200 字符）到前一个
+    # 合并过短的 section（< N 字符）到前一个
     merged: list[dict] = []
     for sec in sections:
-        if merged and len(sec["text"]) < 200:
+        if merged and len(sec["text"]) < config.knowledge_graph.section_merge_min_chars:
             merged[-1]["text"] += "\n" + sec["text"]
         else:
             merged.append(sec)
@@ -304,24 +261,75 @@ def _attach_details_to_sections(
     return edges
 
 
-# ----------------------------------------------------------
-# 核心提取逻辑
-# ----------------------------------------------------------
+def _fill_missing_hierarchy_edges(nodes: list[dict], edges: list[dict]) -> list[dict]:
+    """
+    后处理：对 LLM 遗漏的层级归属边进行补全。
 
-# 并发控制：最多同时 10 个 LLM 请求
-_LLM_SEMAPHORE = asyncio.Semaphore(10)
+    规则（按节点类型，从细到粗逐级向上找最近的上级）：
+    - Concept → 最近的 SubPoint 或 KnowledgePoint
+    - SubPoint → 最近的 KnowledgePoint
+    - KnowledgePoint → 最近的 Chapter
+
+    只补充尚未存在 IS_PART_OF 出边的节点，不重复添加。
+    """
+    # 已有 IS_PART_OF 出边的节点集合（source 侧）
+    has_parent: set[str] = {
+        e["source"] for e in edges if e["relation"] == "IS_PART_OF"
+    }
+
+    # 按类型分组
+    by_type: dict[str, list[str]] = {t: [] for t in _ALL_TYPES}
+    for n in nodes:
+        t = n.get("type", "Concept")
+        if t in by_type:
+            by_type[t].append(n["name"])
+
+    # 上级候选类型映射
+    parent_type_map = {
+        "Concept":        ["SubPoint", "KnowledgePoint", "Chapter"],
+        "SubPoint":       ["KnowledgePoint", "Chapter"],
+        "KnowledgePoint": ["Chapter"],
+    }
+
+    new_edges: list[dict] = []
+    for child_type, parent_types in parent_type_map.items():
+        for child_name in by_type.get(child_type, []):
+            if child_name in has_parent:
+                continue  # 已有归属边，跳过
+            # 找第一个有候选节点的上级类型
+            for pt in parent_types:
+                candidates = by_type.get(pt, [])
+                if candidates:
+                    # 取第一个候选（顺序即文档顺序，近似最相关）
+                    new_edges.append({
+                        "source": child_name,
+                        "target": candidates[0],
+                        "relation": "IS_PART_OF",
+                    })
+                    has_parent.add(child_name)
+                    break
+
+    if new_edges:
+        logger.info(f"[KG] 补全层级归属边 {len(new_edges)} 条（LLM 遗漏）")
+    return edges + new_edges
+
+
+
+
+# 并发控制：避免触发 LLM API 并发限流
+_LLM_SEMAPHORE = asyncio.Semaphore(config.knowledge_graph.llm_concurrency)
 
 
 async def _extract_single_batch(i: int, text: str, total: int) -> list[dict]:
     """单个 batch 的节点提取（供并发调用）。"""
-    prompt = NODE_EXTRACT_PROMPT.format(text=text[:6000])
+    prompt = NODE_EXTRACT_PROMPT.format(text=text[:config.knowledge_graph.text_truncate_chars])
     async with _LLM_SEMAPHORE:
         logger.info(f"[KG] 提取节点 batch {i+1}/{total} (开始)")
         try:
             raw = await chat_completion(
                 [{"role": "user", "content": prompt}],
                 temperature=0.1,
-                max_tokens=4000,
+                max_tokens=config.knowledge_graph.node_extraction_max_tokens,
             )
             nodes = _parse_json_response(raw)
             valid_nodes = []
@@ -387,7 +395,7 @@ async def _extract_edges_batch(
             raw = await chat_completion(
                 [{"role": "user", "content": prompt}],
                 temperature=0.1,
-                max_tokens=4000,
+                max_tokens=config.knowledge_graph.node_extraction_max_tokens,
             )
             edges = _parse_json_response(raw)
             valid_relations = {e.value for e in KGRelation}
@@ -412,9 +420,9 @@ async def _extract_edges(all_nodes: list[dict]) -> list[dict]:
 
     all_node_names = {n["name"] for n in all_nodes}
 
-    # 每批 ~40 个节点，相邻 batch 重叠 10 个，捕获边界处的关系
-    BATCH_SIZE = 40
-    OVERLAP = 10
+    # 相邻 batch 重叠，捕获边界处的关系
+    BATCH_SIZE = config.knowledge_graph.edge_batch_size
+    OVERLAP = config.knowledge_graph.edge_overlap
     batches = []
     i = 0
     while i < len(all_nodes):
@@ -453,7 +461,7 @@ async def _extract_toc_batch(
     """单个章节的细粒度节点提取，返回 (nodes, section_name)。"""
     prompt = _build_toc_node_prompt(
         section_name=section["section"],
-        text=section["text"][:6000],
+        text=section["text"][:config.knowledge_graph.text_truncate_chars],
         llm_types=llm_types,
     )
     allowed = set(llm_types)
@@ -463,7 +471,7 @@ async def _extract_toc_batch(
             raw = await chat_completion(
                 [{"role": "user", "content": prompt}],
                 temperature=0.1,
-                max_tokens=4000,
+                max_tokens=config.knowledge_graph.node_extraction_max_tokens,
             )
             nodes = _parse_json_response(raw)
             valid = []
@@ -511,8 +519,8 @@ async def _extract_cross_edges(all_nodes: list[dict]) -> list[dict]:
         return []
 
     all_node_names = {n["name"] for n in all_nodes}
-    BATCH_SIZE = 40
-    OVERLAP = 10
+    BATCH_SIZE = config.knowledge_graph.edge_batch_size
+    OVERLAP = config.knowledge_graph.edge_overlap
     batches = []
     i = 0
     while i < len(all_nodes):
@@ -533,7 +541,7 @@ async def _extract_cross_edges(all_nodes: list[dict]) -> list[dict]:
                 raw = await chat_completion(
                     [{"role": "user", "content": prompt}],
                     temperature=0.1,
-                    max_tokens=4000,
+                    max_tokens=config.knowledge_graph.node_extraction_max_tokens,
                 )
                 edges = _parse_json_response(raw)
                 valid = []
@@ -567,15 +575,15 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
     """
     从已导入文档构建知识图谱。
 
-    流程：ChromaDB 取文本 → 聚合 → 提取节点 → 推断关系 → 写 DB
+    流程：向量库取文本 → 聚合 → 提取节点 → 推断关系 → 写 DB
     :param on_progress: 可选回调 async def(progress: int, stage: str)
     返回 {"nodes_count": int, "edges_count": int, "doc_id": str}
     """
-    # 1. 从 ChromaDB 获取文本块
+    # 1. 从向量库获取文本块
     logger.info(f"[KG] 开始构建知识图谱，doc_id={doc_id}")
     if on_progress:
         await on_progress(5, "文本处理中")
-    result = get_documents_by_doc_id(doc_id)
+    result = await get_documents_by_doc_id(doc_id)
     documents = result.get("documents", [])
     metadatas = result.get("metadatas", [])
 
@@ -637,6 +645,7 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
         cross_edges = await _extract_cross_edges(nodes)
 
         edges = skeleton_edges + auto_edges + cross_edges
+        edges = _fill_missing_hierarchy_edges(nodes, edges)
         logger.info(f"[KG-TOC] 总计 {len(nodes)} 节点, {len(edges)} 边（骨架 {len(skeleton_edges)} + 归属 {len(auto_edges)} + 跨章节 {len(cross_edges)}）")
     else:
         # ===== Fallback：原有逻辑 =====
@@ -658,6 +667,7 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
         if on_progress:
             await on_progress(55, "关系推断中")
         edges = await _extract_edges(nodes)
+        edges = _fill_missing_hierarchy_edges(nodes, edges)
         logger.info(f"[KG] 推断出 {len(edges)} 条关系")
 
     if not nodes:
@@ -683,13 +693,16 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
         )
     await db.flush()
 
-    # 6. 写入节点
+    # 6. 收集所有节点实例（去重：同名节点只保留第一个）
     name_to_id: dict[str, str] = {}
     edge_count = 0
+    node_instances: list[KGNode] = []
     for node in nodes:
+        if node["name"] in name_to_id:
+            continue  # 跳过重复名称的节点
         node_id = _make_node_id(node["name"], doc_id)
         name_to_id[node["name"]] = node_id
-        db.add(KGNode(
+        node_instances.append(KGNode(
             id=node_id,
             name=node["name"],
             node_type=node["type"],
@@ -697,15 +710,14 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
             course_id=doc_id,
             user_id=user_id,
         ))
-    await db.flush()
 
-    # 7. 自动创建 Course 根节点 + Chapter → Course 边
+    # 7. 自动创建 Course 根节点
     from backend.db.crud import select_one
     from backend.db.models import ResourceMeta
     doc_resource = await select_one(db, ResourceMeta, filters={"kp_id": doc_id})
     course_title = doc_resource.title if doc_resource else doc_id
     course_node_id = f"kp_course_{hashlib.md5(doc_id.encode()).hexdigest()[:8]}"
-    db.add(KGNode(
+    node_instances.append(KGNode(
         id=course_node_id,
         name=course_title,
         node_type="Course",
@@ -714,30 +726,43 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
         user_id=user_id,
     ))
     name_to_id[course_title] = course_node_id
-    await db.flush()
+
+    # 8. 收集所有边实例
+    seen_edges: set[tuple[str, str, str]] = set()
+    edge_instances: list[KGEdge] = []
 
     # 所有 Chapter 节点 → IS_PART_OF → Course
     for node in nodes:
         if node["type"] == "Chapter":
             node_id = _make_node_id(node["name"], doc_id)
-            db.add(KGEdge(
-                source_id=node_id,
-                target_id=course_node_id,
-                relation="IS_PART_OF",
-            ))
-            edge_count += 1
+            edge_key = (node_id, course_node_id, "IS_PART_OF")
+            if edge_key not in seen_edges:
+                seen_edges.add(edge_key)
+                edge_instances.append(KGEdge(
+                    source_id=node_id,
+                    target_id=course_node_id,
+                    relation="IS_PART_OF",
+                ))
+                edge_count += 1
 
-    # 8. 写入 LLM 推断的边
+    # LLM 推断的边（去重）
     for edge in edges:
         src_id = name_to_id.get(edge["source"])
         tgt_id = name_to_id.get(edge["target"])
         if src_id and tgt_id:
-            db.add(KGEdge(
-                source_id=src_id,
-                target_id=tgt_id,
-                relation=edge["relation"],
-            ))
-            edge_count += 1
+            edge_key = (src_id, tgt_id, edge["relation"])
+            if edge_key not in seen_edges:
+                seen_edges.add(edge_key)
+                edge_instances.append(KGEdge(
+                    source_id=src_id,
+                    target_id=tgt_id,
+                    relation=edge["relation"],
+                ))
+                edge_count += 1
+
+    # 9. 批量写入
+    db.add_all(node_instances)
+    db.add_all(edge_instances)
     await db.commit()
 
     logger.info(f"[KG] 构建完成: {len(nodes)} 节点, {edge_count} 边")
@@ -753,29 +778,36 @@ async def build_kg(doc_id: str, db: AsyncSession, on_progress=None, user_id=None
 # ----------------------------------------------------------
 
 async def run_kg_build(task_id, doc_id: str, db: AsyncSession, user_id=None) -> None:
-    """后台执行 KG 构建，通过 KGBuildTask 记录进度。"""
+    """后台执行 KG 构建，通过 KGBuildTask 记录进度。
+
+    注意：FastAPI BackgroundTasks 在请求结束后执行，此时请求作用域的 db session
+    已关闭，因此必须创建独立的 session。
+    """
     from backend.db.crud import update_by_id
     from backend.db.models import KGBuildTask
+    from backend.db.database import _session_factory
 
-    async def on_progress(progress: int, stage: str):
-        await update_by_id(db, KGBuildTask, task_id, {
-            "status": "running", "progress": progress, "stage": stage,
-        })
+    async with _session_factory() as session:
+        async def on_progress(progress: int, stage: str):
+            await update_by_id(session, KGBuildTask, task_id, {
+                "status": "running", "progress": progress, "stage": stage,
+            })
 
-    try:
-        result = await build_kg(doc_id, db, on_progress=on_progress, user_id=user_id)
-        await update_by_id(db, KGBuildTask, task_id, {
-            "status": "done",
-            "progress": 100,
-            "stage": "构建完成",
-            "nodes_count": result["nodes_count"],
-            "edges_count": result["edges_count"],
-        })
-    except Exception as e:
-        logger.error(f"[KG] 后台构建失败: {e}")
-        await update_by_id(db, KGBuildTask, task_id, {
-            "status": "failed",
-            "progress": 0,
-            "stage": "构建失败",
-            "error_message": str(e),
-        })
+        try:
+            result = await build_kg(doc_id, session, on_progress=on_progress, user_id=user_id)
+            await update_by_id(session, KGBuildTask, task_id, {
+                "status": "done",
+                "progress": 100,
+                "stage": "构建完成",
+                "nodes_count": result["nodes_count"],
+                "edges_count": result["edges_count"],
+            })
+        except Exception as e:
+            logger.error(f"[KG] 后台构建失败: {e}")
+            await session.rollback()
+            await update_by_id(session, KGBuildTask, task_id, {
+                "status": "failed",
+                "progress": 0,
+                "stage": "构建失败",
+                "error_message": str(e)[:500],
+            })
