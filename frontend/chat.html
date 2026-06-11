@@ -7,6 +7,7 @@
     <title>智能对话 · 智学实验室</title>
     <script src="https://unpkg.com/lucide@0.460.0"></script>
     <link rel="stylesheet" href="./assets/styles-v4.css">
+    <link rel="stylesheet" href="./assets/assistant.css">
     <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
     <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
@@ -16,8 +17,6 @@
     <style>
         body { height: 100vh; overflow: hidden; }
         .app-content { height: 100vh; overflow: hidden; padding-top: 56px; }
-
-        .ai-bot-fab, .ai-panel { display: none !important; }
 
         /* Override app-body for full-height chat layout */
         .app-body {
@@ -925,5 +924,6 @@ canvas{display:block;margin:0 auto;}
         document.getElementById('voiceTip').classList.remove('show');
     }
 </script>
+<script type="module" src="./assets/assistant.js"></script>
 </body>
 </html>
