@@ -23,7 +23,7 @@ const NAV = [
     { key: 'chat',     href: 'chat.html',     icon: 'sparkles',         label: 'AI 对话' },
     { key: 'generate', href: 'generate.html', icon: 'wand-2',           label: '资源生成' },
     { key: 'library',  href: 'library.html',  icon: 'library',          label: '资源库' },
-    { key: 'pathway',  href: 'pathway.html',  icon: 'route',            label: '知识图谱' },
+    { key: 'pathway',  href: 'pathway.html',  icon: 'route',            label: '学习规划' },
     { key: 'evaluate', href: 'evaluate.html', icon: 'clipboard-check',  label: '学习评估' },
     { key: 'history',  href: 'history.html',  icon: 'scroll-text',      label: '历史记录' },
     { key: 'profile',  href: 'profile.html',  icon: 'circle-user',      label: '个人中心' },

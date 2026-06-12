@@ -83,7 +83,7 @@ export function showDialog(opts = {}) {
         if (desc) {
             const descEl = document.createElement('div');
             descEl.textContent = desc;
-            descEl.style.cssText = 'font-size:14px;color:#6B7280;text-align:center;line-height:1.5;';
+            descEl.style.cssText = 'font-size:14px;color:#6B7280;text-align:left;line-height:1.8;white-space:pre-line;';
             box.appendChild(descEl);
         }
 

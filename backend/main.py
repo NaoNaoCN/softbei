@@ -98,6 +98,11 @@ from backend.models.schemas import (
     UserOut,
     KGNodeType,
     KGRelation,
+    StudyPlanGenerateRequest,
+    StudyPlanItemOut,
+    StudyPlanItemUpdate,
+    StudyPlanOut,
+    StudyPlanUpdate,
 )
 from backend.db.models import User, ChatSession, ChatMessage, KGNode, KGEdge, QuizItem, QuizAttempt, LearningPath, LearningPathItem, ResourceMeta, LearningRecord, EmailVerification
 from backend.services import profile as profile_svc
@@ -489,6 +494,7 @@ async def send_study_plan_email(
 ):
     """将学习计划表发送到用户邮箱。"""
     import asyncio as _asyncio
+    import sqlalchemy as sa
     import backend.services.study_plan as sp
 
     # 获取用户信息
@@ -545,6 +551,114 @@ async def send_study_plan_email(
         "email": user.email,
         "plan_title": plan.title,
     }
+
+
+@app.get("/study-plans", response_model=list[StudyPlanOut], tags=["study-plan"])
+async def list_study_plans(
+    user_id: int,
+    db: AsyncSession = Depends(get_session),
+):
+    """列出用户的所有学习计划（按创建时间倒序）。"""
+    import backend.services.study_plan as sp
+    return await sp.list_study_plans(user_id, db)
+
+
+@app.get("/study-plans/{plan_id}", response_model=StudyPlanOut, tags=["study-plan"])
+async def get_study_plan(
+    plan_id: int,
+    user_id: int,
+    db: AsyncSession = Depends(get_session),
+):
+    """获取单个学习计划详情。"""
+    import backend.services.study_plan as sp
+    plan = await sp.get_study_plan(plan_id, user_id, db)
+    if not plan:
+        raise HTTPException(status_code=404, detail="学习计划不存在")
+    return plan
+
+
+@app.post("/study-plans/generate", response_model=StudyPlanOut, tags=["study-plan"])
+async def generate_study_plan(
+    user_id: int,
+    body: StudyPlanGenerateRequest,
+    db: AsyncSession = Depends(get_session),
+):
+    """生成一份新的学习计划。"""
+    import backend.services.study_plan as sp
+    plan = await sp.generate_study_plan(user_id, body, db)
+    if not plan:
+        raise HTTPException(status_code=400, detail="没有可用的候选知识点，请先建立学习路径或完善学生画像")
+    return plan
+
+
+@app.put("/study-plans/{plan_id}", response_model=StudyPlanOut, tags=["study-plan"])
+async def update_study_plan(
+    plan_id: int,
+    user_id: int,
+    body: StudyPlanUpdate,
+    db: AsyncSession = Depends(get_session),
+):
+    """更新学习计划（标题/描述/状态）。"""
+    import backend.services.study_plan as sp
+    plan = await sp.update_study_plan(plan_id, user_id, body, db)
+    if not plan:
+        raise HTTPException(status_code=404, detail="学习计划不存在")
+    return plan
+
+
+@app.delete("/study-plans/{plan_id}", tags=["study-plan"])
+async def delete_study_plan(
+    plan_id: int,
+    user_id: int,
+    db: AsyncSession = Depends(get_session),
+):
+    """删除学习计划（级联删除所有计划项）。"""
+    import backend.services.study_plan as sp
+    ok = await sp.delete_study_plan(plan_id, user_id, db)
+    if not ok:
+        raise HTTPException(status_code=404, detail="学习计划不存在")
+    return {"ok": True}
+
+
+@app.put("/study-plans/{plan_id}/items/{item_id}", response_model=StudyPlanItemOut, tags=["study-plan"])
+async def update_study_plan_item(
+    plan_id: int,
+    item_id: int,
+    user_id: int,
+    body: StudyPlanItemUpdate,
+    db: AsyncSession = Depends(get_session),
+):
+    """更新单个计划项（日期/时段/完成状态/备注）。"""
+    import backend.services.study_plan as sp
+    item = await sp.update_study_plan_item(plan_id, item_id, user_id, body, db)
+    if not item:
+        raise HTTPException(status_code=404, detail="计划项不存在")
+    return item
+
+
+@app.post("/study-plans/{plan_id}/items/{item_id}/generate-resource", tags=["study-plan"])
+async def generate_study_plan_item_resources(
+    plan_id: int,
+    item_id: int,
+    user_id: int,
+    body: dict,
+    db: AsyncSession = Depends(get_session),
+):
+    """为计划项生成缺失资源（后台异步）。"""
+    import asyncio as _asyncio
+    import backend.services.study_plan as sp
+
+    item = await sp.get_study_plan_item(plan_id, item_id, user_id, db)
+    if not item:
+        raise HTTPException(status_code=404, detail="计划项不存在")
+
+    resource_types = body.get("resource_types") if body else None
+    types = resource_types or item.missing_resource_types
+    if not types:
+        raise HTTPException(status_code=400, detail="没有需要生成的资源类型")
+
+    _asyncio.create_task(sp.generate_resources_for_item(plan_id, item_id, user_id, types))
+    return {"message": f"已触发 {len(types)} 种资源生成", "resource_types": types}
 
 
 # ===========================================================

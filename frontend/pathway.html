@@ -166,35 +166,239 @@
         .kg-progress-bar .bar { flex: 1; height: 6px; background: rgba(110,148,102,0.25); border-radius: 3px; overflow: hidden; }
         .kg-progress-bar .bar-fill { height: 100%; background: var(--success); border-radius: 3px; }
 
-        /* Type filter checkboxes */
-        .type-filter-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-        .type-filter-group label { display: flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; padding: 4px 8px; border-radius: 4px; background: var(--accent-soft); border: 1px solid var(--divider); transition: all 0.2s; }
-        .type-filter-group label:hover { border-color: var(--accent); }
-        .type-filter-group input[type="checkbox"] { width: 14px; height: 14px; }
+        /* KG Toolbar — unified card */
+        .kg-toolbar {
+            background: #fff;
+            border: 1px solid var(--divider);
+            border-radius: var(--r-lg);
+            padding: 14px 18px;
+            margin-bottom: 20px;
+        }
+        .kg-toolbar-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .kg-toolbar-row + .kg-toolbar-row {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--divider);
+        }
+        .kg-select {
+            padding: 8px 34px 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--r-sm);
+            font-size: 13px;
+            font-family: var(--font);
+            background: var(--bg-page);
+            color: var(--text-1);
+            cursor: pointer;
+            outline: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238C7B68' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .kg-select:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+        .kg-search-wrap {
+            flex: 1;
+            min-width: 220px;
+            display: flex;
+        }
+        .kg-search-wrap .form-input {
+            border-radius: var(--r-sm) 0 0 var(--r-sm);
+            border-right: none;
+            padding-top: 5px;
+            padding-bottom: 5px;
+            font-size: 13px;
+            height: 32px;
+        }
+        .kg-search-wrap .form-input:focus {
+            border-right: none;
+        }
+        .kg-search-wrap .btn {
+            border-radius: 0 var(--r-sm) var(--r-sm) 0;
+            flex-shrink: 0;
+        }
+        .kg-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            color: var(--text-2);
+            cursor: pointer;
+            user-select: none;
+            padding: 5px 10px;
+            border-radius: var(--r-sm);
+            border: 1px solid transparent;
+            transition: all 0.15s;
+        }
+        .kg-toggle:hover {
+            background: var(--bg-hover);
+            border-color: var(--divider);
+        }
+        .kg-toggle input[type="checkbox"] {
+            width: 15px;
+            height: 15px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        /* Legend chips */
+        .kg-legend-group {
+            display: flex;
+            gap: 3px;
+            align-items: center;
+        }
+        .kg-legend-chip {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            padding: 5px 12px;
+            border-radius: var(--r-full);
+            border: 1px solid var(--divider);
+            background: #fff;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .kg-legend-chip:hover {
+            border-color: var(--accent);
+            background: var(--accent-soft);
+        }
+        .kg-legend-chip.active {
+            background: var(--accent-soft);
+            border-color: rgba(199,123,60,0.35);
+            color: var(--accent);
+            font-weight: 500;
+        }
+        .kg-legend-chip:not(.active) {
+            opacity: 0.4;
+            background: var(--bg-page);
+        }
 
         /* Pathway select in detail panel */
         .pathway-select-list { max-height: 150px; overflow-y: auto; border: 1px solid var(--divider); border-radius: 12px; margin-top: 6px; }
         .pathway-select-item { padding: 8px 12px; font-size: 12px; cursor: pointer; transition: background 0.2s; }
         .pathway-select-item:hover { background: var(--accent-soft); }
 
-        /* KG Filter Bar */
-        .kg-filter {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 16px;
-            flex-wrap: wrap;
-            align-items: center;
+        /* ===== 学习计划 ===== */
+        .sp-toolbar {
+            display: flex; align-items: center; gap: 16px;
+            margin-bottom: 20px;
         }
-        .filter-select {
-            padding: 8px 14px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            font-size: 14px;
+        .sp-toolbar-hint { font-size: 13px; color: var(--text-3); flex: 1; }
+
+        .sp-plan-card {
             background: #fff;
-            cursor: pointer;
-            outline: none;
-            min-width: 120px;
+            border: 1px solid var(--divider);
+            border-radius: 12px;
+            margin-bottom: 16px;
+            overflow: hidden;
         }
+        .sp-plan-header {
+            display: flex; align-items: center; gap: 12px;
+            padding: 16px 20px; cursor: pointer;
+            user-select: none;
+        }
+        .sp-plan-header:hover { background: var(--accent-soft); }
+        .sp-plan-header-left { flex: 1; min-width: 0; }
+        .sp-plan-title { font-size: 16px; font-weight: 600; color: var(--text-1); }
+        .sp-plan-meta { font-size: 12px; color: var(--text-3); margin-top: 3px; }
+        .sp-plan-status {
+            font-size: 12px; padding: 3px 10px; border-radius: 20px;
+            font-weight: 500;
+        }
+        .sp-plan-status.active { background: #E8F5E9; color: #2E7D32; }
+        .sp-plan-status.archived { background: #F3E5F5; color: #7B1FA2; }
+        .sp-plan-status.completed { background: #E3F2FD; color: #1565C0; }
+        .sp-plan-arrow { transition: transform 0.25s; flex-shrink: 0; }
+        .sp-plan-card.collapsed .sp-plan-arrow { transform: rotate(-90deg); }
+        .sp-plan-card.collapsed .sp-plan-body { display: none; }
+        .sp-plan-body { padding: 0 20px 20px; }
+        .sp-plan-progress {
+            display: flex; align-items: center; gap: 10px;
+            margin-bottom: 16px; font-size: 13px; color: var(--text-2);
+        }
+        .sp-progress-bar {
+            flex: 1; height: 6px; background: var(--bg-2);
+            border-radius: 3px; overflow: hidden;
+        }
+        .sp-progress-fill {
+            height: 100%; background: var(--accent);
+            border-radius: 3px; transition: width 0.3s;
+        }
+        .sp-day-group {
+            margin-bottom: 12px; border: 1px solid var(--divider);
+            border-radius: 8px; overflow: hidden;
+        }
+        .sp-day-label {
+            display: flex; align-items: center; gap: 6px;
+            padding: 10px 14px; background: var(--bg-1);
+            font-size: 14px; font-weight: 600; color: var(--text-1);
+            cursor: pointer; user-select: none;
+        }
+        .sp-day-label-arrow { width: 14px; height: 14px; transition: transform 0.2s; flex-shrink: 0; }
+        .sp-day-group.collapsed .sp-day-label-arrow { transform: rotate(-90deg); }
+        .sp-day-group.collapsed .sp-day-items { display: none; }
+        .sp-day-items { padding: 8px 0; }
+        .sp-item-row {
+            display: flex; align-items: flex-start; gap: 10px;
+            padding: 10px 14px; border-bottom: 1px solid var(--divider);
+        }
+        .sp-item-row:last-child { border-bottom: none; }
+        .sp-item-check {
+            width: 20px; height: 20px; border-radius: 50%;
+            border: 2px solid var(--divider); flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; margin-top: 1px; transition: all 0.2s;
+        }
+        .sp-item-check.done { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .sp-item-check:hover { border-color: var(--accent); }
+        .sp-item-info { flex: 1; min-width: 0; }
+        .sp-item-name { font-size: 14px; font-weight: 500; color: var(--text-1); cursor: pointer; }
+        .sp-item-name.done { color: var(--text-3); text-decoration: line-through; }
+        .sp-item-name:hover { color: var(--accent); }
+        .sp-item-meta { font-size: 12px; color: var(--text-3); margin-top: 3px; display: flex; gap: 12px; flex-wrap: wrap; }
+        .sp-item-resources {
+            display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+            margin-top: 6px;
+        }
+        .sp-res-tag {
+            font-size: 11px; padding: 2px 8px; border-radius: 4px;
+            background: var(--accent-soft); color: var(--accent);
+            cursor: pointer;
+        }
+        .sp-res-missing {
+            font-size: 11px; padding: 2px 8px; border-radius: 4px;
+            background: #FFF3E0; color: #E65100; cursor: pointer;
+        }
+        .sp-plan-header-btn { font-size: 12px; padding: 4px 10px; white-space: nowrap; }
+
+        /* 生成对话框 */
+        .sp-dialog-overlay {
+            position: fixed; inset: 0; z-index: 10000;
+            background: rgba(0,0,0,0.35); backdrop-filter: blur(2px);
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.2s;
+        }
+        .sp-dialog-overlay.open { opacity: 1; pointer-events: auto; }
+        .sp-dialog {
+            background: #fff; border-radius: 16px; padding: 28px;
+            max-width: 440px; width: 90%;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.15);
+        }
+        .sp-dialog h3 { font-size: 17px; font-weight: 600; color: var(--text-1); margin: 0 0 16px; }
+        .sp-dialog-row { display: flex; gap: 12px; margin-bottom: 14px; }
+        .sp-dialog-row label { font-size: 13px; color: var(--text-2); min-width: 72px; line-height: 36px; }
+        .sp-dialog-row input { flex: 1; }
+        .sp-dialog .dialog-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; }
 
         /* ===== 学习路径 Tab 改版：路线图样式 ===== */
 
@@ -611,6 +815,7 @@
         body.kg-fullscreen .page-subtitle,
         body.kg-fullscreen .tab-bar,
         body.kg-fullscreen #tab-pathways,
+        body.kg-fullscreen #tab-study-plan,
         body.kg-fullscreen #node-grid-section { display: none !important; }
 
         body.kg-fullscreen .main { margin-left: 0; padding: 0; }
@@ -625,6 +830,79 @@
             background: rgba(30,40,55,0.9); color: #fff; font-size: 18px; cursor: pointer;
         }
         body.kg-fullscreen .kg-fullscreen-close { display: flex; align-items: center; justify-content: center; }
+
+        /* Zoom control knob */
+        .kg-zoom-control {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1px;
+            background: rgba(30,40,60,0.85);
+            border-radius: 10px;
+            padding: 4px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(255,255,255,0.12);
+            user-select: none;
+        }
+        .kg-graph-area.light-bg .kg-zoom-control {
+            background: rgba(255,255,255,0.85);
+            border-color: rgba(0,0,0,0.1);
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        }
+        .kg-zoom-btn {
+            width: 36px;
+            height: 36px;
+            border: none;
+            background: transparent;
+            color: #c8d6e5;
+            font-size: 20px;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 7px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s, color 0.15s;
+            line-height: 1;
+            font-family: inherit;
+        }
+        .kg-graph-area.light-bg .kg-zoom-btn {
+            color: #555;
+        }
+        .kg-zoom-btn:hover {
+            background: rgba(255,255,255,0.12);
+            color: #fff;
+        }
+        .kg-graph-area.light-bg .kg-zoom-btn:hover {
+            background: rgba(0,0,0,0.06);
+            color: #222;
+        }
+        .kg-zoom-btn:active {
+            background: rgba(255,255,255,0.2);
+        }
+        .kg-graph-area.light-bg .kg-zoom-btn:active {
+            background: rgba(0,0,0,0.1);
+        }
+        .kg-zoom-label {
+            font-size: 11px;
+            color: #8899aa;
+            padding: 4px 0;
+            min-width: 44px;
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+        }
+        .kg-graph-area.light-bg .kg-zoom-label {
+            color: #777;
+        }
+        body.kg-fullscreen .kg-zoom-control {
+            bottom: 24px;
+            right: 24px;
+        }
     </style>
 </head>
 <body>
@@ -632,59 +910,60 @@
     <div class="app-layout">
         <div class="app-content">
         <div class="app-body">
-            <h1 class="page-title">知识图谱</h1>
+            <h1 class="page-title">学习规划</h1>
             <p class="page-subtitle">查看知识图谱结构，规划和管理个性化学习路径，高效达成学习目标。</p>
 
             <!-- Tabs -->
             <div class="tab-bar">
                 <button class="tab-btn active" onclick="switchTab(this, 'kg')">知识图谱</button>
                 <button class="tab-btn" onclick="switchTab(this, 'pathways')">我的路径</button>
+                <button class="tab-btn" onclick="switchTab(this, 'study-plan')">学习计划</button>
             </div>
 
             <!-- KG Tab -->
             <div id="tab-kg">
                 <button class="kg-fullscreen-close" id="kg-fullscreen-close" onclick="exitKgFullscreen()">✕</button>
-                <!-- Row 1: Document selector -->
-                <div class="kg-filter">
-                    <select class="filter-select" id="kg-doc-select" style="min-width:200px;">
-                        <option value="">全部文档</option>
-                    </select>
-                </div>
-                <!-- Row 2: View mode + fullscreen -->
-                <div class="kg-filter">
-                    <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-                        <input type="checkbox" id="kg-learned-toggle"> 已学习视图
-                    </label>
-                    <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-                        <input type="checkbox" id="kg-bg-toggle" checked> 浅色背景
-                    </label>
-                    <button class="btn btn-secondary btn-sm" onclick="enterKgFullscreen()">全屏查看</button>
-                </div>
-                <!-- Row 3: Filter controls -->
-                <div class="kg-filter">
-                    <select class="filter-select" id="kg-depth">
-                        <option value="1">深度：1</option>
-                        <option value="2" selected>深度：2</option>
-                        <option value="3">深度：3</option>
-                        <option value="4">深度：4</option>
-                        <option value="5">深度：5</option>
-                    </select>
-                    <select class="filter-select" id="kg-root-select">
-                        <option value="">全部根节点</option>
-                    </select>
-                    <div class="type-filter-group" id="kg-type-filters">
-                        <label><input type="checkbox" value="Course" checked><span style="color:#5B8DB8;">●</span> 课程</label>
-                        <label><input type="checkbox" value="Chapter" checked><span style="color:#6BA389;">●</span> 章节</label>
-                        <label><input type="checkbox" value="KnowledgePoint" checked><span style="color:#D4956A;">●</span> 知识点</label>
-                        <label><input type="checkbox" value="SubPoint" checked><span style="color:#9B85B2;">●</span> 子点</label>
-                        <label><input type="checkbox" value="Concept" checked><span style="color:#C27E7E;">●</span> 概念</label>
+                <!-- KG Toolbar -->
+                <div class="kg-toolbar">
+                    <div class="kg-toolbar-row">
+                        <select class="kg-select" id="kg-doc-select">
+                            <option value="">全部文档</option>
+                        </select>
+                        <select class="kg-select" id="kg-depth">
+                            <option value="1">深度：1</option>
+                            <option value="2" selected>深度：2</option>
+                            <option value="3">深度：3</option>
+                            <option value="4">深度：4</option>
+                            <option value="5">深度：5</option>
+                        </select>
+                        <select class="kg-select" id="kg-root-select">
+                            <option value="">全部根节点</option>
+                        </select>
+                        <div class="kg-search-wrap">
+                            <input type="text" class="form-input" id="kg-search" placeholder="搜索知识点...">
+                            <button class="btn btn-primary btn-sm" id="kg-search-btn">搜索</button>
+                        </div>
+                        <select class="kg-select" id="kg-pathway-overlay">
+                            <option value="">路径叠加：无</option>
+                        </select>
+                        <button class="btn btn-secondary btn-sm" onclick="loadKgGraph()">刷新</button>
+                        <button class="btn btn-secondary btn-sm" onclick="enterKgFullscreen()">全屏查看</button>
                     </div>
-                    <input type="text" class="form-input" id="kg-search" placeholder="搜索知识点..." style="min-width:140px;">
-                    <button class="btn btn-secondary btn-sm" id="kg-search-btn">搜索</button>
-                    <select class="filter-select" id="kg-pathway-overlay">
-                        <option value="">路径叠加：无</option>
-                    </select>
-                    <button class="btn btn-secondary btn-sm" onclick="loadKgGraph()">刷新</button>
+                    <div class="kg-toolbar-row">
+                        <span class="kg-legend-group" id="kg-legend-group">
+                            <span class="kg-legend-chip active" data-type="Course" onclick="toggleLegendType(this)"><span style="color:#5B8DB8;">●</span> 课程</span>
+                            <span class="kg-legend-chip active" data-type="Chapter" onclick="toggleLegendType(this)"><span style="color:#6BA389;">●</span> 章节</span>
+                            <span class="kg-legend-chip active" data-type="KnowledgePoint" onclick="toggleLegendType(this)"><span style="color:#D4956A;">●</span> 知识点</span>
+                            <span class="kg-legend-chip active" data-type="SubPoint" onclick="toggleLegendType(this)"><span style="color:#9B85B2;">●</span> 子点</span>
+                            <span class="kg-legend-chip active" data-type="Concept" onclick="toggleLegendType(this)"><span style="color:#C27E7E;">●</span> 概念</span>
+                        </span>
+                        <label class="kg-toggle">
+                            <input type="checkbox" id="kg-learned-toggle"> 已学习视图
+                        </label>
+                        <label class="kg-toggle">
+                            <input type="checkbox" id="kg-bg-toggle" checked> 浅色背景
+                        </label>
+                    </div>
                 </div>
 
                 <!-- Learned progress bar (hidden by default) -->
@@ -698,6 +977,11 @@
                     <div class="kg-main">
                         <div class="kg-graph-area light-bg">
                             <div id="kg-chart" style="width:100%;height:700px;position:relative;z-index:1;"></div>
+                            <div class="kg-zoom-control">
+                                <button class="kg-zoom-btn" onclick="zoomKgIn()" title="放大">+</button>
+                                <span class="kg-zoom-label" id="kg-zoom-label">100%</span>
+                                <button class="kg-zoom-btn" onclick="zoomKgOut()" title="缩小">−</button>
+                            </div>
                             <div class="kg-placeholder" id="kg-placeholder" style="display:none;">
                                 <div class="kg-placeholder-icon"><i data-lucide="git-branch"></i></div>
                                 <div class="kg-placeholder-text">知识图谱加载中，请稍候...</div>
@@ -745,6 +1029,49 @@
                 </div>
             </div>
 
+            <!-- Study Plan Tab -->
+            <div id="tab-study-plan" style="display:none;">
+                <div class="sp-toolbar">
+                    <button class="btn btn-primary" onclick="window._showSpGenerateDialog()">生成学习计划</button>
+                    <span class="sp-toolbar-hint">基于学习路径和画像自动排程</span>
+                </div>
+                <div id="sp-content">
+                    <div class="roadmap-empty" id="sp-empty">
+                        <div class="roadmap-empty-icon"><i data-lucide="calendar"></i></div>
+                        <div class="roadmap-empty-title">还没有学习计划</div>
+                        <div class="roadmap-empty-desc">系统将根据你的学习路径和画像，自动生成按日期排程的个性化学习计划</div>
+                    </div>
+                    <div id="sp-list" style="display:none;"></div>
+                </div>
+            </div>
+
+            <!-- 生成学习计划对话框 -->
+            <div class="sp-dialog-overlay" id="sp-dialog-overlay" onclick="if(event.target===this)window._closeSpGenerateDialog()">
+                <div class="sp-dialog">
+                    <h3>生成学习计划</h3>
+                    <div class="sp-dialog-row">
+                        <label>计划标题</label>
+                        <input type="text" class="form-input" id="sp-dialog-title" placeholder="可选，留空自动生成">
+                    </div>
+                    <div class="sp-dialog-row">
+                        <label>开始日期</label>
+                        <input type="date" class="form-input" id="sp-dialog-start">
+                    </div>
+                    <div class="sp-dialog-row">
+                        <label>目标天数</label>
+                        <input type="number" class="form-input" id="sp-dialog-days" placeholder="如 14" min="1" max="180">
+                    </div>
+                    <div class="sp-dialog-row">
+                        <label>每日时长</label>
+                        <input type="number" class="form-input" id="sp-dialog-daily" placeholder="分钟，如 60" min="10" max="720">
+                    </div>
+                    <div class="dialog-actions">
+                        <button class="btn btn-secondary" onclick="window._closeSpGenerateDialog()">取消</button>
+                        <button class="btn btn-primary" id="sp-dialog-generate-btn" onclick="window._handleSpGenerate()">开始生成</button>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
     </div>
@@ -762,7 +1089,7 @@
     </div>
 
     <script type="module">
-        import { isLoggedIn, getUserId, clearAuth, getKgGraph, getPathways, createPathway, deletePathway, getLearningRecords, addPathwayItem, markPathwayItemDone, getDocuments, getResources } from './assets/api.js';
+        import { isLoggedIn, getUserId, clearAuth, getKgGraph, getPathways, createPathway, deletePathway, getLearningRecords, addPathwayItem, markPathwayItemDone, getDocuments, getResources, listStudyPlans, generateStudyPlan, deleteStudyPlan, updateStudyPlanItem, generateStudyPlanItemResources } from './assets/api.js';
         import { showToast } from './assets/toast.js';
         import { showDialog } from './assets/dialog.js';
         import { registerPage, initSidebar } from './assets/nav.js';
@@ -791,6 +1118,38 @@
             document.body.classList.remove('kg-fullscreen');
             if (chartInstance) chartInstance.resize();
         };
+
+        // === KG zoom control ===
+        const KG_ZOOM_MIN = 0.2;
+        const KG_ZOOM_MAX = 5.0;
+        const KG_ZOOM_STEP = 1.3;
+
+        window.zoomKgIn = function() {
+            if (!chartInstance) return;
+            currentZoom = Math.min(KG_ZOOM_MAX, currentZoom * KG_ZOOM_STEP);
+            chartInstance.setOption({ series: [{ zoom: currentZoom }] });
+            updateVisibilityByZoom(currentZoom);
+            updateZoomLabel();
+        };
+        window.zoomKgOut = function() {
+            if (!chartInstance) return;
+            currentZoom = Math.max(KG_ZOOM_MIN, currentZoom / KG_ZOOM_STEP);
+            chartInstance.setOption({ series: [{ zoom: currentZoom }] });
+            updateVisibilityByZoom(currentZoom);
+            updateZoomLabel();
+        };
+        function updateZoomLabel() {
+            const el = document.getElementById('kg-zoom-label');
+            if (el) el.textContent = Math.round(currentZoom * 100) + '%';
+        }
+
+        window.toggleLegendType = function(el) {
+            const typeName = categoryNames[el.dataset.type] || el.dataset.type;
+            if (!chartInstance) return;
+            chartInstance.dispatchAction({ type: 'legendToggleSelect', name: typeName });
+            el.classList.toggle('active');
+        };
+
         let pathways = [];
 
         const nodeTypeSize = { 'Course': 90, 'Chapter': 55, 'KnowledgePoint': 30, 'SubPoint': 20, 'Concept': 10 };
@@ -852,8 +1211,10 @@
             btn.classList.add('active');
             document.getElementById('tab-kg').style.display = tab === 'kg' ? 'block' : 'none';
             document.getElementById('tab-pathways').style.display = tab === 'pathways' ? 'block' : 'none';
+            document.getElementById('tab-study-plan').style.display = tab === 'study-plan' ? 'block' : 'none';
             if (tab === 'kg') loadKgGraph();
             else if (tab === 'pathways') loadPathways();
+            else if (tab === 'study-plan') loadStudyPlans();
         }
 
         // === Step 2: Load document options ===
@@ -916,16 +1277,13 @@
         function applyFilters() {
             if (!fullGraph) return;
 
-            // Get active type filters
-            const activeTypes = new Set();
-            document.querySelectorAll('#kg-type-filters input[type="checkbox"]').forEach(cb => {
-                if (cb.checked) activeTypes.add(cb.value);
-            });
+            // All types are visible by default; ECharts legend handles type filtering
+            const allTypes = new Set(categoryList);
 
             // Search query
             const query = (document.getElementById('kg-search').value || '').trim().toLowerCase();
 
-            let filteredNodes = fullGraph.nodes.filter(n => activeTypes.has(n.type || 'KnowledgePoint'));
+            let filteredNodes = fullGraph.nodes.filter(n => allTypes.has(n.type || 'KnowledgePoint'));
 
             // Step 3: Search filter
             if (query) {
@@ -1167,11 +1525,14 @@
             });
 
             chartInstance.setOption({ series: [{ data: updated, links: updatedLinks }] });
+            updateZoomLabel();
         }
 
         // === Step 1: Pure render function ===
         function renderGraph(nodes, edges) {
             currentZoom = 1;
+            // Reset legend chips to all active
+            document.querySelectorAll('.kg-legend-chip').forEach(c => c.classList.add('active'));
             const chartDiv = document.getElementById('kg-chart');
             if (!chartInstance) {
                 chartInstance = echarts.init(chartDiv);
@@ -1303,9 +1664,9 @@
                         return `<b>${params.data.name}</b><br/><span style="font-size:12px;color:var(--text-3)">${categoryNames[t] || t}</span>`;
                     }
                 },
-                legend: { data: categories.map(c => c.name), orient: 'horizontal', bottom: 10, textStyle: { fontSize: 12, color: isLightBg ? 'rgba(30,30,50,0.7)' : 'rgba(255,255,255,0.7)' } },
+                legend: { show: false, data: categories.map(c => c.name), selected: Object.fromEntries(categories.map(c => [c.name, true])) },
                 series: [{
-                    type: 'graph', layout: 'force', roam: true, draggable: true,
+                    type: 'graph', layout: 'force', roam: 'move', draggable: true,
                     categories: categories,
                     label: { show: true, fontSize: 11, position: 'bottom', formatter: '{b}', color: labelColor },
                     edgeSymbol: ['circle', 'arrow'], edgeSymbolSize: [4, 6],
@@ -1423,12 +1784,9 @@
         // 获取当前筛选后的节点列表（与 applyFilters 同步）
         function getCurrentFilteredNodes() {
             if (!fullGraph) return [];
-            const activeTypes = new Set();
-            document.querySelectorAll('#kg-type-filters input[type="checkbox"]').forEach(cb => {
-                if (cb.checked) activeTypes.add(cb.value);
-            });
+            const allTypes = new Set(categoryList);
             const query = (document.getElementById('kg-search').value || '').trim().toLowerCase();
-            let nodes = fullGraph.nodes.filter(n => activeTypes.has(n.type || 'KnowledgePoint'));
+            let nodes = fullGraph.nodes.filter(n => allTypes.has(n.type || 'KnowledgePoint'));
             if (query) {
                 const matchedIds = new Set();
                 nodes.forEach(n => { if (n.name.toLowerCase().includes(query)) matchedIds.add(n.id); });
@@ -1485,9 +1843,10 @@
 
             html += `<hr style="margin:12px 0;border:none;border-top:1px solid var(--divider);">`;
             html += `<div class="detail-section">关联资源</div><div id="detail-resources"><span style="font-size:12px;color:var(--text-3);">加载中...</span></div>`;
+            window._kgDetailNode = node;
             html += `<div class="detail-actions">
-                <button class="btn btn-primary" onclick="window._generateForKp('${node.id}', '${node.name.replace(/'/g, "\\'")}')">生成学习资源</button>
-                <button class="btn btn-secondary" onclick="window._showAddToPathway('${node.id}', '${node.name.replace(/'/g, "\\'")}')">加入学习路径</button>
+                <button class="btn btn-primary" onclick="window._generateForCurrentKp()">生成学习资源</button>
+                <button class="btn btn-secondary" onclick="window._showAddToCurrentPathway()">加入学习路径</button>
             </div>`;
             html += `<div id="detail-pathway-list" style="display:none;margin-top:8px;"></div>`;
 
@@ -1519,9 +1878,20 @@
             document.getElementById('kg-detail-backdrop').classList.remove('open');
         };
 
-        // === Step 7: Add to pathway ===
+        // === Step 7: Generate / Add to pathway (from detail node) ===
+        window._generateForCurrentKp = function() {
+            const n = window._kgDetailNode;
+            if (!n) return;
+            location.href = `generate.html?kp=${encodeURIComponent(n.id)}&kp_name=${encodeURIComponent(n.name)}`;
+        };
+        window._showAddToCurrentPathway = function() {
+            const n = window._kgDetailNode;
+            if (!n) return;
+            window._showAddToPathway(n.id, n.name);
+        };
+        // Keep old signatures for backward compat (used by learning path expand links)
         window._generateForKp = function(kpId, kpName) {
-            location.href = `generate.html?kp_id=${encodeURIComponent(kpId)}&kp_name=${encodeURIComponent(kpName)}`;
+            location.href = `generate.html?kp=${encodeURIComponent(kpId)}&kp_name=${encodeURIComponent(kpName)}`;
         };
 
         window._showAddToPathway = function(kpId, kpName) {
@@ -1794,7 +2164,7 @@
                 ${relationsHtml}
                 ${resourcesHtml}
                 <div class="step-expand-section">
-                    <span class="step-expand-link" onclick="event.stopPropagation();location.href='generate.html?kp_id=${encodeURIComponent(kpId)}&kp_name=${encodeURIComponent(rowEl.querySelector('.step-name').textContent)}'">生成学习资源</span>
+                    <span class="step-expand-link" onclick="event.stopPropagation();location.href='generate.html?kp=${encodeURIComponent(kpId)}&kp_name=${encodeURIComponent(rowEl.querySelector('.step-name').textContent)}'">生成学习资源</span>
                     <span class="step-expand-link" onclick="event.stopPropagation();switchTab(document.querySelectorAll('.tab-btn')[0], 'kg');setTimeout(()=>{const n=fullGraph&&fullGraph.nodes.find(n=>n.id==='${kpId}');if(n)showDetailPanel(n);},300)">在知识图谱中查看</span>
                 </div>
             `;
@@ -2013,9 +2383,6 @@
             if (document.getElementById('kg-learned-toggle').checked) await loadLearnedState();
             if (fullGraph) applyFilters();
         });
-        document.querySelectorAll('#kg-type-filters input[type="checkbox"]').forEach(cb => {
-            cb.addEventListener('change', () => { if (fullGraph) applyFilters(); });
-        });
         document.getElementById('kg-search-btn').addEventListener('click', () => { performSearch(); });
         document.getElementById('kg-search').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') performSearch();
@@ -2039,6 +2406,264 @@
         if (_initTab === 'pathways') {
             const btn = document.querySelectorAll('.tab-btn')[1];
             if (btn) switchTab(btn, 'pathways');
+        } else if (_initTab === 'study-plan') {
+            const btn = document.querySelectorAll('.tab-btn')[2];
+            if (btn) switchTab(btn, 'study-plan');
+        }
+
+        // ============================================================
+        // === 学习计划 ===
+        // ============================================================
+
+        let studyPlans = [];
+
+        async function loadStudyPlans() {
+            try {
+                studyPlans = await listStudyPlans(userId) || [];
+            } catch (e) {
+                studyPlans = [];
+            }
+            _normalizeStudyPlanIds(studyPlans);
+            renderStudyPlanList();
+        }
+
+        function _normalizeStudyPlanIds(plans) {
+            plans.forEach(p => {
+                p.id = String(p.id);
+                if (p.items) p.items.forEach(it => { it.id = String(it.id); });
+            });
+        }
+
+        function renderStudyPlanList() {
+            const empty = document.getElementById('sp-empty');
+            const list = document.getElementById('sp-list');
+
+            if (!studyPlans.length) {
+                empty.style.display = 'block';
+                list.style.display = 'none';
+                return;
+            }
+            empty.style.display = 'none';
+            list.style.display = 'block';
+
+            const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+
+            let html = '';
+            studyPlans.forEach(plan => {
+                const items = plan.items || [];
+                const completed = items.filter(i => i.is_completed).length;
+                const total = items.length;
+                const pct = total ? Math.round(completed / total * 100) : 0;
+
+                html += `<div class="sp-plan-card" id="sp-card-${plan.id}">`;
+                // Header
+                html += `<div class="sp-plan-header" onclick="window._toggleSpCollapse('${plan.id}')">`;
+                html += `<div class="sp-plan-header-left">`;
+                html += `<div class="sp-plan-title">${escapeHtml(plan.title || '学习计划')}</div>`;
+                html += `<div class="sp-plan-meta">${plan.start_date || ''} ~ ${plan.end_date || ''} · 每日 ${plan.daily_time_minutes || '-'} 分钟 · ${completed}/${total} 项完成</div>`;
+                html += `</div>`;
+                const statusClass = plan.status || 'active';
+                const statusLabel = { active: '进行中', archived: '已归档', completed: '已完成' }[statusClass] || statusClass;
+                html += `<span class="sp-plan-status ${statusClass}">${statusLabel}</span>`;
+                html += `<button class="btn btn-secondary btn-sm sp-plan-header-btn" onclick="event.stopPropagation();window._handleSpSendEmail('${plan.id}')"><i data-lucide="mail" style="width:13px;height:13px;"></i> 发送到邮箱</button>`;
+                html += `<button class="btn-delete btn-sm sp-plan-header-btn" onclick="event.stopPropagation();window._handleSpDelete('${plan.id}')"><i data-lucide="trash-2" style="width:13px;height:13px;"></i> 删除计划</button>`;
+                html += `<i data-lucide="chevron-down" class="sp-plan-arrow"></i>`;
+                html += `</div>`;
+
+                // Body
+                html += `<div class="sp-plan-body">`;
+                html += `<div class="sp-plan-progress"><span>完成进度 ${pct}%</span><div class="sp-progress-bar"><div class="sp-progress-fill" style="width:${pct}%"></div></div></div>`;
+
+                // Group items by date
+                const itemsByDate = new Map();
+                items.forEach(it => {
+                    const d = it.scheduled_date || '未排期';
+                    if (!itemsByDate.has(d)) itemsByDate.set(d, []);
+                    itemsByDate.get(d).push(it);
+                });
+
+                itemsByDate.forEach((dayItems, dateStr) => {
+                    const d = new Date(dateStr + 'T00:00:00');
+                    let label;
+                    if (dateStr === '未排期') {
+                        label = '未排期';
+                    } else {
+                        const m = d.getMonth() + 1;
+                        const day = d.getDate();
+                        const wd = weekdays[d.getDay()];
+                        label = `${m}月${day}日 周${wd}`;
+                    }
+                    html += `<div class="sp-day-group"><div class="sp-day-label" onclick="event.stopPropagation();this.parentElement.classList.toggle('collapsed')"><i data-lucide="chevron-down" class="sp-day-label-arrow"></i>${label}</div><div class="sp-day-items">`;
+
+                    dayItems.forEach(it => {
+                        const isDone = it.is_completed;
+                        html += `<div class="sp-item-row">`;
+                        html += `<div class="sp-item-check${isDone ? ' done' : ''}" onclick="event.stopPropagation();window._handleSpItemToggle('${plan.id}', '${it.id}', ${!isDone})">`;
+                        if (isDone) html += `<i data-lucide="check" style="width:14px;height:14px;"></i>`;
+                        html += `</div>`;
+                        html += `<div class="sp-item-info">`;
+                        html += `<div class="sp-item-name${isDone ? ' done' : ''}" onclick="location.href='chat.html?kp=${encodeURIComponent(it.kp_id || '')}'">${escapeHtml(it.kp_name)}</div>`;
+                        html += `<div class="sp-item-meta">`;
+                        if (it.start_time) html += `<span class="sp-item-time">${it.start_time} - ${it.end_time || ''}</span>`;
+                        html += `<span class="sp-item-minutes">${it.estimated_minutes || '-'} 分钟</span>`;
+                        if (it.notes) html += `<span style="color:var(--text-3);">${escapeHtml(it.notes)}</span>`;
+                        html += `</div></div>`;
+                        html += `<div class="sp-item-resources">`;
+                        if (it.resources && it.resources.length) {
+                            it.resources.slice(0, 3).forEach(r => {
+                                const typeNames = { doc: '文档', mindmap: '导图', quiz: '测验', code: '代码', summary: '总结', animation: '动画' };
+                                const typeLabel = typeNames[r.resource_type] || r.resource_type;
+                                html += `<span class="sp-res-tag" onclick="event.stopPropagation();location.href='library.html?preview=${r.resource_id}'">${typeLabel}</span>`;
+                            });
+                            if (it.resources.length > 3) html += `<span style="font-size:11px;color:var(--text-3);">+${it.resources.length - 3}</span>`;
+                        }
+                        if (it.missing_resource_types && it.missing_resource_types.length) {
+                            it.missing_resource_types.forEach(t => {
+                                html += `<span class="sp-res-missing" onclick="event.stopPropagation();window._handleSpGenMissing('${plan.id}', '${it.id}', '${t}')" title="点击生成${t}资源">缺${t}</span>`;
+                            });
+                        }
+                        html += `</div>`;
+                        if (it.missing_resource_types && it.missing_resource_types.length) {
+                            html += `<button class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px;white-space:nowrap;" onclick="event.stopPropagation();window._handleSpGenMissing('${plan.id}', '${it.id}')">生成资源</button>`;
+                        }
+                        html += `</div>`;
+                    });
+
+                    html += `</div></div>`;
+                });
+
+                html += `</div></div>`;
+            });
+
+            list.innerHTML = html;
+            lucide.createIcons();
+        }
+
+        function _toggleSpCollapse(planId) {
+            const card = document.getElementById('sp-card-' + planId);
+            if (card) card.classList.toggle('collapsed');
+        }
+
+        function _showSpGenerateDialog() {
+            document.getElementById('sp-dialog-overlay').classList.add('open');
+            const today = new Date().toISOString().slice(0, 10);
+            document.getElementById('sp-dialog-start').value = today;
+            document.getElementById('sp-dialog-title').value = '';
+            document.getElementById('sp-dialog-days').value = '';
+            document.getElementById('sp-dialog-daily').value = '';
+        }
+
+        function _closeSpGenerateDialog() {
+            document.getElementById('sp-dialog-overlay').classList.remove('open');
+        }
+
+        async function _handleSpGenerate() {
+            const btn = document.getElementById('sp-dialog-generate-btn');
+            btn.disabled = true;
+            btn.textContent = '生成中...';
+            try {
+                const data = {};
+                const title = document.getElementById('sp-dialog-title').value.trim();
+                if (title) data.title = title;
+                const start = document.getElementById('sp-dialog-start').value;
+                if (start) data.start_date = start;
+                const days = parseInt(document.getElementById('sp-dialog-days').value);
+                if (days) data.days = days;
+                const daily = parseInt(document.getElementById('sp-dialog-daily').value);
+                if (daily) data.daily_time_minutes = daily;
+
+                const plan = await generateStudyPlan(userId, data);
+                if (plan) {
+                    showToast('学习计划已生成', 'success');
+                    _closeSpGenerateDialog();
+                    await loadStudyPlans();
+                } else {
+                    showToast('生成失败：没有可用的候选知识点，请先建立学习路径或完善画像', 'error');
+                }
+            } catch (e) {
+                showToast('生成失败: ' + (e.message || e), 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '开始生成';
+            }
+        }
+
+        async function _handleSpItemToggle(planId, itemId, isCompleted) {
+            try {
+                await updateStudyPlanItem(planId, itemId, userId, { is_completed: isCompleted });
+                const plan = studyPlans.find(p => p.id === planId);
+                if (plan) {
+                    const item = (plan.items || []).find(i => i.id === itemId);
+                    if (item) item.is_completed = isCompleted;
+                    renderStudyPlanList();
+                }
+            } catch (e) {
+                showToast('操作失败: ' + (e.message || e), 'error');
+            }
+        }
+
+        async function _handleSpGenMissing(planId, itemId, singleType) {
+            const plan = studyPlans.find(p => p.id === planId);
+            if (!plan) return;
+            const item = (plan.items || []).find(i => i.id === itemId);
+            if (!item) return;
+            const types = singleType ? [singleType] : (item.missing_resource_types || []);
+            if (!types.length) return;
+
+            try {
+                const result = await generateStudyPlanItemResources(planId, itemId, userId, types);
+                if (result) {
+                    showToast(result.message || '已触发资源生成', 'success');
+                    setTimeout(async () => {
+                        await loadStudyPlans();
+                    }, 3000);
+                }
+            } catch (e) {
+                showToast('资源生成失败: ' + (e.message || e), 'error');
+            }
+        }
+
+        async function _handleSpSendEmail(planId) {
+            const plan = studyPlans.find(p => p.id === planId);
+            if (!plan) { showToast('计划不存在', 'error'); return; }
+
+            const items = plan.items || [];
+            const total = items.length;
+            const completed = items.filter(i => i.is_completed).length;
+            const dateSet = new Set();
+            items.forEach(it => { if (it.scheduled_date && it.scheduled_date !== '未排期') dateSet.add(it.scheduled_date); });
+            const dayCount = dateSet.size || Math.ceil(total / 2) || '?';
+
+            const desc = [
+                `计划：${plan.title || '学习计划'}`,
+                `周期：${plan.start_date || '?'} ~ ${plan.end_date || '?'}`,
+                `内容：${dayCount} 天，${total} 项任务（${completed} 项已完成）`,
+                ``,
+                `邮件将发送至您的注册邮箱，包含完整的每日学习安排。`,
+            ].join('\n');
+
+            const ok = await showDialog({ type: 'normal', title: '发送学习计划到邮箱？', desc, confirmText: '确认发送', cancelText: '取消' });
+            if (!ok) return;
+
+            try {
+                const { sendStudyPlanEmail } = await import('./assets/api.js');
+                const result = await sendStudyPlanEmail(planId, userId);
+                if (result) showToast(result.message || '邮件已发送', 'success');
+            } catch (e) {
+                showToast('发送失败: ' + (e.message || e), 'error');
+            }
+        }
+
+        async function _handleSpDelete(planId) {
+            const ok = await showDialog({ type: 'danger', title: '确定删除该学习计划？', desc: '删除后无法恢复', confirmText: '确认删除' });
+            if (!ok) return;
+            try {
+                await deleteStudyPlan(planId, userId);
+                showToast('计划已删除', 'success');
+                await loadStudyPlans();
+            } catch (e) {
+                showToast('删除失败: ' + (e.message || e), 'error');
+            }
         }
 
         // === Expose to global (required: type="module" isolates scope, onclick needs window.*) ===
@@ -2061,6 +2686,14 @@
         window.handleCreatePathway = handleCreatePathway;
         window.handleDeletePathway = handleDeletePathway;
         window.handleToggleItem = handleToggleItem;
+        window._toggleSpCollapse = _toggleSpCollapse;
+        window._showSpGenerateDialog = _showSpGenerateDialog;
+        window._closeSpGenerateDialog = _closeSpGenerateDialog;
+        window._handleSpGenerate = _handleSpGenerate;
+        window._handleSpItemToggle = _handleSpItemToggle;
+        window._handleSpGenMissing = _handleSpGenMissing;
+        window._handleSpSendEmail = _handleSpSendEmail;
+        window._handleSpDelete = _handleSpDelete;
         }
 
         function destroy() {

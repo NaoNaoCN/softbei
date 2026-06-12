@@ -313,6 +313,7 @@
 
             const urlParams = new URLSearchParams(window.location.search);
             const prefillKp = urlParams.get('kp');
+            const prefillKpName = urlParams.get('kp_name');
             const prefillType = urlParams.get('type');
 
             loadRecentResources();
@@ -341,12 +342,15 @@
                 window._kgTree = { nodeMap, roots: sortNodes(roots) };
                 renderCascadeLevel(0, roots);
                 if (prefillKp) {
-                    let target = graph.nodes.find(n => n.name === prefillKp || n.id === prefillKp);
+                    let target = graph.nodes.find(n => n.id === prefillKp || n.name === prefillKp);
                     if (!target) {
                         try {
                             const decodedKp = decodeURIComponent(prefillKp);
-                            target = graph.nodes.find(n => n.name === decodedKp || n.id === decodedKp);
+                            target = graph.nodes.find(n => n.id === decodedKp || n.name === decodedKp);
                         } catch(e) {}
+                    }
+                    if (!target && prefillKpName) {
+                        try { target = graph.nodes.find(n => n.name === decodeURIComponent(prefillKpName)); } catch(e) {}
                     }
                     if (target) selectNodeById(target.id);
                 }
@@ -429,8 +433,11 @@
                 if (!window._kgTree) return;
                 const { nodeMap, roots } = window._kgTree;
                 const path = [];
+                const visited = new Set();
                 function findPath(nodes, id) {
                     for (const n of nodes) {
+                        if (visited.has(n.id)) continue;
+                        visited.add(n.id);
                         if (n.id === id) { path.push(n.id); return true; }
                         if (n.children && n.children.length) {
                             path.push(n.id);
@@ -440,8 +447,21 @@
                     }
                     return false;
                 }
-                findPath(roots, targetId);
-                let currentNodes = roots;
+                if (!findPath(roots, targetId)) {
+                    // Node not reachable in tree (e.g. parent cut off by depth) — inject into cascade
+                    const orphan = nodeMap[targetId];
+                    if (orphan) {
+                        const sel = document.getElementById('kp-level-0');
+                        if (sel) {
+                            const opt = document.createElement('option');
+                            opt.value = orphan.id;
+                            opt.textContent = orphan.name;
+                            sel.appendChild(opt);
+                            roots.push(orphan);
+                            path.push(orphan.id);
+                        }
+                    }
+                }
                 for (let i = 0; i < path.length; i++) {
                     const sel = document.getElementById(`kp-level-${i}`);
                     if (sel) {

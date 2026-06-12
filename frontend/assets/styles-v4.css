@@ -170,6 +170,30 @@ a:hover { text-decoration: underline; }
 .btn-danger:hover { background: var(--danger-soft); }
 .btn-sm { height: 32px; padding: 0 14px; font-size: 13px; border-radius: var(--r-sm); }
 .btn-lg { height: 48px; padding: 0 28px; font-size: 16px; border-radius: var(--r-lg); }
+.btn-icon-round {
+    width: 42px; height: 42px; padding: 0; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--accent); color: #fff;
+    border: none; cursor: pointer; font-family: var(--font);
+    transition: all 0.2s var(--ease); flex-shrink: 0;
+}
+.btn-icon-round i { width: 18px; height: 18px; }
+.btn-icon-round:hover { background: var(--accent-hover); transform: scale(1.05); }
+.btn-icon-round:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-icon-round.secondary {
+    background: var(--bg-page); color: var(--text-3);
+    border: 1px solid var(--border);
+}
+.btn-icon-round.secondary:hover { background: var(--bg-hover); color: var(--accent); border-color: var(--accent); }
+.btn-icon-round.recording {
+    background: var(--danger-soft); color: var(--danger);
+    border: 1px solid var(--danger);
+    animation: voicePulse 1s ease-in-out infinite;
+}
+@keyframes voicePulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(201,96,90,0.4); }
+    50% { box-shadow: 0 0 0 8px rgba(201,96,90,0); }
+}
 
 /* ---- 9. Forms ---- */
 .form-group { margin-bottom: 18px; }
@@ -300,7 +324,59 @@ tr:hover td { background: var(--bg-hover); }
 .flex-row { display: flex; align-items: center; }
 .gap-2 { gap: 8px; } .gap-3 { gap: 12px; } .gap-4 { gap: 16px; }
 
-/* ---- 20. Responsive ---- */
+/* ---- 20. Suggested Prompts ---- */
+.suggested-prompts {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px;
+    justify-content: center; max-width: 520px;
+}
+.suggested-prompt {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: var(--r-full);
+    font-size: 13px; color: var(--text-2); font-family: var(--font);
+    background: #fff; border: 1px solid var(--divider);
+    cursor: pointer; transition: all 0.2s var(--ease);
+    white-space: nowrap;
+}
+.suggested-prompt:hover {
+    background: var(--accent-soft); color: var(--accent);
+    border-color: rgba(199,123,60,0.22);
+    transform: translateY(-1px);
+}
+.suggested-prompt i { width: 14px; height: 14px; flex-shrink: 0; }
+
+/* ---- 21. Message Actions (hover reveal) ---- */
+.msg-actions {
+    position: absolute; top: 8px; right: 12px;
+    display: flex; gap: 2px; opacity: 0;
+    transition: opacity 0.15s var(--ease);
+}
+.message.assistant { position: relative; }
+.message.assistant:hover .msg-actions { opacity: 1; }
+.msg-action-btn {
+    width: 28px; height: 28px; padding: 0; border-radius: var(--r-sm);
+    background: transparent; color: var(--text-4); border: none;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s; font-family: var(--font);
+}
+.msg-action-btn:hover { background: var(--bg-hover); color: var(--accent); }
+.msg-action-btn i { width: 14px; height: 14px; }
+
+/* ---- 22. Scroll-to-bottom FAB ---- */
+.scroll-bottom-fab {
+    position: absolute; bottom: 12px; right: 20px;
+    width: 32px; height: 32px; border-radius: 50%;
+    background: #fff; border: 1px solid var(--divider);
+    box-shadow: var(--shadow-md); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-3); transition: all 0.2s var(--ease);
+    opacity: 0; transform: translateY(8px); pointer-events: none;
+    z-index: 10;
+}
+.scroll-bottom-fab.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.scroll-bottom-fab:hover { color: var(--accent); border-color: var(--accent); }
+.scroll-bottom-fab i { width: 16px; height: 16px; }
+
+/* ---- 23. Responsive ---- */
 @media (max-width: 860px) {
     .app-body { padding: 24px 20px 40px; }
     .topbar { padding: 0 12px; }

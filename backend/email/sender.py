@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.utils import formataddr, parseaddr
 from pathlib import Path
 
 import aiosmtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from loguru import logger
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -48,8 +49,16 @@ class EmailSender:
         if not self._enabled:
             return self._save_to_file(to, subject, html)
 
+        # Extract bare email for SMTP envelope; always use project name as display name.
+        # QQ/163 mail servers reject messages with malformed From headers.
+        _, from_addr = parseaddr(self._from)
+        if not from_addr:
+            logger.warning("[Email] From 地址解析失败: raw={}", self._from)
+            from_addr = self._from
+        msg_from = formataddr(("智学实验室", from_addr))
+
         msg = MIMEMultipart("alternative")
-        msg["From"] = self._from
+        msg["From"] = msg_from
         msg["To"] = to
         msg["Subject"] = subject
         msg.attach(MIMEText(html, "html", "utf-8"))
@@ -57,6 +66,7 @@ class EmailSender:
         try:
             await aiosmtplib.send(
                 msg,
+                sender=from_addr,
                 hostname=self._host,
                 port=self._port,
                 username=self._username,
