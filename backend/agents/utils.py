@@ -267,7 +267,8 @@ def _extract_json_block(text: str) -> str | None:
 # ----------------------------------------------------------
 
 # RAG 检索缓存：同一请求内多个 Agent 检索相同知识点时复用结果
-_retrieval_cache: dict[tuple[str, str], tuple[str, list[str]]] = {}
+# value: (context, retrieved_texts, sources)
+_retrieval_cache: dict[tuple[str, str], tuple[str, list[str], list]] = {}
 
 
 def clear_retrieval_cache() -> None:
@@ -439,7 +440,8 @@ async def retrieve_context(
     state: AgentState,
     agent_label: str = "Agent",
     config_dict: dict | None = None,
-) -> tuple[str, list[str]]:
+    return_sources: bool = False,
+) -> tuple[str, list[str]] | tuple[str, list[str], list]:
     """
     RAG 检索并格式化上下文，供各生成 Agent 复用。
 
@@ -453,10 +455,16 @@ async def retrieve_context(
     :param state:        AgentState（含 user_message, kp_id, chat_history, profile 等）
     :param agent_label:  Agent 名称标签（用于日志）
     :param config_dict:  LangGraph configurable dict（含 db session，用于解析 kp_id → kp_name）
-    :return:             (context_str, retrieved_texts)
+    :param return_sources: 为 True 时额外返回 CitationSource 列表（编号与 context 中 [n] 对齐），
+                           供 Agent 在文末程序化追加「参考资料」清单。
+    :return:             return_sources=False → (context_str, retrieved_texts)
+                         return_sources=True  → (context_str, retrieved_texts, sources)
     """
     import time
-    from backend.rag.retriever import retrieve, retrieve_by_kp, retrieve_with_queries, retrieve_hybrid, format_context
+    from backend.rag.retriever import (
+        retrieve, retrieve_by_kp, retrieve_with_queries, retrieve_hybrid,
+        format_context, format_context_with_sources,
+    )
 
     kp_name = await resolve_kp_name(state, config_dict)
     user_id = str(state.user_id)
@@ -465,7 +473,8 @@ async def retrieve_context(
     # 优先命中缓存
     if cache_key in _retrieval_cache:
         logger.info("[%s] RAG 命中缓存，跳过检索" % agent_label)
-        return _retrieval_cache[cache_key]
+        cached = _retrieval_cache[cache_key]
+        return cached if return_sources else (cached[0], cached[1])
 
     cfg = config.rag
     t_start = time.perf_counter()
@@ -533,7 +542,7 @@ async def retrieve_context(
     # ------------------------------------------
 
     # 格式化上下文
-    context = format_context(chunks, max_tokens=cfg.context_max_tokens)
+    context, sources = format_context_with_sources(chunks, max_tokens=cfg.context_max_tokens)
     retrieved_texts = [c.text for c in chunks]
 
     retrieval_ms = (time.perf_counter() - t_start) * 1000
@@ -565,5 +574,37 @@ async def retrieve_context(
     except Exception:
         pass
 
-    _retrieval_cache[cache_key] = (context, retrieved_texts)
-    return context, retrieved_texts
+    _retrieval_cache[cache_key] = (context, retrieved_texts, sources)
+    return (context, retrieved_texts, sources) if return_sources else (context, retrieved_texts)
+
+
+def format_reference_list(sources: list) -> str:
+    """将 CitationSource 列表渲染为文末「参考资料」清单（Markdown）。
+
+    与 video_search.inject_video_citations 的视频参考区风格一致，由系统在
+    生成内容后程序化追加，编号与正文 [n] 标记严格对齐——来源信息来自真实
+    检索结果而非 LLM 复述，杜绝悬空编号与来源编造。
+
+    格式：
+        ---
+
+        **参考资料**
+
+        [1] 动手学深度学习.pdf · 第 6 页 · 6.2 卷积层
+        [2] notes.md · 第一章
+
+    :param sources: format_context_with_sources / retrieve_context(return_sources=True) 返回的列表
+    :return:        Markdown 字符串；sources 为空时返回空串（不追加任何内容）
+    """
+    if not sources:
+        return ""
+
+    lines = ["\n\n---\n\n**参考资料**\n"]
+    for s in sources:
+        parts = [s.source]
+        if s.page:
+            parts.append(f"第 {s.page} 页")
+        if s.section:
+            parts.append(s.section)
+        lines.append(f"[{s.index}] " + " · ".join(parts))
+    return "\n".join(lines) + "\n"

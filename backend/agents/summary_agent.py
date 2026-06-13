@@ -9,7 +9,7 @@ from loguru import logger
 
 from backend.config import config as app_config
 from backend.models.schemas import AgentState
-from backend.agents.utils import resolve_kp_name, retrieve_context
+from backend.agents.utils import resolve_kp_name, retrieve_context, format_reference_list
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
 
@@ -30,8 +30,10 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
     kp_name = await resolve_kp_name(state, config)
     logger.info("[SummaryAgent] kp_name=%s", kp_name)
 
-    # 检索相关文档
-    context, retrieved_texts = await retrieve_context(state, "SummaryAgent", config)
+    # 检索相关文档（return_sources：拿到真实来源清单用于文末追加参考资料）
+    context, retrieved_texts, sources = await retrieve_context(
+        state, "SummaryAgent", config, return_sources=True
+    )
 
     # 更新 retrieved_docs
     state = state.model_copy(update={"retrieved_docs": retrieved_texts})
@@ -45,6 +47,8 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
             temperature=app_config.agents.summary.temperature,
             max_tokens=app_config.agents.summary.max_tokens,
         )
+        # 后处理：追加真实来源清单（编号与正文 [n] 对齐）
+        draft += format_reference_list(sources)
         logger.info("[SummaryAgent] 总结生成成功，draft_len=%d", len(draft))
         state = state.model_copy(update={"draft_content": draft})
     except Exception as e:
