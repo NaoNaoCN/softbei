@@ -106,7 +106,13 @@ def safe_json_loads(raw: str) -> dict | list:
     except json.JSONDecodeError:
         pass
 
-    # 策略 3：从文本中提取 JSON 块（处理 LLM 在 JSON 前后加解释文字的情况）
+    # 策略 3：处理多个并排的顶层对象（LLM 把 JSON 数组写成了 NDJSON / 对象堆叠，
+    # 缺少 [ ] 包裹和逗号分隔）。须在"提取首个 JSON 块"之前尝试，否则只会拿到第一个对象。
+    multi = _decode_concatenated_objects(cleaned)
+    if multi is not None:
+        return multi
+
+    # 策略 4：从文本中提取 JSON 块（处理 LLM 在 JSON 前后加解释文字的情况）
     extracted = _extract_json_block(cleaned)
     if extracted:
         try:
@@ -124,7 +130,7 @@ def safe_json_loads(raw: str) -> dict | list:
         except json.JSONDecodeError:
             pass
 
-    # 策略 4：修复被截断的 JSON（补全未闭合的括号和引号）
+    # 策略 5：修复被截断的 JSON（补全未闭合的括号和引号）
     repaired = _repair_truncated_json(cleaned)
     if repaired != cleaned:
         try:
@@ -142,7 +148,7 @@ def safe_json_loads(raw: str) -> dict | list:
         except json.JSONDecodeError:
             pass
 
-    # 策略 5：尝试用 ast.literal_eval（对 Python 风格的 dict/list 字面量有效）
+    # 策略 6：尝试用 ast.literal_eval（对 Python 风格的 dict/list 字面量有效）
     try:
         import ast
         return ast.literal_eval(cleaned)
@@ -160,7 +166,34 @@ def safe_json_loads(raw: str) -> dict | list:
     )
 
 
-def _repair_truncated_json(text: str) -> str:
+def _decode_concatenated_objects(text: str) -> list | None:
+    """解析多个并排的顶层 JSON 值（NDJSON / 对象堆叠）。
+
+    处理 LLM 把数组写成多个独立对象、缺少 [ ] 与逗号分隔的情况，例如：
+        {...}\n{...}\n{...}
+    用 json.JSONDecoder.raw_decode 从每个非空白位置增量解析，拼成数组返回。
+    成功解析出 ≥2 个值才视为命中（单个值已由前面的策略覆盖）。
+    """
+    decoder = json.JSONDecoder()
+    items: list = []
+    idx = 0
+    n = len(text)
+    while idx < n:
+        # 跳过对象之间的空白及可能存在的分隔逗号
+        while idx < n and text[idx] in " \t\r\n,":
+            idx += 1
+        if idx >= n:
+            break
+        try:
+            obj, end = decoder.raw_decode(text, idx)
+        except json.JSONDecodeError:
+            return None
+        items.append(obj)
+        idx = end
+    return items if len(items) >= 2 else None
+
+
+
     """尝试修复被 max_tokens 截断的 JSON。
 
     策略：统计未闭合的括号，在末尾补上缺失的闭合符号。

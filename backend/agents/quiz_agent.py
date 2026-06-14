@@ -11,7 +11,7 @@ from loguru import logger
 
 from backend.config import config as app_config
 from backend.models.schemas import AgentState, QuestionType
-from backend.agents.utils import resolve_kp_name, retrieve_context, parse_json_llm_response
+from backend.agents.utils import resolve_kp_name, retrieve_context, safe_json_loads
 from backend.services.llm import chat_completion
 from langchain_core.runnables import RunnableConfig
 
@@ -90,9 +90,11 @@ async def run(state: AgentState, config: RunnableConfig = None) -> AgentState:
             max_tokens=app_config.agents.quiz.max_tokens,
         )
 
-        # 解析 JSON
-        cleaned = parse_json_llm_response(raw)
-        questions = json.loads(cleaned)
+        # 解析 JSON（safe_json_loads 容错：代码块/LaTeX/截断/并排对象）
+        questions = safe_json_loads(raw)
+        if isinstance(questions, dict):
+            # LLM 偶尔只返回单个题目对象，包成数组
+            questions = [questions]
         logger.info("[QuizAgent] 题目生成成功，共 %d 题" % len(questions))
         draft = json.dumps(questions, ensure_ascii=False)
         state = state.model_copy(update={"draft_content": draft})
