@@ -121,6 +121,16 @@ export async function getUser(user_id) {
     return resp?.json();
 }
 
+// 注销（硬删除）账号：需提供用户名 + 密码双重确认。成功后由调用方清理本地登录态。
+export async function deleteAccount(user_id, username, password) {
+    const resp = await apiFetch(`/user/account?user_id=${encodeURIComponent(user_id)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+    });
+    return resp?.json();
+}
+
 // ===========================================================
 // 资源
 // ===========================================================

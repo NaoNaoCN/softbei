@@ -87,6 +87,12 @@ class UserUpdate(BaseModel):
     email: str | None = Field(default=None, max_length=256)
 
 
+class AccountDeleteIn(BaseModel):
+    """注销账号请求体：要求同时提供用户名与密码进行双重确认。"""
+    username: str = Field(..., min_length=2, max_length=64)
+    password: str = Field(..., min_length=6)
+
+
 class TokenOut(BaseModel):
     """
     这是登录成功后返回给前端的响应体。

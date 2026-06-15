@@ -94,6 +94,7 @@ from backend.models.schemas import (
     StudentProfileOut,
     TokenOut,
     UserUpdate,
+    AccountDeleteIn,
     UserCreate,
     UserOut,
     KGNodeType,
@@ -725,6 +726,44 @@ async def update_account(
     # 重新查询获取更新后的完整 User 对象以匹配 UserOut schema
     updated_user = await select_one(db, User, filters={"id": user_id})
     return updated_user
+
+
+@app.delete("/user/account", tags=["user"])
+async def delete_account(
+    user_id: int,
+    body: AccountDeleteIn,
+    db: AsyncSession = Depends(get_session),
+):
+    """
+    注销（硬删除）当前账号及其全部关联数据。
+
+    安全校验：要求请求体携带用户名 + 密码进行双重确认，且用户名必须与
+    user_id 对应账号一致，密码校验通过后方可执行。该操作不可逆。
+    """
+    from backend.db.crud import select_one, delete_user_cascade
+
+    user = await select_one(db, User, filters={"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    # 双重确认：用户名必须匹配，密码必须正确
+    if body.username != user.username:
+        raise HTTPException(status_code=400, detail="用户名不匹配，无法注销")
+    if not verify_password(body.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="密码错误，无法注销")
+
+    try:
+        ok = await delete_user_cascade(db, user_id)
+    except Exception as e:
+        await db.rollback()
+        logger.exception("[Account] 注销账号失败 user_id={}: {}", user_id, e)
+        raise HTTPException(status_code=500, detail="注销失败，请稍后重试")
+
+    if not ok:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    logger.success("[Account] 账号已注销 user_id={}, username={}", user_id, user.username)
+    return {"success": True, "message": "账号已注销"}
 
 
 @app.get("/user", response_model=UserOut, tags=["user"])
