@@ -72,7 +72,7 @@ function createAssistantDOM() {
     fab.className = 'ai-bot-fab';
     fab.id = 'aiBotFab';
     fab.innerHTML = `
-        <span class="bot-avatar">🤖</span>
+        <span class="bot-avatar"><i data-lucide="atom" style="width:30px;height:30px;color:#fff;"></i></span>
         <span class="bot-close">✕</span>
         <span class="bot-badge" id="aiBotBadge"></span>
     `;
@@ -88,7 +88,7 @@ function createAssistantDOM() {
     panel.id = 'aiBotPanel';
     panel.innerHTML = `
         <div class="ai-panel-header">
-            <span class="panel-bot-icon">🤖</span>
+            <span class="panel-bot-icon"><i data-lucide="atom" style="width:22px;height:22px;"></i></span>
             <div>
                 <div class="panel-title">学习小助手</div>
                 <div class="panel-subtitle">你的专属学习伴侣</div>
@@ -380,12 +380,7 @@ async function renderPlanTab() {
         html += '</div></div>';
     }
 
-    // 快捷入口
-    html += `<div style="display:flex;gap:6px;margin-top:6px;">
-        <a href="generate.html" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;border-radius:10px;background:#FFF5EC;font-size:10.5px;font-weight:500;color:#C77B3C;text-decoration:none;"><i data-lucide="wand-2" style="width:14px;height:14px;"></i>生成资源</a>
-        <a href="evaluate.html" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;border-radius:10px;background:#FFF5EC;font-size:10.5px;font-weight:500;color:#C77B3C;text-decoration:none;"><i data-lucide="clipboard-check" style="width:14px;height:14px;"></i>学习评估</a>
-        <a href="chat.html" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;border-radius:10px;background:#FFF5EC;font-size:10.5px;font-weight:500;color:#C77B3C;text-decoration:none;"><i data-lucide="sparkles" style="width:14px;height:14px;"></i>AI 对话</a>
-    </div>`;
+
 
     container.innerHTML = html;
     if (typeof lucide !== 'undefined') lucide.createIcons();
