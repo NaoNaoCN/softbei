@@ -72,10 +72,20 @@ function createAssistantDOM() {
     fab.className = 'ai-bot-fab';
     fab.id = 'aiBotFab';
     fab.innerHTML = `
-        <span class="bot-avatar"><i data-lucide="atom" style="width:30px;height:30px;color:#fff;"></i></span>
+        <span class="xiaozhi-eye" aria-hidden="true">
+            <span class="xz-disc"></span>
+            <span class="xz-gear"></span>
+            <span class="xz-ring-white"></span>
+            <span class="xz-core">
+                <span class="xz-pupil"></span>
+            </span>
+            <span class="xz-glint"></span>
+            <span class="xz-scan"></span>
+        </span>
         <span class="bot-close">✕</span>
         <span class="bot-badge" id="aiBotBadge"></span>
     `;
+    fab.setAttribute('aria-label', '小知 · AI 学习助手');
 
     // 气泡
     const bubble = document.createElement('div');
@@ -88,7 +98,7 @@ function createAssistantDOM() {
     panel.id = 'aiBotPanel';
     panel.innerHTML = `
         <div class="ai-panel-header">
-            <span class="panel-bot-icon"><i data-lucide="atom" style="width:22px;height:22px;"></i></span>
+            <span class="panel-bot-icon"><span class="xiaozhi-eye xz-mini" aria-hidden="true"><span class="xz-disc"></span><span class="xz-gear"></span><span class="xz-ring-white"></span><span class="xz-core"><span class="xz-pupil"></span></span><span class="xz-glint"></span><span class="xz-scan"></span></span></span>
             <div>
                 <div class="panel-title">学习小助手</div>
                 <div class="panel-subtitle">你的专属学习伴侣</div>
