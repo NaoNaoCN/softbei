@@ -72,16 +72,7 @@ function createAssistantDOM() {
     fab.className = 'ai-bot-fab';
     fab.id = 'aiBotFab';
     fab.innerHTML = `
-        <span class="xiaozhi-eye" aria-hidden="true">
-            <span class="xz-disc"></span>
-            <span class="xz-gear"></span>
-            <span class="xz-ring-white"></span>
-            <span class="xz-core">
-                <span class="xz-pupil"></span>
-            </span>
-            <span class="xz-glint"></span>
-            <span class="xz-scan"></span>
-        </span>
+        <img class="xiaozhi-eye" src="/app/assets/xiaozhi-mascot.svg" alt="" aria-hidden="true" draggable="false">
         <span class="bot-close">✕</span>
         <span class="bot-badge" id="aiBotBadge"></span>
     `;
@@ -98,7 +89,7 @@ function createAssistantDOM() {
     panel.id = 'aiBotPanel';
     panel.innerHTML = `
         <div class="ai-panel-header">
-            <span class="panel-bot-icon"><span class="xiaozhi-eye xz-mini" aria-hidden="true"><span class="xz-disc"></span><span class="xz-gear"></span><span class="xz-ring-white"></span><span class="xz-core"><span class="xz-pupil"></span></span><span class="xz-glint"></span><span class="xz-scan"></span></span></span>
+            <span class="panel-bot-icon"><img class="xiaozhi-eye xz-mini" src="/app/assets/xiaozhi-mascot.svg" alt="" aria-hidden="true" draggable="false"></span>
             <div>
                 <div class="panel-title">学习小助手</div>
                 <div class="panel-subtitle">你的专属学习伴侣</div>
