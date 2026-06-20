@@ -106,7 +106,7 @@ agents:
       - **居中优先**：主体图形/文字以 `u.cx`、`u.cy` 为锚点对称布局，不要堆在左上角。多个元素时围绕中心水平或垂直均匀分布。
       - **留白**：内容不要贴边；横向留 ≥60px 边距，纵向在 `u.safeTop` 与 `u.safeBottom` 之间。
       - **配色**：只用 `u.palette` 里的颜色；主体用 primary，强调用 accent，文字用 text，辅助线用 muted。
-      - **设色用 u.fill/u.stroke**，不要直接 `p.fill('某字符串')`，避免非法颜色崩溃。
+      - **设色一律走 `u.fill / u.stroke / u.lerpColor`**（详见下方 NEVER #5、#6）；运行时已自动绘制背景，禁止自己写 `p.background(...)`。
 
       # Rules（优先级从高到低）
 
@@ -115,14 +115,16 @@ agents:
       2. **禁止凭记忆补全**：参考资料未涵盖的步骤不要自行脑补。若某环节资料缺失，宁可省略也不编造。
       3. **禁止跳过空引用检查**：如果参考资料为"（暂无参考资料）"，必须仅生成一个场景，用 `u.label` 显示"⚠️ 知识库暂无此知识点的参考资料，以下动画基于通用知识，仅供参考"，再做通用演示。
       4. **禁止使用 anim-runtime 未提供的 API**：不得调用 `loadImage`、网络请求、`localStorage`、`fetch`、`window` 等；不得自定义 `setup/draw`。违反会导致动画在沙箱中报错黑屏。
+      5. **禁止在场景 draw 中直接调用 p5 的颜色 API**：不得使用 `p.fill(...)`、`p.stroke(...)`、`p.background(...)`、`p.color(...)`、`p.lerpColor(...)`，必须改用 `u.fill / u.stroke / u.lerpColor`（背景由运行时自动绘制，无需自己 background）。原因：`u.*` 内部对非法颜色组合做了 try/catch 降级，直接调 `p.*` 会让单次配色错误冒泡到运行时，整段动画崩溃黑屏并显示"绘制异常"。
+      6. **禁止把十六进制颜色串与 alpha 作为两个参数同时传给颜色 API**：例如 `p.stroke("#1F2937", 120)`、`u.fill("#FFFFFF", 200)`、`p.fill(palette.primary, 255*e)` 都不允许（`palette.text/primary/accent/...` 都是 `#xxxxxx` 串）。原因：p5.js 的颜色解析器不支持 hex 串 + alpha 的双参组合，会直接抛出 `[object Arguments] is not a valid color representation` 并中断当帧。需要透明度时，必须改写为以下任一形式：① 三/四参 RGBA：`u.fill(31, 41, 55, 255*e)`；② 颜色对象 + setAlpha：`const c = p.color(palette.text); c.setAlpha(255*e); u.fill(c);`；③ 用 `u.lerpColor(palette.bg, palette.text, e)` 让颜色从背景过渡出现，等效淡入。
 
       ## IMPORTANT — 必须做到
-      5. **分步教学**：把知识点拆成 3-6 个递进场景（scenes），每个场景聚焦一个要点，名称用中文短语。这是动画教学价值的核心。
-      6. **节奏充足**：每个场景 `duration` 设为 4500-6000 毫秒，让学生有时间看清。不要为了"紧凑"把时长压到 3000 以下。
-      7. **纯函数绘制**：每个 `draw` 必须仅依据传入的 `t` 计算画面，用 `u.ease`/`u.lerp` 表现过渡。禁止依赖外部可变变量累积状态。
-      8. **居中布局**：主体内容以 `u.cx`/`u.cy` 为锚点，遵守上面的布局规范。
-      9. **公式用 drawLatex**：涉及数学表达式时用 `u.drawLatex(tex, x, y, size)` 渲染，不要用 `p.text` 拼公式。
-      10. **补充标注**：若依据常识补充了参考资料没有的可视化细节，在 `name` 中以「💡」前缀提示。
+      7. **分步教学**：把知识点拆成 3-6 个递进场景（scenes），每个场景聚焦一个要点，名称用中文短语。这是动画教学价值的核心。
+      8. **节奏充足**：每个场景 `duration` 设为 4500-6000 毫秒，让学生有时间看清。不要为了"紧凑"把时长压到 3000 以下。
+      9. **纯函数绘制**：每个 `draw` 必须仅依据传入的 `t` 计算画面，用 `u.ease`/`u.lerp` 表现过渡。禁止依赖外部可变变量累积状态。
+      10. **居中布局**：主体内容以 `u.cx`/`u.cy` 为锚点，遵守上面的布局规范。
+      11. **公式用 drawLatex**：涉及数学表达式时用 `u.drawLatex(tex, x, y, size)` 渲染，不要用 `p.text` 拼公式。
+      12. **补充标注**：若依据常识补充了参考资料没有的可视化细节，在 `name` 中以「💡」前缀提示。
 
       # Pre-generation Check（执行但不输出）
       在心里回答：
