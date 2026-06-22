@@ -1048,18 +1048,26 @@
         let resizeHandler = null;
         let learnedKpIds = new Set();
         let lastFilteredNodes = [];
+        let lastFilteredEdges = [];
 
         async function init() {
             initSidebar('pathway');
 
         // === KG 全屏模式 ===
+        function rerenderForceForResize() {
+            if (chartInstance && lastFilteredNodes.length) {
+                chartInstance.resize();
+                forceRender(lastFilteredNodes, lastFilteredEdges);
+            }
+        }
         window.enterKgFullscreen = function() {
             document.body.classList.add('kg-fullscreen');
-            if (chartInstance) chartInstance.resize();
+            // Wait for layout to settle before measuring new container size.
+            setTimeout(rerenderForceForResize, 50);
         };
         window.exitKgFullscreen = function() {
             document.body.classList.remove('kg-fullscreen');
-            if (chartInstance) chartInstance.resize();
+            setTimeout(rerenderForceForResize, 50);
         };
 
 
@@ -1227,6 +1235,7 @@
 
             forceRender(filteredNodes, filteredEdges);
             lastFilteredNodes = filteredNodes;
+            lastFilteredEdges = filteredEdges;
             renderNodeGrid(filteredNodes);
             updateLearnedProgress(filteredNodes);
         }
@@ -1456,7 +1465,17 @@
                 chartInstance.off('graphRoam');
             } else {
                 chartInstance = echarts.init(chartDiv);
-                resizeHandler = () => chartInstance && chartInstance.resize();
+                let resizeDebounce;
+                resizeHandler = () => {
+                    if (!chartInstance) return;
+                    chartInstance.resize();
+                    clearTimeout(resizeDebounce);
+                    resizeDebounce = setTimeout(() => {
+                        if (lastFilteredNodes.length) {
+                            forceRender(lastFilteredNodes, lastFilteredEdges);
+                        }
+                    }, 200);
+                };
                 window.addEventListener('resize', resizeHandler);
             }
         }
@@ -1581,10 +1600,10 @@
             const nCount = nodes.length;
             // Force params for tight clusters: low repulsion, moderate gravity
             let repulsion, gravity;
-            if (nCount < 50)      { repulsion = 180; gravity = 0.12; }
-            else if (nCount < 150) { repulsion = 280; gravity = 0.08; }
-            else if (nCount < 300) { repulsion = 400; gravity = 0.05; }
-            else                  { repulsion = 600; gravity = 0.03; }
+            if (nCount < 50)      { repulsion = 150; gravity = 0.12; }
+            else if (nCount < 150) { repulsion = 240; gravity = 0.08; }
+            else if (nCount < 300) { repulsion = 350; gravity = 0.05; }
+            else                  { repulsion = 500; gravity = 0.03; }
 
             const seriesBase = {
                 type: 'graph', roam: true, draggable: true,
@@ -1619,7 +1638,7 @@
                 series: [{
                     ...seriesBase,
                     layout: 'force',
-                    force: { repulsion, gravity, edgeLength: [40, 120], layoutAnimation: true, friction: 0.5 },
+                    force: { repulsion, gravity, edgeLength: [40, 120], layoutAnimation: true, friction: 0.75 },
                     data: chartNodes,
                     links: chartEdges,
                 }]

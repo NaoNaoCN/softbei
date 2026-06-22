@@ -122,7 +122,7 @@ function buildTopbar(current) {
         <header class="topbar">
             <a href="index.html" class="topbar-brand">
                 <span class="topbar-brand-mark"><i data-lucide="atom"></i></span>
-                <span>智学实验室</span>
+                <span>智学工坊</span>
             </a>
             <nav class="topbar-nav">${links}</nav>
         </header>`;

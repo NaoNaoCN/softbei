@@ -9,58 +9,36 @@
   body { margin:0; min-height:100vh; background:#FBF6F0; font-family:system-ui,sans-serif;
          display:flex; flex-direction:column; align-items:center; justify-content:center; gap:40px; }
   h1 { color:#A8652E; font-size:18px; font-weight:600; }
-  .row { display:flex; align-items:center; gap:48px; }
+  .row { display:flex; align-items:center; gap:64px; }
   .demo { display:flex; flex-direction:column; align-items:center; gap:12px; }
   .demo .label { font-size:12px; color:#6B7280; }
   /* 大尺寸展示 */
-  .big .xiaozhi-eye { width:180px; height:180px; border-radius:50%; overflow:hidden;
-                      box-shadow:0 8px 40px rgba(255,138,61,0.4); position:relative; }
+  .big .xiaozhi-eye { width:180px; height:180px;
+                      filter: drop-shadow(0 8px 40px rgba(216,152,86,0.45)); }
   /* 让预览里的 fab 可见（线上由 JS 注入） */
-  .fab-demo { position:relative; }
-  .fab-demo .ai-bot-fab { position:relative; bottom:auto; right:auto; }
-  .tip { font-size:12px; color:#9CA3AF; max-width:520px; text-align:center; line-height:1.7; }
+  .fab-demo .ai-bot-fab { position:relative; bottom:auto; right:auto; animation:none; }
+  .tip { font-size:12px; color:#9CA3AF; max-width:560px; text-align:center; line-height:1.7; }
 </style>
 </head>
 <body>
-  <h1>小知 · 同心圆光环之眼（纯 CSS · 零依赖）</h1>
+  <h1>小知 · 同心圆光环之眼（SVG 动画 · 焦糖色系）</h1>
   <div class="row">
     <div class="demo big">
-      <span class="xiaozhi-eye" aria-hidden="true">
-        <span class="xz-disc"></span>
-        <span class="xz-gear"></span>
-        <span class="xz-ring-white"></span>
-        <span class="xz-core"><span class="xz-pupil"></span></span>
-        <span class="xz-glint"></span>
-        <span class="xz-scan"></span>
-      </span>
+      <img class="xiaozhi-eye" src="assets/xiaozhi-mascot.svg" alt="小知" draggable="false">
       <span class="label">180px 放大预览（看细节）</span>
     </div>
     <div class="demo fab-demo">
       <button class="ai-bot-fab">
-        <span class="xiaozhi-eye" aria-hidden="true">
-          <span class="xz-disc"></span>
-          <span class="xz-gear"></span>
-          <span class="xz-ring-white"></span>
-          <span class="xz-core"><span class="xz-pupil"></span></span>
-          <span class="xz-glint"></span>
-          <span class="xz-scan"></span>
-        </span>
+        <img class="xiaozhi-eye" src="assets/xiaozhi-mascot.svg" alt="" aria-hidden="true" draggable="false">
       </button>
       <span class="label">62px 实际悬浮球（hover 试试）</span>
     </div>
     <div class="demo">
-      <span class="xiaozhi-eye xz-mini" aria-hidden="true" style="width:26px;height:26px;">
-        <span class="xz-disc"></span>
-        <span class="xz-gear"></span>
-        <span class="xz-ring-white"></span>
-        <span class="xz-core"><span class="xz-pupil"></span></span>
-        <span class="xz-glint"></span>
-        <span class="xz-scan"></span>
-      </span>
+      <img class="xiaozhi-eye xz-mini" src="assets/xiaozhi-mascot.svg" alt="" aria-hidden="true" draggable="false">
       <span class="label">26px 头部 mini</span>
     </div>
   </div>
-  <p class="tip">结构：橙色外圈(亮缘) → 4棱角齿轮层(旋转+缩放呼吸) → 奶白环 → 内圈橙 → 黑瞳孔 → 右下高光球。<br>
-     齿轮层 9s 旋转一圈并轻微缩放，4 个圆角从白环外缘探出形成动态棱角；内圈独立眨眼(外圈不动)；扫描线噪点游动。hover 时齿轮加速、高光球放大。</p>
+  <p class="tip">结构：外层光晕呼吸 → 焦糖外盘 → 咖啡色四角星芒(12s 自转) → 奶油色眼眶 → 棕色瞳孔(4.5s 缩放) → 右下高光 → 顶部眼睑(5.4s 一次眨眼)。<br>
+     SVG 内嵌 CSS 动画，零依赖；尊重 prefers-reduced-motion。</p>
 </body>
 </html>

@@ -55,7 +55,7 @@ class EmailSender:
         if not from_addr:
             logger.warning("[Email] From 地址解析失败: raw={}", self._from)
             from_addr = self._from
-        msg_from = formataddr(("智学实验室", from_addr))
+        msg_from = formataddr(("智学工坊", from_addr))
 
         msg = MIMEMultipart("alternative")
         msg["From"] = msg_from
