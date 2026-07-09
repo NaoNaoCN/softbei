@@ -430,8 +430,10 @@
                 moreEl.style.display = 'none';
             }
             try {
-                const records = await getLearningRecords(userId, { limit: _actPageSize + 1, skip: _actPage * _actPageSize }) || [];
-                _actHasMore = records.length > _actPageSize;
+                const raw = await getLearningRecords(userId, { limit: _actPageSize + 1, skip: _actPage * _actPageSize }) || [];
+                // 过滤掉无知识点的页面停留（通用页面如主页/对话/资源库的停留无意义，会显示为「未命名」）
+                const records = raw.filter(r => !(r.action === 'stay' && !r.kp_id));
+                _actHasMore = raw.length > _actPageSize;
                 const batch = _actHasMore ? records.slice(0, _actPageSize) : records;
                 if (reset) _activityData = batch;
                 else _activityData = _activityData.concat(batch);
