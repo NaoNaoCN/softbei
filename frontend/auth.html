@@ -3,152 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 / 注册 · 智学实验室</title>
+    <meta name="view-transition" content="same-origin">
+    <title>登录 / 注册 · 智学工坊</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <script src="https://unpkg.com/lucide@0.460.0"></script>
-    <link rel="stylesheet" href="./assets/aurora.css">
+    <link rel="stylesheet" href="./assets/styles-v4.css">
     <style>
         body { display: flex; align-items: center; justify-content: center; padding: 32px; }
 
         .auth-card {
-            position: relative;
-            z-index: 1;
-            width: 440px;
-            max-width: 100%;
+            width: 420px; max-width: 100%;
+            background: #fff; border-radius: var(--r-lg);
+            box-shadow: var(--shadow-lg); border: 1px solid var(--divider);
+            padding: 40px;
         }
-        .auth-card .glass-body { padding: 40px; }
 
         .auth-logo { text-align: center; margin-bottom: 28px; }
         .auth-mark {
-            width: 60px; height: 60px; margin: 0 auto 18px;
-            border-radius: 16px;
-            background: var(--neon);
+            width: 56px; height: 56px; margin: 0 auto 16px;
+            border-radius: 14px;
+            background: var(--accent);
             display: grid; place-items: center;
             color: #fff;
-            box-shadow: var(--shadow-neon), inset 0 0 14px rgba(255,255,255,0.35);
-            position: relative;
         }
-        .auth-mark i { width: 28px; height: 28px; }
-        .auth-mark::after {
-            content: ''; position: absolute; inset: -6px;
-            border-radius: 50%;
-            border: 1.5px solid rgba(199, 123, 60, 0.45);
-            animation: ripple 2.6s var(--ease) infinite;
-        }
-        .auth-logo h1 { font-family: var(--display); font-size: 24px; font-weight: 800; letter-spacing: -0.02em; color: var(--text-1); }
-        .auth-logo p { font-size: 13.5px; color: var(--text-2); margin-top: 6px; }
+        .auth-mark i { width: 26px; height: 26px; }
+        .auth-logo h1 { font-family: var(--display); font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+        .auth-logo p { font-size: 13px; color: var(--text-3); margin-top: 6px; }
 
-        .auth-tabs {
-            display: flex;
-            gap: 4px;
-            padding: 5px;
-            background: rgba(255, 255, 255, 0.45);
-            border: 1px solid var(--border-glass);
-            border-radius: var(--r-full);
-            margin-bottom: 24px;
-        }
-        .auth-tab {
-            flex: 1;
-            padding: 10px;
-            text-align: center;
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--text-2);
-            cursor: pointer;
-            border-radius: var(--r-full);
-            transition: all 0.25s var(--ease);
-            user-select: none;
-        }
-        .auth-tab:hover { color: var(--text-1); }
-        .auth-tab.active {
-            color: #fff;
-            background: var(--neon);
-            box-shadow: 0 4px 14px rgba(199, 123, 60, 0.35);
-        }
 
         .form-group { margin-bottom: 16px; }
-        .form-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-2); margin-bottom: 7px; }
-        .form-input {
-            width: 100%;
-            padding: 13px 15px;
-            background: rgba(255, 255, 255, 0.7);
-            border: 1px solid var(--border-glass);
-            border-radius: var(--r-md);
-            font-size: 14px;
-            font-family: inherit;
-            color: var(--text-1);
-            outline: none;
-            transition: all 0.25s var(--ease);
-        }
-        .form-input::placeholder { color: var(--text-3); }
-        .form-input:focus {
-            background: #fff;
-            border-color: var(--indigo);
-            box-shadow: 0 0 0 3px rgba(199, 123, 60, 0.16);
-        }
+        .form-label { display: block; font-size: 13px; font-weight: 500; color: var(--text-2); margin-bottom: 6px; }
 
         .btn-submit {
-            width: 100%;
-            height: 48px;
-            margin-top: 6px;
-            background: var(--neon);
-            color: #fff;
-            border: none;
-            border-radius: var(--r-md);
-            font-size: 15px;
-            font-weight: 700;
-            font-family: inherit;
-            cursor: pointer;
-            transition: transform 0.25s var(--spring), box-shadow 0.3s var(--ease);
-            box-shadow: 0 6px 20px rgba(199, 123, 60, 0.32);
+            width: 100%; height: 46px; margin-top: 8px;
+            background: var(--accent); color: #fff; border: none;
+            border-radius: var(--r-md); font-size: 15px; font-weight: 600;
+            font-family: inherit; cursor: pointer;
+            transition: all 0.2s;
         }
-        .btn-submit:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(199, 123, 60, 0.45); }
+        .btn-submit:hover { background: var(--accent-hover); box-shadow: 0 4px 14px rgba(199,123,60,0.28); }
         .btn-submit:active { transform: scale(0.97); }
-        .btn-submit:disabled { background: var(--text-4); box-shadow: none; cursor: not-allowed; transform: none; }
+        .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
         .alert {
-            padding: 12px 15px;
-            border-radius: var(--r-md);
-            font-size: 13.5px;
-            margin-bottom: 18px;
-            display: none;
-            border: 1px solid;
+            padding: 12px 15px; border-radius: var(--r-sm);
+            font-size: 13px; margin-bottom: 18px; display: none; border: 1px solid;
         }
-        .alert-success { background: rgba(110, 148, 102, 0.12); border-color: rgba(110, 148, 102, 0.35); color: #4F6F47; }
-        .alert-danger  { background: rgba(201, 96, 90, 0.12);  border-color: rgba(201, 96, 90, 0.35);  color: #A8423C; }
+        .alert-success { background: var(--success-soft); border-color: rgba(110,148,102,0.30); color: #4F6F47; }
+        .alert-danger  { background: var(--danger-soft);  border-color: rgba(201,96,90,0.30);  color: #A8423C; }
 
         .spinner {
-            display: inline-block;
-            width: 16px; height: 16px;
-            border: 2px solid rgba(255,255,255,0.4);
-            border-top-color: #fff;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            vertical-align: middle;
-            margin-right: 6px;
+            display: inline-block; width: 16px; height: 16px;
+            border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff;
+            border-radius: 50%; animation: spin 0.8s linear infinite;
+            vertical-align: middle; margin-right: 6px;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-    <div class="aurora-bg"></div>
-    <div class="aurora-orb"></div>
-    <div class="aurora-grid"></div>
 
-    <div class="auth-card glass">
-      <div class="glass-body">
+    <div class="auth-card">
         <div class="auth-logo">
             <div class="auth-mark"><i data-lucide="atom"></i></div>
-            <h1>智学实验室</h1>
+            <h1>智学工坊</h1>
             <p>个性化资源生成与学习多智能体系统</p>
         </div>
 
         <div id="alert-box" class="alert"></div>
 
-        <div class="auth-tabs">
-            <div class="auth-tab active" id="tab-login" onclick="switchTab('login')">登录</div>
-            <div class="auth-tab" id="tab-register" onclick="switchTab('register')">注册</div>
+        <div class="tab-bar">
+            <button class="tab-btn active" id="tab-login" onclick="switchTab('login')">登录</button>
+            <button class="tab-btn" id="tab-register" onclick="switchTab('register')">注册</button>
         </div>
 
         <div id="login-form">
@@ -161,8 +88,8 @@
                 <input type="password" id="login-password" class="form-input" placeholder="请输入密码" autocomplete="current-password">
             </div>
             <button class="btn-submit" id="login-btn" onclick="handleLogin()">登录</button>
-            <div style="text-align: center; margin-top: 16px;">
-                <a href="forgot-password.html" style="font-size: 13px; color: var(--neon); text-decoration: none;">忘记密码？</a>
+            <div style="text-align: center; margin-top: 14px;">
+                <a href="forgot-password.html" style="font-size:13px; color:var(--accent);">忘记密码？</a>
             </div>
         </div>
 
@@ -185,19 +112,15 @@
             </div>
             <button class="btn-submit" id="register-btn" onclick="handleRegister()">注册</button>
         </div>
-      </div>
     </div>
 
     <script type="module">
         import { authLogin, authRegister, isLoggedIn } from './assets/api.js';
 
-        // 如果已登录，直接跳转首页
-        if (isLoggedIn()) {
-            window.location.href = 'index.html';
-        }
+        if (isLoggedIn()) { window.location.href = 'index.html'; }
 
         function switchTab(tab) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
             document.getElementById('tab-' + tab).classList.add('active');
             document.getElementById('login-form').style.display = tab === 'login' ? 'block' : 'none';
             document.getElementById('register-form').style.display = tab === 'register' ? 'block' : 'none';
@@ -211,27 +134,18 @@
             box.style.display = 'block';
         }
 
-        function hideAlert() {
-            document.getElementById('alert-box').style.display = 'none';
-        }
+        function hideAlert() { document.getElementById('alert-box').style.display = 'none'; }
 
         function setLoading(btn, loading) {
             btn.disabled = loading;
-            btn.innerHTML = loading
-                ? '<span class="spinner"></span>处理中...'
-                : (btn.id === 'login-btn' ? '登录' : '注册');
+            btn.innerHTML = loading ? '<span class="spinner"></span>处理中...' : (btn.id === 'login-btn' ? '登录' : '注册');
         }
 
         async function handleLogin() {
             const username = document.getElementById('login-username').value.trim();
             const password = document.getElementById('login-password').value;
             const btn = document.getElementById('login-btn');
-
-            if (!username || !password) {
-                showAlert('请填写用户名和密码');
-                return;
-            }
-
+            if (!username || !password) { showAlert('请填写用户名和密码'); return; }
             setLoading(btn, true);
             try {
                 const result = await authLogin(username, password);
@@ -241,11 +155,8 @@
                 } else {
                     showAlert('登录失败，请检查用户名和密码');
                 }
-            } catch (e) {
-                showAlert('网络异常，请稍后重试');
-            } finally {
-                setLoading(btn, false);
-            }
+            } catch (e) { showAlert('网络异常，请稍后重试'); }
+            finally { setLoading(btn, false); }
         }
 
         async function handleRegister() {
@@ -254,24 +165,10 @@
             const password = document.getElementById('reg-password').value;
             const passwordConfirm = document.getElementById('reg-password-confirm').value;
             const btn = document.getElementById('register-btn');
-
-            if (!username || !password) {
-                showAlert('请填写用户名和密码');
-                return;
-            }
-            if (username.length < 3 || username.length > 20) {
-                showAlert('用户名需为 3-20 个字符');
-                return;
-            }
-            if (password.length < 6) {
-                showAlert('密码至少需要 6 个字符');
-                return;
-            }
-            if (password !== passwordConfirm) {
-                showAlert('两次输入的密码不一致');
-                return;
-            }
-
+            if (!username || !password) { showAlert('请填写用户名和密码'); return; }
+            if (username.length < 3 || username.length > 20) { showAlert('用户名需为 3-20 个字符'); return; }
+            if (password.length < 6) { showAlert('密码至少需要 6 个字符'); return; }
+            if (password !== passwordConfirm) { showAlert('两次输入的密码不一致'); return; }
             setLoading(btn, true);
             try {
                 const resp = await authRegister(username, password, email || null);
@@ -284,25 +181,15 @@
                     document.getElementById('reg-password').value = '';
                     document.getElementById('reg-password-confirm').value = '';
                 } else {
-                    const errMsg = resp?.detail || '注册失败';
-                    showAlert(errMsg);
+                    showAlert(resp?.detail || '注册失败');
                 }
-            } catch (e) {
-                showAlert('网络异常，请稍后重试');
-            } finally {
-                setLoading(btn, false);
-            }
+            } catch (e) { showAlert('网络异常，请稍后重试'); }
+            finally { setLoading(btn, false); }
         }
 
-        // 回车键提交
-        document.getElementById('login-password').addEventListener('keypress', e => {
-            if (e.key === 'Enter') handleLogin();
-        });
-        document.getElementById('reg-password-confirm').addEventListener('keypress', e => {
-            if (e.key === 'Enter') handleRegister();
-        });
+        document.getElementById('login-password').addEventListener('keypress', e => { if (e.key === 'Enter') handleLogin(); });
+        document.getElementById('reg-password-confirm').addEventListener('keypress', e => { if (e.key === 'Enter') handleRegister(); });
 
-        // 暴露到全局，供 HTML onclick 调用
         window.switchTab = switchTab;
         window.handleLogin = handleLogin;
         window.handleRegister = handleRegister;

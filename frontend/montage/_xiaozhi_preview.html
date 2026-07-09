@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小知 · 同心圆光环之眼 预览</title>
+<link rel="stylesheet" href="assets/assistant.css">
+<style>
+  body { margin:0; min-height:100vh; background:#FBF6F0; font-family:system-ui,sans-serif;
+         display:flex; flex-direction:column; align-items:center; justify-content:center; gap:40px; }
+  h1 { color:#A8652E; font-size:18px; font-weight:600; }
+  .row { display:flex; align-items:center; gap:64px; }
+  .demo { display:flex; flex-direction:column; align-items:center; gap:12px; }
+  .demo .label { font-size:12px; color:#6B7280; }
+  /* 大尺寸展示 */
+  .big .xiaozhi-eye { width:180px; height:180px;
+                      filter: drop-shadow(0 8px 40px rgba(216,152,86,0.45)); }
+  /* 让预览里的 fab 可见（线上由 JS 注入） */
+  .fab-demo .ai-bot-fab { position:relative; bottom:auto; right:auto; animation:none; }
+  .tip { font-size:12px; color:#9CA3AF; max-width:560px; text-align:center; line-height:1.7; }
+</style>
+</head>
+<body>
+  <h1>小知 · 同心圆光环之眼（SVG 动画 · 焦糖色系）</h1>
+  <div class="row">
+    <div class="demo big">
+      <img class="xiaozhi-eye" src="assets/xiaozhi-mascot.svg" alt="小知" draggable="false">
+      <span class="label">180px 放大预览（看细节）</span>
+    </div>
+    <div class="demo fab-demo">
+      <button class="ai-bot-fab">
+        <img class="xiaozhi-eye" src="assets/xiaozhi-mascot.svg" alt="" aria-hidden="true" draggable="false">
+      </button>
+      <span class="label">62px 实际悬浮球（hover 试试）</span>
+    </div>
+    <div class="demo">
+      <img class="xiaozhi-eye xz-mini" src="assets/xiaozhi-mascot.svg" alt="" aria-hidden="true" draggable="false">
+      <span class="label">26px 头部 mini</span>
+    </div>
+  </div>
+  <p class="tip">结构：外层光晕呼吸 → 焦糖外盘 → 咖啡色四角星芒(12s 自转) → 奶油色眼眶 → 棕色瞳孔(4.5s 缩放) → 右下高光 → 顶部眼睑(5.4s 一次眨眼)。<br>
+     SVG 内嵌 CSS 动画，零依赖；尊重 prefers-reduced-motion。</p>
+</body>
+</html>

@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.utils import formataddr, parseaddr
 from pathlib import Path
 
 import aiosmtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from loguru import logger
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -48,8 +49,16 @@ class EmailSender:
         if not self._enabled:
             return self._save_to_file(to, subject, html)
 
+        # Extract bare email for SMTP envelope; always use project name as display name.
+        # QQ/163 mail servers reject messages with malformed From headers.
+        _, from_addr = parseaddr(self._from)
+        if not from_addr:
+            logger.warning("[Email] From 地址解析失败: raw={}", self._from)
+            from_addr = self._from
+        msg_from = formataddr(("智学工坊", from_addr))
+
         msg = MIMEMultipart("alternative")
-        msg["From"] = self._from
+        msg["From"] = msg_from
         msg["To"] = to
         msg["Subject"] = subject
         msg.attach(MIMEText(html, "html", "utf-8"))
@@ -57,12 +66,14 @@ class EmailSender:
         try:
             await aiosmtplib.send(
                 msg,
+                sender=from_addr,
                 hostname=self._host,
                 port=self._port,
                 username=self._username,
                 password=self._password,
                 use_tls=self._use_tls,
                 timeout=self._timeout,
+                local_hostname="localhost",
             )
             logger.success("[Email] 发送成功: to={}, subject={}", to, subject)
             return True
@@ -109,6 +120,14 @@ class EmailSender:
         report_data["date"] = date.today().isoformat()
         html = render_learning_report(username, report_data)
         return await self.send(to, f"[学习系统] 您的学习报告（{report_data['date']}）", html)
+
+    async def send_study_plan(self, to: str, username: str, plan_data: dict) -> bool:
+        """发送学习计划表邮件。"""
+        from backend.email.templates import render_study_plan
+
+        html = render_study_plan(username, plan_data)
+        subject = f"[学习系统] 您的学习计划表 · {plan_data.get('title', '')}"
+        return await self.send(to, subject, html)
 
 
 # 模块级单例

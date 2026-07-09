@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>小知 mascot · 动效预览</title>
+<style>
+  body {
+    margin: 0; min-height: 100vh; padding: 32px;
+    font-family: -apple-system, "Segoe UI", "PingFang SC", sans-serif;
+    background: #1a1a1a; color: #ddd;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  h1 { font-size: 18px; opacity: .7; margin: 0 0 24px; font-weight: 500; }
+  .row { display: flex; gap: 32px; align-items: flex-end; flex-wrap: wrap; justify-content: center; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .cell .label { font-size: 13px; opacity: .6; }
+  .frame {
+    background: #0e0e0e; border-radius: 24px; padding: 20px;
+    box-shadow: inset 0 0 0 1px #2a2a2a;
+  }
+  .frame.light { background: #f5f0e8; box-shadow: inset 0 0 0 1px #d8c8a8; }
+  .frame.white { background: #fff; }
+  .frame.deep  { background: linear-gradient(135deg,#1a1a2e 0%,#16213e 100%); }
+  .frame img { display: block; }
+  .toolbar { margin-top: 36px; display: flex; gap: 12px; font-size: 13px; }
+  .toolbar button {
+    background: #2a2a2a; color: #ddd; border: 1px solid #3a3a3a;
+    border-radius: 6px; padding: 6px 14px; cursor: pointer;
+  }
+  .toolbar button:hover { background: #3a3a3a; }
+  .note { margin-top: 20px; font-size: 12px; opacity: .55; max-width: 600px; text-align: center; line-height: 1.7; }
+  .note code { background:#2a2a2a; padding:1px 6px; border-radius:3px; }
+</style>
+</head>
+<body>
+  <h1>小知 mascot · 动效预览</h1>
+
+  <div class="row">
+    <div class="cell"><div class="frame"><img class="m" width="64"  height="64"></div><div class="label">64 px (FAB mini)</div></div>
+    <div class="cell"><div class="frame"><img class="m" width="120" height="120"></div><div class="label">120 px</div></div>
+    <div class="cell"><div class="frame"><img class="m" width="240" height="240"></div><div class="label">240 px (视频立绘)</div></div>
+    <div class="cell"><div class="frame"><img class="m" width="360" height="360"></div><div class="label">360 px</div></div>
+  </div>
+
+  <div class="row" style="margin-top:36px;">
+    <div class="cell"><div class="frame light"><img class="m" width="120" height="120"></div><div class="label" style="color:#aaa;">浅色背景</div></div>
+    <div class="cell"><div class="frame white"><img class="m" width="120" height="120"></div><div class="label" style="color:#aaa;">纯白</div></div>
+    <div class="cell"><div class="frame deep"><img class="m" width="120" height="120"></div><div class="label">深色渐变（视频用）</div></div>
+  </div>
+
+  <div class="toolbar">
+    <button onclick="reload()">↻ 强制重载 SVG（绕过缓存）</button>
+  </div>
+
+  <div class="note">
+    动效（沿用 figma make 原型）— 四芒星 <code>6s</code> 匀速旋转 / 眨眼三帧序列 <code>open 2.8s → half 90ms → closed 110ms → half 90ms</code>（总周期 3.09s）。<br>
+    上下浮动动效在前端 FAB 容器 <code>.ai-bot-fab</code> 上（<code>botBounce 3.6s</code>），不在 SVG 内部 — 此预览页不含浮动以避免误导。<br>
+    <b>没看到动效？</b>1) 点上面"强制重载"按钮 2) 浏览器无障碍设置中关闭"减少动画" 3) 用 Chrome/Edge 打开
+  </div>
+
+<script>
+  const SRC = 'assets/xiaozhi-mascot.svg';
+  function reload() {
+    const t = Date.now();
+    document.querySelectorAll('img.m').forEach(i => { i.src = SRC + '?t=' + t; });
+  }
+  reload();
+</script>
+</body>
+</html>

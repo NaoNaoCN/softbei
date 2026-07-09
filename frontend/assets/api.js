@@ -107,6 +107,30 @@ export async function updateProfile(user_id, data) {
     return resp?.json();
 }
 
+export async function updateAccount(user_id, data) {
+    const resp = await apiFetch(`/user/account?user_id=${encodeURIComponent(user_id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    return resp?.json();
+}
+
+export async function getUser(user_id) {
+    const resp = await apiFetch(`/user?user_id=${encodeURIComponent(user_id)}`);
+    return resp?.json();
+}
+
+// 注销（硬删除）账号：需提供用户名 + 密码双重确认。成功后由调用方清理本地登录态。
+export async function deleteAccount(user_id, username, password) {
+    const resp = await apiFetch(`/user/account?user_id=${encodeURIComponent(user_id)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+    });
+    return resp?.json();
+}
+
 // ===========================================================
 // 资源
 // ===========================================================
@@ -266,14 +290,16 @@ export async function getChatMessages(session_id, user_id) {
     return resp?.json();
 }
 
-export async function sendChatMessage(session_id, user_id, message) {
+export async function sendChatMessage(session_id, user_id, message, signal) {
+    const opts = {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: message })
+    };
+    if (signal) opts.signal = signal;
     const resp = await apiFetch(
         `/chat/${session_id}?user_id=${encodeURIComponent(user_id)}&stream=false`,
-        {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content: message })
-        }
+        opts
     );
     return resp?.json();
 }
@@ -397,10 +423,11 @@ export async function postLearningRecord(user_id, data) {
     return resp?.json();
 }
 
-export async function getLearningRecords(user_id, { kp_id, limit } = {}) {
+export async function getLearningRecords(user_id, { kp_id, limit, skip } = {}) {
     let url = `/records?user_id=${encodeURIComponent(user_id)}`;
     if (kp_id) url += `&kp_id=${encodeURIComponent(kp_id)}`;
     if (limit) url += `&limit=${limit}`;
+    if (skip) url += `&skip=${skip}`;
     const resp = await apiFetch(url);
     return resp?.json();
 }
@@ -411,5 +438,69 @@ export async function getLearningRecords(user_id, { kp_id, limit } = {}) {
 
 export async function getLearningAnalytics(user_id) {
     const resp = await apiFetch(`/analytics/dashboard?user_id=${encodeURIComponent(user_id)}`);
+    return resp?.json();
+}
+
+// ===========================================================
+// 学习计划
+// ===========================================================
+
+export async function sendStudyPlanEmail(plan_id, user_id) {
+    const resp = await apiFetch(`/study-plan/email?plan_id=${plan_id}&user_id=${user_id}`, {
+        method: 'POST'
+    });
+    return resp?.json();
+}
+
+export async function listStudyPlans(user_id) {
+    const resp = await apiFetch(`/study-plans?user_id=${encodeURIComponent(user_id)}`);
+    return resp?.json();
+}
+
+export async function getStudyPlan(plan_id, user_id) {
+    const resp = await apiFetch(`/study-plans/${plan_id}?user_id=${encodeURIComponent(user_id)}`);
+    return resp?.json();
+}
+
+export async function generateStudyPlan(user_id, data) {
+    const resp = await apiFetch(`/study-plans/generate?user_id=${encodeURIComponent(user_id)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    return resp?.json();
+}
+
+export async function updateStudyPlan(plan_id, user_id, data) {
+    const resp = await apiFetch(`/study-plans/${plan_id}?user_id=${encodeURIComponent(user_id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    return resp?.json();
+}
+
+export async function deleteStudyPlan(plan_id, user_id) {
+    const resp = await apiFetch(`/study-plans/${plan_id}?user_id=${encodeURIComponent(user_id)}`, {
+        method: 'DELETE'
+    });
+    return resp?.ok;
+}
+
+export async function updateStudyPlanItem(plan_id, item_id, user_id, data) {
+    const resp = await apiFetch(`/study-plans/${plan_id}/items/${item_id}?user_id=${encodeURIComponent(user_id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    return resp?.json();
+}
+
+export async function generateStudyPlanItemResources(plan_id, item_id, user_id, resource_types) {
+    const resp = await apiFetch(`/study-plans/${plan_id}/items/${item_id}/generate-resource?user_id=${encodeURIComponent(user_id)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resource_types })
+    });
     return resp?.json();
 }

@@ -1,45 +1,37 @@
-/**
+﻿/**
  * assistant.js — AI 学习伴侣悬浮面板
  *
  * 功能：
  *   1. 悬浮机器人按钮（右下角）
- *   2. 多 Tab 面板：迷你对话 / 学情摘要 / 番茄钟
+ *   2. 多 Tab 面板：今日任务 / 学情摘要 / 番茄钟
  *   3. 每日学习提醒弹窗（每天首次进入首页时显示）
  *   4. 随机气泡提示
  */
 
-import { getUserId, isLoggedIn, getLearningAnalytics, getProfile,
-         createChatSession, sendChatMessage } from './api.js';
+import { getUserId, isLoggedIn, getLearningAnalytics, getProfile } from './api.js';
 
 // ============================================================
 // 常量
 // ============================================================
 
 const MOTIVATIONS = [
-    '坚持就是胜利，今天也要加油学习哦！💪',
-    '每天进步一点点，日积月累成就大不同。✨',
-    '学而不思则罔，思而不学则殆。📚',
-    '今天的努力是明天的底气。🌟',
-    '知识是最好的投资，开始今天的学习吧！🎯',
-    '不积跬步，无以至千里。一起加油！🚀',
-    '天道酬勤，越努力越幸运！🍀',
-    '学习使人充实，坚持让你出众。💡',
+    '坚持就是胜利，今天也要加油学习哦！',
+    '每天进步一点点，日积月累成就大不同。',
+    '学而不思则罔，思而不学则殆。',
+    '今天的努力是明天的底气。',
+    '知识是最好的投资，开始今天的学习吧！',
+    '不积跬步，无以至千里。一起加油！',
+    '天道酬勤，越努力越幸运！',
+    '学习使人充实，坚持让你出众。',
 ];
 
 const BUBBLE_MESSAGES = [
-    '👋 有什么我可以帮你的吗？',
-    '📖 今天复习了吗？别让知识溜走哦~',
-    '🎯 试试番茄钟，保持专注！',
-    '💡 点击我可以随时提问哦~',
-    '🌟 你已经很棒了，继续保持！',
-    '🍅 来个番茄钟，专注25分钟吧！',
-];
-
-const CHAT_SUGGESTIONS = [
-    '帮我复习薄弱知识点',
-    '今天应该学什么？',
-    '解释一下这个概念',
-    '给我出道题测试一下',
+    '有什么我可以帮你的吗？',
+    '今天复习了吗？别让知识溜走哦~',
+    '试试番茄钟，保持专注！',
+    '点击我可以随时提问哦~',
+    '你已经很棒了，继续保持！',
+    '来个番茄钟，专注25分钟吧！',
 ];
 
 const GREETINGS = {
@@ -80,10 +72,11 @@ function createAssistantDOM() {
     fab.className = 'ai-bot-fab';
     fab.id = 'aiBotFab';
     fab.innerHTML = `
-        <span class="bot-avatar">🤖</span>
+        <img class="xiaozhi-eye" src="/app/assets/xiaozhi-mascot.svg" alt="" aria-hidden="true" draggable="false">
         <span class="bot-close">✕</span>
         <span class="bot-badge" id="aiBotBadge"></span>
     `;
+    fab.setAttribute('aria-label', '小知 · AI 学习助手');
 
     // 气泡
     const bubble = document.createElement('div');
@@ -96,43 +89,36 @@ function createAssistantDOM() {
     panel.id = 'aiBotPanel';
     panel.innerHTML = `
         <div class="ai-panel-header">
-            <span class="panel-bot-icon">🤖</span>
+            <span class="panel-bot-icon"><img class="xiaozhi-eye xz-mini" src="/app/assets/xiaozhi-mascot.svg" alt="" aria-hidden="true" draggable="false"></span>
             <div>
                 <div class="panel-title">学习小助手</div>
                 <div class="panel-subtitle">你的专属学习伴侣</div>
             </div>
             <div class="ai-panel-today-time">
-                <span class="today-time-icon">⏱️</span>
+                <span class="today-time-icon"><i data-lucide="clock" style="width:14px;height:14px;"></i></span>
                 <span class="today-time-value" id="aiTodayTime">0分钟</span>
                 <span class="today-time-label">今日已学习</span>
             </div>
         </div>
         <div class="ai-panel-tabs">
-            <div class="ai-panel-tab active" data-tab="chat">
-                <span class="tab-icon">💬</span>
-                <span>对话</span>
+            <div class="ai-panel-tab active" data-tab="tasks">
+                <span class="tab-icon"><i data-lucide="calendar-check" style="width:16px;height:16px;"></i></span>
+                <span>今日任务</span>
             </div>
             <div class="ai-panel-tab" data-tab="stats">
-                <span class="tab-icon">📊</span>
+                <span class="tab-icon"><i data-lucide="bar-chart-3" style="width:16px;height:16px;"></i></span>
                 <span>学情</span>
             </div>
             <div class="ai-panel-tab" data-tab="pomodoro">
-                <span class="tab-icon">🍅</span>
+                <span class="tab-icon"><i data-lucide="timer" style="width:16px;height:16px;"></i></span>
                 <span>番茄钟</span>
             </div>
         </div>
         <div class="ai-panel-content">
-            <!-- Tab: 对话 -->
-            <div class="ai-tab-pane active" id="aiTabChat">
-                <div class="ai-chat-container">
-                    <div class="ai-chat-suggestions" id="aiChatSuggestions"></div>
-                    <div class="ai-chat-messages" id="aiChatMessages">
-                        <div class="ai-chat-msg bot">你好！我是你的学习小助手 🤖 有什么问题随时问我～</div>
-                    </div>
-                    <div class="ai-chat-input-area">
-                        <input class="ai-chat-input" id="aiChatInput" placeholder="输入你的问题..." maxlength="500">
-                        <button class="ai-chat-send-btn" id="aiChatSend">➤</button>
-                    </div>
+            <!-- Tab: 今日任务 -->
+            <div class="ai-tab-pane active" id="aiTabTasks">
+                <div id="aiTasksContent">
+                    <div class="ai-empty-state">加载中...</div>
                 </div>
             </div>
             <!-- Tab: 学情 -->
@@ -152,8 +138,8 @@ function createAssistantDOM() {
                         <button class="ai-pomo-btn primary" id="aiPomoStart">开始专注</button>
                     </div>
                     <div class="ai-pomo-stats">
-                        <span>🍅 今日完成 <span class="pomo-count" id="aiPomoCount">0</span> 个</span>
-                        <span>⏱️ 共 <span class="pomo-count" id="aiPomoMinutes">0</span> 分钟</span>
+                        <span><i data-lucide="timer" style="width:13px;height:13px;vertical-align:-2px;margin-right:2px;"></i>今日完成 <span class="pomo-count" id="aiPomoCount">0</span> 个</span>
+                        <span><i data-lucide="clock" style="width:13px;height:13px;vertical-align:-2px;margin-right:2px;"></i>共 <span class="pomo-count" id="aiPomoMinutes">0</span> 分钟</span>
                     </div>
                     <div class="ai-pomo-settings">
                         <div class="ai-pomo-setting-row">
@@ -176,7 +162,7 @@ function createAssistantDOM() {
     reminder.id = 'dailyReminder';
     reminder.innerHTML = `
         <div class="daily-reminder-card">
-            <div class="daily-reminder-icon" id="reminderIcon">🌅</div>
+            <div class="daily-reminder-icon" id="reminderIcon"><i data-lucide="sunrise" style="width:40px;height:40px;color:#C77B3C;"></i></div>
             <div class="daily-reminder-greeting" id="reminderGreeting">早上好！</div>
             <div class="daily-reminder-time" id="reminderTime"></div>
             <div id="reminderContent"></div>
@@ -193,6 +179,9 @@ function createAssistantDOM() {
     document.body.appendChild(bubble);
     document.body.appendChild(panel);
     document.body.appendChild(reminder);
+
+    // 渲染 Lucide 图标
+    if (typeof lucide !== 'undefined') lucide.createIcons();
 }
 
 // ============================================================
@@ -201,7 +190,27 @@ function createAssistantDOM() {
 
 let panelOpen = false;
 let bubbleTimeout = null;
-let currentTab = 'chat';
+let currentTab = 'tasks';
+
+// 全局状态持久化
+function getPanelStateKey() {
+    return `softbei_panel_state_${getUserId()}`;
+}
+
+function savePanelState() {
+    const data = { tab: currentTab, open: panelOpen };
+    localStorage.setItem(getPanelStateKey(), JSON.stringify(data));
+}
+
+function restorePanelState() {
+    try {
+        const raw = localStorage.getItem(getPanelStateKey());
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (data.tab) currentTab = data.tab;
+        if (data.open) panelOpen = true;
+    } catch (e) { /* ignore */ }
+}
 
 function togglePanel() {
     const fab = document.getElementById('aiBotFab');
@@ -209,13 +218,15 @@ function togglePanel() {
     const bubble = document.getElementById('aiBotBubble');
 
     panelOpen = !panelOpen;
+    savePanelState();
 
     if (panelOpen) {
         fab.classList.add('open');
         panel.classList.add('open');
         bubble.classList.remove('show');
-        // 首次打开学情 tab 时加载数据
         if (currentTab === 'stats') loadStatsData();
+        if (currentTab === 'tasks') renderPlanTab();
+        if (currentTab === 'pomodoro') updatePomoDisplay();
     } else {
         fab.classList.remove('open');
         panel.classList.remove('open');
@@ -224,12 +235,15 @@ function togglePanel() {
 
 function switchTab(tabName) {
     currentTab = tabName;
+    savePanelState();
     document.querySelectorAll('.ai-panel-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
     document.querySelectorAll('.ai-tab-pane').forEach(p => p.classList.remove('active'));
-    const targetPane = document.getElementById(tabName === 'chat' ? 'aiTabChat' : tabName === 'stats' ? 'aiTabStats' : 'aiTabPomodoro');
+    const targetPane = document.getElementById(tabName === 'tasks' ? 'aiTabTasks' : tabName === 'stats' ? 'aiTabStats' : 'aiTabPomodoro');
     if (targetPane) targetPane.classList.add('active');
 
     if (tabName === 'stats') loadStatsData();
+    if (tabName === 'tasks') renderPlanTab();
+    if (tabName === 'pomodoro') updatePomoDisplay();
 }
 
 function showBubble(msg) {
@@ -254,104 +268,188 @@ function scheduleBubbles() {
 }
 
 // ============================================================
-// Tab1: 迷你对话
+// Tab1: 学习计划
 // ============================================================
 
-let chatSessionId = null;
-let chatSending = false;
+let _sharedForgettingItems = null; // 全局共享遗忘知识点缓存
 
-function renderSuggestions() {
-    const container = document.getElementById('aiChatSuggestions');
-    if (!container) return;
-    container.innerHTML = CHAT_SUGGESTIONS.map(s =>
-        `<span class="ai-chat-suggestion">${s}</span>`
-    ).join('');
-}
-
-async function ensureChatSession() {
-    if (chatSessionId) return chatSessionId;
-    const userId = getUserId();
+async function getSharedForgettingItems() {
+    if (_sharedForgettingItems !== null) return _sharedForgettingItems;
     try {
-        const session = await createChatSession(userId);
-        chatSessionId = session?.id || session?.session_id;
-        return chatSessionId;
-    } catch (e) {
-        console.warn('[assistant] 创建会话失败', e);
-        return null;
-    }
-}
-
-function appendChatMsg(text, role) {
-    const container = document.getElementById('aiChatMessages');
-    if (!container) return;
-    const div = document.createElement('div');
-    div.className = `ai-chat-msg ${role}`;
-    div.textContent = text;
-    container.appendChild(div);
-    container.scrollTop = container.scrollHeight;
-}
-
-function showTyping() {
-    const container = document.getElementById('aiChatMessages');
-    const div = document.createElement('div');
-    div.className = 'ai-chat-msg bot typing';
-    div.id = 'aiTypingMsg';
-    div.textContent = '思考中...';
-    container.appendChild(div);
-    container.scrollTop = container.scrollHeight;
-}
-
-function removeTyping() {
-    const el = document.getElementById('aiTypingMsg');
-    if (el) el.remove();
-}
-
-async function handleSendMessage() {
-    if (chatSending) return;
-    const input = document.getElementById('aiChatInput');
-    const msg = input.value.trim();
-    if (!msg) return;
-
-    input.value = '';
-    appendChatMsg(msg, 'user');
-
-    // 隐藏快捷建议
-    const suggestions = document.getElementById('aiChatSuggestions');
-    if (suggestions) suggestions.style.display = 'none';
-
-    chatSending = true;
-    const sendBtn = document.getElementById('aiChatSend');
-    sendBtn.disabled = true;
-
-    showTyping();
-
-    try {
-        const sessionId = await ensureChatSession();
-        if (!sessionId) {
-            removeTyping();
-            appendChatMsg('抱歉，连接失败，请稍后重试。', 'bot');
-            return;
-        }
-
         const userId = getUserId();
-        const resp = await sendChatMessage(sessionId, userId, msg);
-        removeTyping();
-
-        if (resp && resp.content) {
-            appendChatMsg(resp.content, 'bot');
-        } else if (resp && resp.reply) {
-            appendChatMsg(resp.reply, 'bot');
-        } else {
-            appendChatMsg('收到！不过我暂时无法回复，请稍后再试。', 'bot');
+        if (userId) {
+            const data = await getLearningAnalytics(userId);
+            if (data && data.forgetting_curve) {
+                _sharedForgettingItems = data.forgetting_curve.filter(i => i.needs_review);
+                return _sharedForgettingItems;
+            }
         }
-    } catch (e) {
-        removeTyping();
-        appendChatMsg('网络错误，请检查连接后重试。', 'bot');
-        console.warn('[assistant] 发送消息失败', e);
-    } finally {
-        chatSending = false;
-        sendBtn.disabled = false;
+    } catch (e) { /* ignore */ }
+    _sharedForgettingItems = [];
+    return _sharedForgettingItems;
+}
+
+function getPlanStorageKey() {
+    const userId = getUserId();
+    const today = new Date().toISOString().slice(0, 10);
+    return `softbei_plan_${userId}_${today}`;
+}
+
+function getTodayPlan() {
+    const key = getPlanStorageKey();
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    try { return JSON.parse(raw); } catch { return []; }
+}
+
+function saveTodayPlan(plans) {
+    const key = getPlanStorageKey();
+    localStorage.setItem(key, JSON.stringify(plans));
+}
+
+async function renderPlanTab() {
+    const container = document.getElementById('aiTasksContent');
+    if (!container) return;
+
+    // 加载遗忘知识点（共享缓存）
+    const forgettingItems = await getSharedForgettingItems();
+
+    const plans = getTodayPlan();
+    const total = plans.length;
+    const done = plans.filter(p => p.done).length;
+    const pct = total > 0 ? Math.round(done / total * 100) : 0;
+
+    let html = '';
+
+    // 进度概览
+    html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:#FFF5EC;border-radius:12px;margin-bottom:14px;">
+        <div style="position:relative;width:44px;height:44px;flex-shrink:0;">
+            <svg viewBox="0 0 36 36" width="44" height="44" style="transform:rotate(-90deg);">
+                <path fill="none" stroke="rgba(199,123,60,0.15)" stroke-width="3.5" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                <path fill="none" stroke="#C77B3C" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="${pct}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            </svg>
+            <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#C77B3C;">${pct}%</span>
+        </div>
+        <div style="flex:1;">
+            <div style="font-size:13px;font-weight:600;color:#1E1E2E;">今日计划</div>
+            <div style="font-size:11px;color:#6B7280;margin-top:2px;">${total > 0 ? `已完成 ${done}/${total} 项` : '还没有计划，添加一个吧'}</div>
+        </div>
+    </div>`;
+
+    // 计划列表
+    if (total > 0) {
+        html += '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;">';
+        plans.forEach((item, idx) => {
+            html += `<div class="plan-item" data-idx="${idx}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;background:${item.done ? '#F9FAFB' : '#fff'};border:1px solid #E5E7EB;cursor:pointer;transition:all 0.15s;">
+                <div class="plan-check" style="width:18px;height:18px;border-radius:50%;border:2px solid ${item.done ? '#10B981' : '#D1D5DB'};display:flex;align-items:center;justify-content:center;flex-shrink:0;background:${item.done ? '#10B981' : 'transparent'};transition:all 0.2s;">
+                    ${item.done ? '<svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>' : ''}
+                </div>
+                <span style="flex:1;font-size:12px;color:${item.done ? '#9CA3AF' : '#1E1E2E'};${item.done ? 'text-decoration:line-through;' : ''}overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.text}</span>
+                <span class="plan-del" data-idx="${idx}" style="width:16px;height:16px;display:flex;align-items:center;justify-content:center;color:#D1D5DB;cursor:pointer;font-size:14px;border-radius:4px;">&times;</span>
+            </div>`;
+        });
+        html += '</div>';
+    } else {
+        html += `<div style="text-align:center;padding:16px 12px;font-size:12px;color:#9CA3AF;background:#F9FAFB;border-radius:8px;margin-bottom:12px;">
+            制定今天的学习计划，开启高效学习之旅
+        </div>`;
     }
+
+    // 自定义添加输入框
+    html += `<div style="display:flex;gap:6px;margin-bottom:10px;">
+        <input id="aiPlanInput" type="text" placeholder="输入学习计划..." maxlength="50" style="flex:1;border:1px solid #E5E7EB;border-radius:8px;padding:8px 10px;font-size:12px;outline:none;transition:border-color 0.2s;">
+        <button id="aiPlanAddBtn" style="padding:8px 12px;border-radius:8px;border:none;background:linear-gradient(135deg,#C77B3C 0%,#A8652E 100%);color:#fff;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;">添加</button>
+    </div>`;
+
+    // 选择复习知识点快捷添加
+    const existingTexts = plans.map(p => p.text);
+    const available = forgettingItems.filter(item => !existingTexts.includes(`复习：${item.kp_name}`));
+    if (available.length > 0) {
+        html += `<div style="padding:10px 12px;border-radius:10px;background:linear-gradient(135deg,#FFFBF5 0%,#FFF0E3 100%);border:1px solid #F5E6D3;margin-bottom:12px;">`;
+        html += `<div style="font-size:10.5px;color:#A8652E;margin-bottom:8px;font-weight:500;display:flex;align-items:center;justify-content:space-between;"><span>\u{1F4CB} 待复习 ${forgettingItems.length} 项</span><span style="font-size:9.5px;color:#C4A882;font-weight:400;">点击加入计划</span></div>`;
+        html += '<div style="display:flex;flex-direction:column;gap:4px;max-height:96px;overflow-y:auto;">';
+        available.forEach(item => {
+            const urgLabel = item.urgency === 'high' ? '紧急' : item.urgency === 'medium' ? '需关注' : '稳定';
+            const urgBg = item.urgency === 'high' ? '#FEE2E2' : item.urgency === 'medium' ? '#FEF3C7' : '#D1FAE5';
+            const urgColor = item.urgency === 'high' ? '#DC2626' : item.urgency === 'medium' ? '#D97706' : '#059669';
+            html += `<div class="plan-kp-tag" data-kp="${item.kp_name}" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:#fff;cursor:pointer;transition:all 0.15s;border:1px solid #F0E6DA;" title="${item.kp_name}">
+                <span style="flex:1;font-size:11px;color:#4B3621;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.kp_name}</span>
+                <span style="font-size:9px;padding:1px 5px;border-radius:4px;background:${urgBg};color:${urgColor};white-space:nowrap;flex-shrink:0;">${urgLabel}</span>
+                <span style="font-size:9.5px;color:#B8977A;white-space:nowrap;flex-shrink:0;">${item.days_since_last}天</span>
+            </div>`;
+        });
+        html += '</div></div>';
+    }
+
+
+
+    container.innerHTML = html;
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    // 绑定事件
+    bindPlanEvents();
+}
+
+function bindPlanEvents() {
+    const container = document.getElementById('aiTasksContent');
+    if (!container) return;
+
+    // 自定义添加
+    const addBtn = document.getElementById('aiPlanAddBtn');
+    const input = document.getElementById('aiPlanInput');
+    if (addBtn && input) {
+        const doAdd = () => {
+            const text = input.value.trim();
+            if (!text) return;
+            const plans = getTodayPlan();
+            plans.push({ text, done: false });
+            saveTodayPlan(plans);
+            renderPlanTab();
+        };
+        addBtn.addEventListener('click', doAdd);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); doAdd(); }
+        });
+        input.addEventListener('focus', () => input.style.borderColor = '#C77B3C');
+        input.addEventListener('blur', () => input.style.borderColor = '#E5E7EB');
+    }
+
+    // 知识点标签点击添加
+    container.querySelectorAll('.plan-kp-tag').forEach(tag => {
+        tag.addEventListener('click', () => {
+            const kpName = tag.dataset.kp;
+            const plans = getTodayPlan();
+            plans.push({ text: `复习：${kpName}`, done: false });
+            saveTodayPlan(plans);
+            renderPlanTab();
+        });
+    });
+
+    // 勾选完成
+    container.querySelectorAll('.plan-item').forEach(el => {
+        el.addEventListener('click', (e) => {
+            if (e.target.closest('.plan-del')) return;
+            const idx = parseInt(el.dataset.idx);
+            const plans = getTodayPlan();
+            if (plans[idx]) {
+                plans[idx].done = !plans[idx].done;
+                saveTodayPlan(plans);
+                renderPlanTab();
+            }
+        });
+    });
+
+    // 删除
+    container.querySelectorAll('.plan-del').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const idx = parseInt(el.dataset.idx);
+            const plans = getTodayPlan();
+            plans.splice(idx, 1);
+            saveTodayPlan(plans);
+            renderPlanTab();
+        });
+    });
 }
 
 // ============================================================
@@ -371,38 +469,40 @@ async function loadStatsData() {
     try {
         const data = await getLearningAnalytics(userId);
         if (!data) {
-            container.innerHTML = '<div class="ai-empty-state">暂无学习数据，快去学习吧！📚</div>';
+            container.innerHTML = '<div class="ai-empty-state">暂无学习数据，快去学习吧！</div>';
             statsLoaded = true;
             return;
         }
 
         const behavior = data.learning_behavior || {};
         const forgetting = (data.forgetting_curve || []).filter(i => i.needs_review);
+        // 同步到共享缓存
+        _sharedForgettingItems = forgetting;
         const mastery = data.quiz_mastery || [];
 
         // 统计卡片
         let html = `<div class="ai-stats-grid">
             <div class="ai-stat-card">
                 <div class="ai-stat-value">${behavior.streak_days || 0}</div>
-                <div class="ai-stat-label">🔥 连续学习天数</div>
+                <div class="ai-stat-label">连续学习天数</div>
             </div>
             <div class="ai-stat-card">
                 <div class="ai-stat-value">${behavior.total_actions || 0}</div>
-                <div class="ai-stat-label">📝 总学习次数</div>
+                <div class="ai-stat-label">总学习次数</div>
             </div>
             <div class="ai-stat-card">
                 <div class="ai-stat-value">${Math.round(behavior.total_minutes || 0)}</div>
-                <div class="ai-stat-label">⏱️ 总学习(分钟)</div>
+                <div class="ai-stat-label">总学习(分钟)</div>
             </div>
             <div class="ai-stat-card">
                 <div class="ai-stat-value">${behavior.active_days || 0}</div>
-                <div class="ai-stat-label">📅 活跃天数</div>
+                <div class="ai-stat-label">活跃天数</div>
             </div>
         </div>`;
 
         // 掌握度 Top 5
         if (mastery.length > 0) {
-            html += `<div class="ai-section-title">🎯 知识掌握度</div>`;
+            html += `<div class="ai-section-title">知识掌握度</div>`;
             const top5 = mastery.sort((a, b) => b.mastery_score - a.mastery_score).slice(0, 5);
             html += top5.map(m => {
                 const pct = m.mastery_score;
@@ -417,21 +517,21 @@ async function loadStatsData() {
             }).join('');
         }
 
-        // 遗忘提醒
+        // 遗忘知识点复习
         if (forgetting.length > 0) {
-            html += `<div class="ai-section-title">⚠️ 需要复习 (${forgetting.length})</div>`;
-            html += '<div class="ai-review-list">';
-            html += forgetting.slice(0, 5).map(item => `
-                <div class="ai-review-item urgency-${item.urgency}" 
-                     onclick="window.location.href='generate.html?kp=${encodeURIComponent(item.kp_id || item.kp_name)}&type=doc'"
-                     title="点击去复习">
-                    <span class="review-name">${item.kp_name}</span>
-                    <span class="review-days">${item.days_since_last}天前</span>
-                </div>
-            `).join('');
+            html += `<div class="ai-section-title">需要复习 (${forgetting.length})</div>`;
+            html += '<div style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto;">';
+            html += forgetting.map(item => {
+                const urgColor = item.urgency === 'high' ? '#EF4444' : item.urgency === 'medium' ? '#F59E0B' : '#10B981';
+                return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1px solid #E5E7EB;background:#fff;border-left:3px solid ${urgColor};cursor:pointer;" onclick="window.location.href='generate.html?kp=${encodeURIComponent(item.kp_id || item.kp_name)}&type=doc'">
+                    <span style="flex:1;font-size:12px;color:#1E1E2E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.kp_name}</span>
+                    <span style="font-size:11px;color:#9CA3AF;white-space:nowrap;">${item.days_since_last}天前</span>
+                </div>`;
+            }).join('');
             html += '</div>';
         } else {
-            html += '<div class="ai-section-title">✅ 所有知识点都很新鲜，继续保持！</div>';
+            html += '<div class="ai-section-title">复习状态</div>';
+            html += '<div style="font-size:12px;color:#6B7280;line-height:1.6;padding:8px 10px;background:#F0FDF4;border-radius:8px;">所有知识点记忆状态良好，继续保持！</div>';
         }
 
         container.innerHTML = html;
@@ -454,6 +554,83 @@ let pomoBreakMin = 5;
 let pomoCount = 0;
 let pomoTotalMin = 0;
 
+// 番茄钟状态持久化
+function getPomoStateKey() {
+    const userId = getUserId();
+    return `softbei_pomo_state_${userId}`;
+}
+
+function savePomoState() {
+    const data = {
+        state: pomoState,
+        remaining: pomoRemaining,
+        workMin: pomoWorkMin,
+        breakMin: pomoBreakMin,
+        timestamp: Date.now()
+    };
+    localStorage.setItem(getPomoStateKey(), JSON.stringify(data));
+}
+
+function clearPomoState() {
+    localStorage.removeItem(getPomoStateKey());
+}
+
+function restorePomoState() {
+    const raw = localStorage.getItem(getPomoStateKey());
+    if (!raw) return;
+    try {
+        const data = JSON.parse(raw);
+        pomoWorkMin = data.workMin || 25;
+        pomoBreakMin = data.breakMin || 5;
+
+        if (data.state === 'running' || data.state === 'resting') {
+            // 计算离开期间流逝的时间
+            const elapsed = Math.floor((Date.now() - data.timestamp) / 1000);
+            pomoRemaining = (data.remaining || 0) - elapsed;
+
+            if (data.state === 'running') {
+                if (pomoRemaining <= 0) {
+                    // 专注已完成，记录并进入休息
+                    pomoCount++;
+                    pomoTotalMin += pomoWorkMin;
+                    savePomodoroStats();
+                    pomoState = 'resting';
+                    // 计算休息剩余时间
+                    const restElapsed = Math.abs(pomoRemaining); // 超出的时间
+                    pomoRemaining = pomoBreakMin * 60 - restElapsed;
+                    if (pomoRemaining <= 0) {
+                        // 休息也已结束
+                        pomoState = 'idle';
+                        pomoRemaining = pomoWorkMin * 60;
+                        clearPomoState();
+                    } else {
+                        pomoInterval = setInterval(pomoTick, 1000);
+                        savePomoState();
+                    }
+                } else {
+                    // 还在专注中，继续计时
+                    pomoState = 'running';
+                    pomoInterval = setInterval(pomoTick, 1000);
+                }
+            } else if (data.state === 'resting') {
+                if (pomoRemaining <= 0) {
+                    // 休息已结束
+                    pomoState = 'idle';
+                    pomoRemaining = pomoWorkMin * 60;
+                    clearPomoState();
+                } else {
+                    pomoState = 'resting';
+                    pomoInterval = setInterval(pomoTick, 1000);
+                }
+            }
+        } else if (data.state === 'paused') {
+            // 暂停状态直接恢复
+            pomoState = 'paused';
+            pomoRemaining = data.remaining || pomoWorkMin * 60;
+        }
+    } catch (e) { /* ignore */ }
+}
+
 function updatePomoDisplay() {
     const timeEl = document.getElementById('aiPomoTime');
     const labelEl = document.getElementById('aiPomoLabel');
@@ -469,7 +646,7 @@ function updatePomoDisplay() {
     circleEl.className = 'ai-pomo-circle' + (pomoState === 'running' ? ' running' : pomoState === 'resting' ? ' resting' : '');
 
     if (pomoState === 'resting') {
-        labelEl.textContent = '休息时间 ☕';
+        labelEl.textContent = '休息时间';
     } else if (pomoState === 'running') {
         labelEl.textContent = '专注中...';
     } else if (pomoState === 'paused') {
@@ -518,6 +695,7 @@ function startPomodoro() {
     pomoBreakMin = parseInt(document.getElementById('aiPomoBreakMin')?.value) || 5;
     pomoRemaining = pomoWorkMin * 60;
     pomoState = 'running';
+    savePomoState();
     updatePomoDisplay();
     pomoInterval = setInterval(pomoTick, 1000);
 }
@@ -525,11 +703,13 @@ function startPomodoro() {
 function pausePomodoro() {
     pomoState = 'paused';
     clearInterval(pomoInterval);
+    savePomoState();
     updatePomoDisplay();
 }
 
 function resumePomodoro() {
     pomoState = 'running';
+    savePomoState();
     updatePomoDisplay();
     pomoInterval = setInterval(pomoTick, 1000);
 }
@@ -538,6 +718,7 @@ function stopPomodoro() {
     pomoState = 'idle';
     clearInterval(pomoInterval);
     pomoRemaining = pomoWorkMin * 60;
+    clearPomoState();
     updatePomoDisplay();
 }
 
@@ -545,6 +726,7 @@ function skipRest() {
     clearInterval(pomoInterval);
     pomoState = 'idle';
     pomoRemaining = pomoWorkMin * 60;
+    clearPomoState();
     updatePomoDisplay();
 }
 
@@ -557,22 +739,27 @@ function pomoTick() {
             pomoCount++;
             pomoTotalMin += pomoWorkMin;
             savePomodoroStats();
-            showBubble('🎉 太棒了！一个番茄钟完成！休息一下吧～');
+            showBubble('太棒了！一个番茄钟完成！休息一下吧～');
             // 进入休息
             pomoState = 'resting';
             pomoRemaining = pomoBreakMin * 60;
+            savePomoState();
             updatePomoDisplay();
             pomoInterval = setInterval(pomoTick, 1000);
             // 尝试通知
-            tryNotification('番茄钟完成！', '你已经专注了 ' + pomoWorkMin + ' 分钟，休息一下吧 ☕');
+            tryNotification('番茄钟完成！', '你已经专注了 ' + pomoWorkMin + ' 分钟，休息一下吧');
         } else if (pomoState === 'resting') {
             // 休息结束
             pomoState = 'idle';
             pomoRemaining = pomoWorkMin * 60;
+            clearPomoState();
             updatePomoDisplay();
-            showBubble('⏰ 休息结束，准备好开始下一轮了吗？');
-            tryNotification('休息结束！', '该开始下一个番茄钟了 🍅');
+            showBubble('休息结束，准备好开始下一轮了吗？');
+            tryNotification('休息结束！', '该开始下一个番茄钟了');
         }
+    } else {
+        // 每10秒保存一次状态，避免频繁写入
+        if (pomoRemaining % 10 === 0) savePomoState();
     }
     updatePomoDisplay();
 }
@@ -598,7 +785,7 @@ function loadPomodoroStats() {
 
 function tryNotification(title, body) {
     if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(title, { body, icon: '🍅' });
+        new Notification(title, { body });
     }
 }
 
@@ -613,7 +800,7 @@ async function showDailyReminder() {
 
     const path = window.location.pathname;
     console.log('[daily-reminder] pathname:', path);
-    const isIndex = path.endsWith('index.html') || path.endsWith('/') || path === '' || path.endsWith('/frontend/');
+    const isIndex = path.endsWith('index.html') || path.endsWith('/') || path === '' || path.endsWith('/frontend/') || path.endsWith('/app/');
     if (!isIndex) { console.log('[daily-reminder] 非首页，退出'); return; }
 
     // 引导正在展示或即将开始，不弹每日提醒
@@ -651,15 +838,15 @@ async function showDailyReminder() {
 
     const now = new Date();
     const hour = now.getHours();
-    const timeIcon = hour < 12 ? '🌅' : (hour < 18 ? '☀️' : '🌙');
-    if (iconEl) iconEl.textContent = timeIcon;
+    const timeIcon = hour < 12 ? 'sunrise' : (hour < 18 ? 'sun' : 'moon');
+    if (iconEl) iconEl.innerHTML = `<i data-lucide="${timeIcon}" style="width:40px;height:40px;color:var(--accent,#C77B3C);"></i>`;
     greeting.textContent = `${getTimeGreeting()}！`;
     timeEl.textContent = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 星期${['日','一','二','三','四','五','六'][now.getDay()]}`;
 
     let streakHTML = '';
     if (streakDays > 0) {
         streakHTML = `<div class="daily-reminder-section">
-            <div class="daily-reminder-section-title">🔥 连续学习 ${streakDays} 天，真棒！</div>
+            <div class="daily-reminder-section-title"><i data-lucide="flame" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px;color:#C77B3C;"></i>连续学习 ${streakDays} 天，真棒！</div>
         </div>`;
     }
 
@@ -670,7 +857,7 @@ async function showDailyReminder() {
             return `<span class="daily-reminder-tag ${cls}" style="cursor:pointer;" onclick="window.location.href='generate.html?kp=${encodeURIComponent(item.kp_id || item.kp_name)}&type=doc'">${item.kp_name}</span>`;
         }).join('');
         reviewHTML = `<div class="daily-reminder-section">
-            <div class="daily-reminder-section-title">📋 以下知识点需要复习：</div>
+            <div class="daily-reminder-section-title"><i data-lucide="clipboard-list" style="width:14px;height:14px;vertical-align:-2px;margin-right:4px;color:#C77B3C;"></i>以下知识点需要复习：</div>
             <div class="daily-reminder-tags">${tags}</div>
         </div>`;
     }
@@ -679,13 +866,13 @@ async function showDailyReminder() {
 
     let tipText = '';
     if (forgettingItems.length > 0) {
-        tipText = `💡 根据艾宾浩斯遗忘曲线，你有 ${forgettingItems.length} 个知识点即将遗忘，建议今天花 10-15 分钟进行针对性复习。`;
+        tipText = `根据艾宾浩斯遗忘曲线，你有 ${forgettingItems.length} 个知识点即将遗忘，建议今天花 10-15 分钟进行针对性复习。`;
     } else if (hour < 12) {
-        tipText = '💡 早上是记忆力最好的时段，适合学习新知识。试试开启番茄钟，专注25分钟！';
+        tipText = '早上是记忆力最好的时段，适合学习新知识。试试开启番茄钟，专注25分钟！';
     } else if (hour < 18) {
-        tipText = '💡 下午适合做练习和复习。试试做几道测验题保持手感吧！';
+        tipText = '下午适合做练习和复习。试试做几道测验题保持手感吧！';
     } else {
-        tipText = '💡 晚间适合轻度复习和总结。回顾今天的学习内容，巩固记忆。';
+        tipText = '晚间适合轻度复习和总结。回顾今天的学习内容，巩固记忆。';
     }
     tip.textContent = tipText;
     motivation.textContent = `"${getMotivation()}"`;
@@ -697,6 +884,9 @@ async function showDailyReminder() {
     sessionStorage.setItem('softbei_daily_shown', '1');
 
     overlay.classList.add('show');
+
+    // 渲染弹窗内的 Lucide 图标
+    if (typeof lucide !== 'undefined') lucide.createIcons();
 
     document.getElementById('reminderStartBtn').onclick = () => {
         overlay.classList.remove('show');
@@ -721,6 +911,8 @@ function init() {
     // 点击面板外关闭
     document.addEventListener('click', (e) => {
         if (!panelOpen) return;
+        // 如果点击的元素已被移除（重新渲染导致），不关闭面板
+        if (!e.target.isConnected) return;
         const panel = document.getElementById('aiBotPanel');
         const fab = document.getElementById('aiBotFab');
         if (!panel.contains(e.target) && !fab.contains(e.target)) {
@@ -733,27 +925,25 @@ function init() {
         tab.addEventListener('click', () => switchTab(tab.dataset.tab));
     });
 
-    // 对话：快捷建议
-    renderSuggestions();
-    document.getElementById('aiChatSuggestions').addEventListener('click', (e) => {
-        if (e.target.classList.contains('ai-chat-suggestion')) {
-            document.getElementById('aiChatInput').value = e.target.textContent;
-            handleSendMessage();
-        }
-    });
-
-    // 对话：发送
-    document.getElementById('aiChatSend').addEventListener('click', handleSendMessage);
-    document.getElementById('aiChatInput').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSendMessage();
-        }
-    });
-
-    // 番茄钟：加载今日统计
+    // 番茄钟：恢复状态 + 加载今日统计
     loadPomodoroStats();
+    restorePomoState();
     updatePomoDisplay();
+
+    // 恢复面板状态（Tab + 打开/关闭）
+    restorePanelState();
+    // 应用恢复的 Tab
+    switchTab(currentTab);
+    // 应用恢复的打开状态
+    if (panelOpen) {
+        const fab = document.getElementById('aiBotFab');
+        const panel = document.getElementById('aiBotPanel');
+        fab.classList.add('open');
+        panel.classList.add('open');
+    }
+
+    // 预加载学习计划（仅当当前 Tab 是 tasks 时）
+    if (currentTab === 'tasks') renderPlanTab();
 
     // 请求通知权限
     if ('Notification' in window && Notification.permission === 'default') {
@@ -871,15 +1061,16 @@ function createRestReminderDOM() {
     overlay.id = 'restReminderOverlay';
     overlay.innerHTML = `
         <div class="rest-reminder-card">
-            <div class="rest-reminder-icon">☕</div>
+            <div class="rest-reminder-icon"><i data-lucide="coffee" style="width:44px;height:44px;color:#C77B3C;"></i></div>
             <div class="rest-reminder-title">该休息一下啦！</div>
             <div class="rest-reminder-hours-label">今日已学习</div>
             <div class="rest-reminder-hours" id="restReminderHours">1<span class="rest-reminder-hours-unit">小时</span></div>
-            <div class="rest-reminder-desc">连续学习时间较长，让眼睛和大脑休息一下吧！<br>起来走动走动、看看远处，身体好才能学习好 💪</div>
+            <div class="rest-reminder-desc">连续学习时间较长，让眼睛和大脑休息一下吧！<br>起来走动走动、看看远处，身体好才能学习好。</div>
             <button class="rest-reminder-btn" id="restReminderBtn">好的，我去休息</button>
         </div>
     `;
     document.body.appendChild(overlay);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
     document.getElementById('restReminderBtn').addEventListener('click', () => {
         overlay.classList.remove('show');
     });
@@ -888,7 +1079,7 @@ function createRestReminderDOM() {
 function showRestReminder(hours) {
     createRestReminderDOM();
     const hoursEl = document.getElementById('restReminderHours');
-    if (hoursEl) hoursEl.textContent = hours;
+    if (hoursEl) hoursEl.innerHTML = `${hours}<span class="rest-reminder-hours-unit">小时</span>`;
     const overlay = document.getElementById('restReminderOverlay');
     if (overlay) {
         setTimeout(() => overlay.classList.add('show'), 200);

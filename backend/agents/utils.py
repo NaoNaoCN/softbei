@@ -106,7 +106,13 @@ def safe_json_loads(raw: str) -> dict | list:
     except json.JSONDecodeError:
         pass
 
-    # 策略 3：从文本中提取 JSON 块（处理 LLM 在 JSON 前后加解释文字的情况）
+    # 策略 3：处理多个并排的顶层对象（LLM 把 JSON 数组写成了 NDJSON / 对象堆叠，
+    # 缺少 [ ] 包裹和逗号分隔）。须在"提取首个 JSON 块"之前尝试，否则只会拿到第一个对象。
+    multi = _decode_concatenated_objects(cleaned)
+    if multi is not None:
+        return multi
+
+    # 策略 4：从文本中提取 JSON 块（处理 LLM 在 JSON 前后加解释文字的情况）
     extracted = _extract_json_block(cleaned)
     if extracted:
         try:
@@ -124,7 +130,7 @@ def safe_json_loads(raw: str) -> dict | list:
         except json.JSONDecodeError:
             pass
 
-    # 策略 4：修复被截断的 JSON（补全未闭合的括号和引号）
+    # 策略 5：修复被截断的 JSON（补全未闭合的括号和引号）
     repaired = _repair_truncated_json(cleaned)
     if repaired != cleaned:
         try:
@@ -142,7 +148,7 @@ def safe_json_loads(raw: str) -> dict | list:
         except json.JSONDecodeError:
             pass
 
-    # 策略 5：尝试用 ast.literal_eval（对 Python 风格的 dict/list 字面量有效）
+    # 策略 6：尝试用 ast.literal_eval（对 Python 风格的 dict/list 字面量有效）
     try:
         import ast
         return ast.literal_eval(cleaned)
@@ -160,7 +166,34 @@ def safe_json_loads(raw: str) -> dict | list:
     )
 
 
-def _repair_truncated_json(text: str) -> str:
+def _decode_concatenated_objects(text: str) -> list | None:
+    """解析多个并排的顶层 JSON 值（NDJSON / 对象堆叠）。
+
+    处理 LLM 把数组写成多个独立对象、缺少 [ ] 与逗号分隔的情况，例如：
+        {...}\n{...}\n{...}
+    用 json.JSONDecoder.raw_decode 从每个非空白位置增量解析，拼成数组返回。
+    成功解析出 ≥2 个值才视为命中（单个值已由前面的策略覆盖）。
+    """
+    decoder = json.JSONDecoder()
+    items: list = []
+    idx = 0
+    n = len(text)
+    while idx < n:
+        # 跳过对象之间的空白及可能存在的分隔逗号
+        while idx < n and text[idx] in " \t\r\n,":
+            idx += 1
+        if idx >= n:
+            break
+        try:
+            obj, end = decoder.raw_decode(text, idx)
+        except json.JSONDecodeError:
+            return None
+        items.append(obj)
+        idx = end
+    return items if len(items) >= 2 else None
+
+
+
     """尝试修复被 max_tokens 截断的 JSON。
 
     策略：统计未闭合的括号，在末尾补上缺失的闭合符号。
@@ -267,7 +300,8 @@ def _extract_json_block(text: str) -> str | None:
 # ----------------------------------------------------------
 
 # RAG 检索缓存：同一请求内多个 Agent 检索相同知识点时复用结果
-_retrieval_cache: dict[tuple[str, str], tuple[str, list[str]]] = {}
+# value: (context, retrieved_texts, sources)
+_retrieval_cache: dict[tuple[str, str], tuple[str, list[str], list]] = {}
 
 
 def clear_retrieval_cache() -> None:
@@ -439,7 +473,8 @@ async def retrieve_context(
     state: AgentState,
     agent_label: str = "Agent",
     config_dict: dict | None = None,
-) -> tuple[str, list[str]]:
+    return_sources: bool = False,
+) -> tuple[str, list[str]] | tuple[str, list[str], list]:
     """
     RAG 检索并格式化上下文，供各生成 Agent 复用。
 
@@ -453,10 +488,16 @@ async def retrieve_context(
     :param state:        AgentState（含 user_message, kp_id, chat_history, profile 等）
     :param agent_label:  Agent 名称标签（用于日志）
     :param config_dict:  LangGraph configurable dict（含 db session，用于解析 kp_id → kp_name）
-    :return:             (context_str, retrieved_texts)
+    :param return_sources: 为 True 时额外返回 CitationSource 列表（编号与 context 中 [n] 对齐），
+                           供 Agent 在文末程序化追加「参考资料」清单。
+    :return:             return_sources=False → (context_str, retrieved_texts)
+                         return_sources=True  → (context_str, retrieved_texts, sources)
     """
     import time
-    from backend.rag.retriever import retrieve, retrieve_by_kp, retrieve_with_queries, retrieve_hybrid, format_context
+    from backend.rag.retriever import (
+        retrieve, retrieve_by_kp, retrieve_with_queries, retrieve_hybrid,
+        format_context, format_context_with_sources,
+    )
 
     kp_name = await resolve_kp_name(state, config_dict)
     user_id = str(state.user_id)
@@ -465,7 +506,8 @@ async def retrieve_context(
     # 优先命中缓存
     if cache_key in _retrieval_cache:
         logger.info("[%s] RAG 命中缓存，跳过检索" % agent_label)
-        return _retrieval_cache[cache_key]
+        cached = _retrieval_cache[cache_key]
+        return cached if return_sources else (cached[0], cached[1])
 
     cfg = config.rag
     t_start = time.perf_counter()
@@ -533,7 +575,7 @@ async def retrieve_context(
     # ------------------------------------------
 
     # 格式化上下文
-    context = format_context(chunks, max_tokens=cfg.context_max_tokens)
+    context, sources = format_context_with_sources(chunks, max_tokens=cfg.context_max_tokens)
     retrieved_texts = [c.text for c in chunks]
 
     retrieval_ms = (time.perf_counter() - t_start) * 1000
@@ -565,5 +607,37 @@ async def retrieve_context(
     except Exception:
         pass
 
-    _retrieval_cache[cache_key] = (context, retrieved_texts)
-    return context, retrieved_texts
+    _retrieval_cache[cache_key] = (context, retrieved_texts, sources)
+    return (context, retrieved_texts, sources) if return_sources else (context, retrieved_texts)
+
+
+def format_reference_list(sources: list) -> str:
+    """将 CitationSource 列表渲染为文末「参考资料」清单（Markdown）。
+
+    与 video_search.inject_video_citations 的视频参考区风格一致，由系统在
+    生成内容后程序化追加，编号与正文 [n] 标记严格对齐——来源信息来自真实
+    检索结果而非 LLM 复述，杜绝悬空编号与来源编造。
+
+    格式：
+        ---
+
+        **参考资料**
+
+        [1] 动手学深度学习.pdf · 第 6 页 · 6.2 卷积层
+        [2] notes.md · 第一章
+
+    :param sources: format_context_with_sources / retrieve_context(return_sources=True) 返回的列表
+    :return:        Markdown 字符串；sources 为空时返回空串（不追加任何内容）
+    """
+    if not sources:
+        return ""
+
+    lines = ["\n\n---\n\n**参考资料**\n"]
+    for s in sources:
+        parts = [s.source]
+        if s.page:
+            parts.append(f"第 {s.page} 页")
+        if s.section:
+            parts.append(s.section)
+        lines.append(f"[{s.index}] " + " · ".join(parts))
+    return "\n".join(lines) + "\n"

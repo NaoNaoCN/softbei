@@ -93,10 +93,17 @@ from backend.models.schemas import (
     StudentProfileIn,
     StudentProfileOut,
     TokenOut,
+    UserUpdate,
+    AccountDeleteIn,
     UserCreate,
     UserOut,
     KGNodeType,
     KGRelation,
+    StudyPlanGenerateRequest,
+    StudyPlanItemOut,
+    StudyPlanItemUpdate,
+    StudyPlanOut,
+    StudyPlanUpdate,
 )
 from backend.db.models import User, ChatSession, ChatMessage, KGNode, KGEdge, QuizItem, QuizAttempt, LearningPath, LearningPathItem, ResourceMeta, LearningRecord, EmailVerification
 from backend.services import profile as profile_svc
@@ -480,6 +487,181 @@ async def send_learning_report(
     return {"message": "学习报告邮件已发送"}
 
 
+@app.post("/study-plan/email", tags=["study-plan"])
+async def send_study_plan_email(
+    plan_id: int,
+    user_id: int,
+    db: AsyncSession = Depends(get_session),
+):
+    """将学习计划表发送到用户邮箱。"""
+    import asyncio as _asyncio
+    import sqlalchemy as sa
+    import backend.services.study_plan as sp
+
+    # 获取用户信息
+    user = (await db.execute(sa.select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if not user.email:
+        raise HTTPException(status_code=400, detail="未设置邮箱地址，请先在个人中心绑定邮箱")
+
+    # 获取学习计划
+    plan = await sp.get_study_plan(plan_id, user_id, db)
+    if not plan:
+        raise HTTPException(status_code=404, detail="学习计划不存在")
+
+    # 构建邮件数据：按日期分组 items
+    from collections import OrderedDict
+    items_by_date = OrderedDict()
+    for item in plan.items:
+        date_str = item.scheduled_date.isoformat() if item.scheduled_date else "未排期"
+        # 格式化日期为中文
+        d = item.scheduled_date
+        weekdays = ["一", "二", "三", "四", "五", "六", "日"]
+        label = f"{d.month}月{d.day}日 周{weekdays[d.weekday()]}"
+        if label not in items_by_date:
+            items_by_date[label] = []
+        resources_info = [
+            {"id": r.resource_id, "type": r.resource_type.value if hasattr(r.resource_type, 'value') else str(r.resource_type), "title": r.title}
+            for r in (item.resources or [])
+        ]
+        items_by_date[label].append({
+            "kp_name": item.kp_name,
+            "start_time": item.start_time,
+            "end_time": item.end_time,
+            "estimated_minutes": item.estimated_minutes or "-",
+            "order_index": item.order_index,
+            "is_completed": item.is_completed,
+            "notes": item.notes or "",
+            "resources": resources_info,
+            "missing_resource_types": [str(t) if not isinstance(t, str) else t for t in (item.missing_resource_types or [])],
+        })
+
+    plan_data = {
+        "title": plan.title,
+        "start_date": plan.start_date.isoformat() if plan.start_date else "",
+        "end_date": plan.end_date.isoformat() if plan.end_date else "",
+        "daily_time_minutes": plan.daily_time_minutes or "-",
+        "goal": plan.goal or "",
+        "items_by_date": items_by_date,
+    }
+
+    _asyncio.create_task(email_sender.send_study_plan(user.email, user.username, plan_data))
+    return {
+        "message": "学习计划表邮件已发送",
+        "email": user.email,
+        "plan_title": plan.title,
+    }
+
+
+@app.get("/study-plans", response_model=list[StudyPlanOut], tags=["study-plan"])
+async def list_study_plans(
+    user_id: int,
+    db: AsyncSession = Depends(get_session),
+):
+    """列出用户的所有学习计划（按创建时间倒序）。"""
+    import backend.services.study_plan as sp
+    return await sp.list_study_plans(user_id, db)
+
+
+@app.get("/study-plans/{plan_id}", response_model=StudyPlanOut, tags=["study-plan"])
+async def get_study_plan(
+    plan_id: int,
+    user_id: int,
+    db: AsyncSession = Depends(get_session),
+):
+    """获取单个学习计划详情。"""
+    import backend.services.study_plan as sp
+    plan = await sp.get_study_plan(plan_id, user_id, db)
+    if not plan:
+        raise HTTPException(status_code=404, detail="学习计划不存在")
+    return plan
+
+
+@app.post("/study-plans/generate", response_model=StudyPlanOut, tags=["study-plan"])
+async def generate_study_plan(
+    user_id: int,
+    body: StudyPlanGenerateRequest,
+    db: AsyncSession = Depends(get_session),
+):
+    """生成一份新的学习计划。"""
+    import backend.services.study_plan as sp
+    plan = await sp.generate_study_plan(user_id, body, db)
+    if not plan:
+        raise HTTPException(status_code=400, detail="没有可用的候选知识点，请先建立学习路径或完善学生画像")
+    return plan
+
+
+@app.put("/study-plans/{plan_id}", response_model=StudyPlanOut, tags=["study-plan"])
+async def update_study_plan(
+    plan_id: int,
+    user_id: int,
+    body: StudyPlanUpdate,
+    db: AsyncSession = Depends(get_session),
+):
+    """更新学习计划（标题/描述/状态）。"""
+    import backend.services.study_plan as sp
+    plan = await sp.update_study_plan(plan_id, user_id, body, db)
+    if not plan:
+        raise HTTPException(status_code=404, detail="学习计划不存在")
+    return plan
+
+
+@app.delete("/study-plans/{plan_id}", tags=["study-plan"])
+async def delete_study_plan(
+    plan_id: int,
+    user_id: int,
+    db: AsyncSession = Depends(get_session),
+):
+    """删除学习计划（级联删除所有计划项）。"""
+    import backend.services.study_plan as sp
+    ok = await sp.delete_study_plan(plan_id, user_id, db)
+    if not ok:
+        raise HTTPException(status_code=404, detail="学习计划不存在")
+    return {"ok": True}
+
+
+@app.put("/study-plans/{plan_id}/items/{item_id}", response_model=StudyPlanItemOut, tags=["study-plan"])
+async def update_study_plan_item(
+    plan_id: int,
+    item_id: int,
+    user_id: int,
+    body: StudyPlanItemUpdate,
+    db: AsyncSession = Depends(get_session),
+):
+    """更新单个计划项（日期/时段/完成状态/备注）。"""
+    import backend.services.study_plan as sp
+    item = await sp.update_study_plan_item(plan_id, item_id, user_id, body, db)
+    if not item:
+        raise HTTPException(status_code=404, detail="计划项不存在")
+    return item
+
+
+@app.post("/study-plans/{plan_id}/items/{item_id}/generate-resource", tags=["study-plan"])
+async def generate_study_plan_item_resources(
+    plan_id: int,
+    item_id: int,
+    user_id: int,
+    body: dict,
+    db: AsyncSession = Depends(get_session),
+):
+    """为计划项生成缺失资源（后台异步）。"""
+    import asyncio as _asyncio
+    import backend.services.study_plan as sp
+
+    item = await sp.get_study_plan_item(plan_id, item_id, user_id, db)
+    if not item:
+        raise HTTPException(status_code=404, detail="计划项不存在")
+
+    resource_types = body.get("resource_types") if body else None
+    types = resource_types or item.missing_resource_types
+    if not types:
+        raise HTTPException(status_code=400, detail="没有需要生成的资源类型")
+
+    _asyncio.create_task(sp.generate_resources_for_item(plan_id, item_id, user_id, types))
+    return {"message": f"已触发 {len(types)} 种资源生成", "resource_types": types}
+
+
 # ===========================================================
 # 学生画像
 # ===========================================================
@@ -510,6 +692,92 @@ async def get_profile_history(
 ):
     """获取画像历史版本。"""
     return await profile_svc.get_profile_history(user_id, db)
+
+
+@app.put("/user/account", response_model=UserOut, tags=["user"])
+async def update_account(
+    user_id: int,
+    body: UserUpdate,
+    db: AsyncSession = Depends(get_session),
+):
+    """更新用户名和邮箱。"""
+    from backend.db.crud import select_one, update_by_id
+
+    updates = {}
+    if body.username is not None:
+        existing = await select_one(db, User, filters={"username": body.username})
+        if existing and existing.id != user_id:
+            raise HTTPException(status_code=409, detail="用户名已被占用")
+        updates["username"] = body.username
+    if body.email is not None:
+        if body.email != "":
+            existing = await select_one(db, User, filters={"email": body.email})
+            if existing and existing.id != user_id:
+                raise HTTPException(status_code=409, detail="邮箱已被占用")
+        updates["email"] = body.email if body.email != "" else None
+        updates["email_verified"] = False
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="没有需要更新的字段")
+
+    ok = await update_by_id(db, User, user_id, data=updates)
+    if not ok:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    # 重新查询获取更新后的完整 User 对象以匹配 UserOut schema
+    updated_user = await select_one(db, User, filters={"id": user_id})
+    return updated_user
+
+
+@app.delete("/user/account", tags=["user"])
+async def delete_account(
+    user_id: int,
+    body: AccountDeleteIn,
+    db: AsyncSession = Depends(get_session),
+):
+    """
+    注销（硬删除）当前账号及其全部关联数据。
+
+    安全校验：要求请求体携带用户名 + 密码进行双重确认，且用户名必须与
+    user_id 对应账号一致，密码校验通过后方可执行。该操作不可逆。
+    """
+    from backend.db.crud import select_one, delete_user_cascade
+
+    user = await select_one(db, User, filters={"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    # 双重确认：用户名必须匹配，密码必须正确
+    if body.username != user.username:
+        raise HTTPException(status_code=400, detail="用户名不匹配，无法注销")
+    if not verify_password(body.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="密码错误，无法注销")
+
+    try:
+        ok = await delete_user_cascade(db, user_id)
+    except Exception as e:
+        await db.rollback()
+        logger.exception("[Account] 注销账号失败 user_id={}: {}", user_id, e)
+        raise HTTPException(status_code=500, detail="注销失败，请稍后重试")
+
+    if not ok:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    logger.success("[Account] 账号已注销 user_id={}, username={}", user_id, user.username)
+    return {"success": True, "message": "账号已注销"}
+
+
+@app.get("/user", response_model=UserOut, tags=["user"])
+async def get_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_session),
+):
+    """获取用户基本信息（用户名、邮箱等）。"""
+    from backend.db.crud import select_one
+
+    user = await select_one(db, User, filters={"id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return user
 
 
 # ===========================================================

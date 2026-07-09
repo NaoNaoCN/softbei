@@ -35,7 +35,8 @@ vector_db:
 llm:
   api_key: "${LLM_API_KEY}"
   base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-  model: "qwen3.6-plus-2026-04-02"
+  # model: "qwen3.6-flash-2026-04-16"
+  model: "qwen3.5-plus-2026-04-20"
   provider: "qwen"
   default_max_tokens: 2048       # 默认最大输出 token 数
   enable_thinking: false          # Qwen3 系列深度思考开关；true=启用（高质量但慢），false=关闭（低延迟）；非 Qwen3 模型请设为 null 跳过该参数
@@ -65,7 +66,8 @@ llm:
       default_model: "deepseek-chat"
     qwen:
       base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-      default_model: "qwen3.6-plus-2026-04-02"
+      # default_model: "qwen3.6-flash-2026-04-16"
+      default_model: "qwen3.5-plus-2026-04-20"
     openai:
       base_url: "https://api.openai.com/v1"
       default_model: "gpt-4o-mini"
@@ -380,9 +382,9 @@ email:
   smtp_username: "${SMTP_USERNAME}"
   smtp_password: "${SMTP_PASSWORD}"
   smtp_from: "${SMTP_FROM}"
-  smtp_use_tls: true
-  smtp_timeout: 30
-  max_retries: 3
-  verification_expire_minutes: 30
-  password_reset_expire_minutes: 15
-  rate_limit_send_per_hour: 5
+  smtp_use_tls: "${SMTP_USE_TLS-true}"
+  smtp_timeout: "${SMTP_TIMEOUT-30}"
+  max_retries: "${EMAIL_MAX_RETRIES-3}"
+  verification_expire_minutes: "${EMAIL_VERIFY_EXPIRE_MINUTES-30}"
+  password_reset_expire_minutes: "${EMAIL_PASSWORD_RESET_EXPIRE_MINUTES-15}"
+  rate_limit_send_per_hour: "${EMAIL_RATE_LIMIT_PER_HOUR-5}"

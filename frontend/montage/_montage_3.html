@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智学工坊 · 主页</title>
+<script src="https://unpkg.com/lucide@0.460.0"></script>
+<link rel="stylesheet" href="./assets/styles-v4.css">
+<style>
+    .hero { margin-bottom: 14px; }
+    hr.section-divider { margin: 10px 0 16px; border: none; border-top: 1px solid var(--divider); }
+    .hero-greeting { font-family: var(--display); font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+    .hero-greeting .accent { color: var(--accent); }
+    .hero-meta { display: flex; align-items: center; gap: 12px; margin-top: 6px; font-size: 13px; color: var(--text-3); }
+    .hero-quote { margin-top: 8px; font-size: 13px; color: var(--text-3); font-style: italic; padding-left: 12px; border-left: 2px solid rgba(199,123,60,0.20); }
+    .home-stats { display: flex; gap: 32px; padding: 8px 0 12px; }
+    .home-stat-num { font-family: var(--display); font-size: 26px; font-weight: 800; color: var(--accent); line-height: 1.2; }
+    .home-stat-lbl { font-size: 12px; color: var(--text-3); }
+    .home-grid { display: grid; grid-template-columns: 1fr 1.5fr; gap: 26px; margin: 14px 0 18px; }
+    .hm-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; max-width: 320px; }
+    .hm-title { font-family: var(--display); font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+    .hm-title i { color: var(--accent); }
+    .hm-nav { display: flex; align-items: center; gap: 4px; }
+    .hm-nav-btn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 4px; border: none; background: transparent; color: var(--text-3); cursor: pointer; }
+    .hm-nav-btn:disabled { opacity: 0.3; cursor: default; }
+    .hm-month { font-size: 13px; color: var(--text-2); font-weight: 500; min-width: 80px; text-align: center; }
+    .hm-legend { display: flex; align-items: center; gap: 4px; margin-bottom: 8px; font-size: 10px; color: var(--text-4); max-width: 320px; }
+    .hm-legend-swatch { width: 10px; height: 10px; border-radius: 2px; }
+    .hm-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; max-width: 320px; }
+    .hm-cell { aspect-ratio: 1; border-radius: 2px; background: rgba(120,90,60,0.06); transition: transform 0.15s; }
+    .hm-cell[data-level="1"] { background: #E8CDA0; }
+    .hm-cell[data-level="2"] { background: #D4A56A; }
+    .hm-cell[data-level="3"] { background: #C77B3C; }
+    .hm-cell[data-level="4"] { background: #A8652E; }
+    .hm-cell.today { box-shadow: 0 0 0 2px var(--accent); z-index: 1; }
+    .hm-cell.out-of-month { opacity: 0.2; }
+    .hm-day-label { text-align: center; font-size: 9px; color: var(--text-4); padding: 1px 0; }
+    .home-panels { display: flex; flex-direction: column; gap: 20px; }
+    .bar-row { display: flex; align-items: flex-end; gap: 3px; height: 64px; }
+    .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .bar-fill { width: 100%; max-width: 14px; border-radius: 2px 2px 0 0; background: var(--accent); min-height: 2px; }
+    .bar-label { font-size: 9px; color: var(--text-4); white-space: nowrap; }
+    .ring-row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .ring-item { flex: 1; min-width: 50px; text-align: center; }
+    .ring-svg { width: 44px; height: 44px; }
+    .ring-bg { fill: none; stroke: rgba(120,90,60,0.10); stroke-width: 4; }
+    .ring-fg { fill: none; stroke-width: 4; stroke-linecap: round; }
+    .ring-name { font-size: 10px; color: var(--text-3); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ring-val { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--text-1); }
+    .alert-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 12.5px; }
+    .alert-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .alert-dot.urgent { background: var(--danger); } .alert-dot.warning { background: var(--warning); } .alert-dot.safe { background: var(--success); }
+    .alert-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+    .alert-action { font-size: 11px; color: var(--accent); white-space: nowrap; font-weight: 500; }
+    .tl-item { display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 12.5px; }
+    .tl-item + .tl-item { border-top: 1px solid var(--divider); }
+    .tl-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--accent); }
+    .tl-text { flex: 1; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tl-time { font-size: 11px; color: var(--text-4); white-space: nowrap; }
+    .goal-bar-row { display: flex; align-items: center; gap: 14px; margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--divider); }
+    .goal-label { font-size: 13px; font-weight: 600; color: var(--text-2); white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+    .goal-bar { flex: 1; height: 5px; background: var(--divider); border-radius: 3px; overflow: hidden; }
+    .goal-fill { height: 100%; border-radius: 3px; background: var(--accent); }
+    .goal-val { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+    .stage-badge { position: fixed; right: 16px; bottom: 14px; background: var(--success); color: #fff; font-family: var(--display); font-weight: 700; font-size: 13px; padding: 6px 14px; border-radius: 999px; box-shadow: var(--shadow-md); z-index: 99; letter-spacing: .04em; }
+    @media (max-width: 860px) { .home-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+    <header class="topbar">
+        <a href="index.html" class="topbar-brand"><span class="topbar-brand-mark"><i data-lucide="atom"></i></span><span>智学工坊</span></a>
+        <nav class="topbar-nav">
+            <a href="#" class="topbar-link active"><i data-lucide="layout-dashboard"></i><span>主页</span></a>
+            <a href="#" class="topbar-link"><i data-lucide="sparkles"></i><span>AI 对话</span></a>
+            <a href="#" class="topbar-link"><i data-lucide="wand-2"></i><span>资源生成</span></a>
+            <a href="#" class="topbar-link"><i data-lucide="library"></i><span>资源库</span></a>
+            <a href="#" class="topbar-link"><i data-lucide="route"></i><span>学习规划</span></a>
+            <a href="#" class="topbar-link"><i data-lucide="clipboard-check"></i><span>学习评估</span></a>
+            <a href="#" class="topbar-link"><i data-lucide="scroll-text"></i><span>历史记录</span></a>
+            <a href="#" class="topbar-link"><i data-lucide="circle-user"></i><span>个人中心</span></a>
+        </nav>
+    </header>
+
+    <div class="app-layout"><main class="app-content"><div class="app-body">
+        <div class="hero fade-up d1">
+            <div class="hero-greeting">下午好，<span class="accent">naonao</span></div>
+            <div class="hero-meta"><span>6月26日 周五</span><span>· 11 Agent 已就绪</span></div>
+            <div class="hero-quote">博学之，审问之，慎思之，明辨之，笃行之</div>
+        </div>
+        <hr class="section-divider">
+        <div class="home-stats fade-up d2">
+            <div><div class="home-stat-num">20</div><div class="home-stat-lbl">连续学习（天）</div></div>
+            <div><div class="home-stat-num">5</div><div class="home-stat-lbl">已掌握知识点</div></div>
+            <div><div class="home-stat-num">912</div><div class="home-stat-lbl">总学习（分钟）</div></div>
+        </div>
+        <div class="home-grid">
+            <div class="home-heatmap fade-up d3">
+                <div class="hm-head">
+                    <span class="hm-title"><i data-lucide="calendar-days" style="width:15px;height:15px;"></i> 学习热力</span>
+                    <span class="hm-nav"><button class="hm-nav-btn" disabled><i data-lucide="chevron-left" style="width:13px;height:13px;"></i></button><span class="hm-month">2026年6月</span><button class="hm-nav-btn" disabled><i data-lucide="chevron-right" style="width:13px;height:13px;"></i></button></span>
+                </div>
+                <div class="hm-legend"><span>少</span><span class="hm-legend-swatch" style="background:rgba(120,90,60,0.06);"></span><span class="hm-legend-swatch" style="background:#E8CDA0;"></span><span class="hm-legend-swatch" style="background:#D4A56A;"></span><span class="hm-legend-swatch" style="background:#C77B3C;"></span><span class="hm-legend-swatch" style="background:#A8652E;"></span><span>多</span></div>
+                <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;max-width:320px;"><div class="hm-day-label">一</div><div class="hm-day-label">二</div><div class="hm-day-label">三</div><div class="hm-day-label">四</div><div class="hm-day-label">五</div><div class="hm-day-label">六</div><div class="hm-day-label">日</div></div>
+                <div class="hm-grid" id="heatmap-cells"></div>
+            </div>
+            <div class="home-panels fade-up d3">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+                    <div><div class="section-title" style="margin-bottom:8px;"><i data-lucide="bar-chart-3" style="width:14px;height:14px;display:inline;vertical-align:-2px;margin-right:4px;"></i>学习活跃度</div><div class="bar-row" id="trend-bars"></div></div>
+                    <div><div class="section-title" style="margin-bottom:8px;"><i data-lucide="target" style="width:14px;height:14px;display:inline;vertical-align:-2px;margin-right:4px;"></i>知识掌握度</div><div class="ring-row" id="progress-rings"></div></div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+                    <div><div class="section-title" style="margin-bottom:8px;"><i data-lucide="bell" style="width:14px;height:14px;display:inline;vertical-align:-2px;margin-right:4px;"></i>遗忘预警</div><div id="forgetting-list"></div></div>
+                    <div><div class="section-title" style="margin-bottom:8px;"><i data-lucide="history" style="width:14px;height:14px;display:inline;vertical-align:-2px;margin-right:4px;"></i>最近动态</div><div id="recent-list"></div></div>
+                </div>
+            </div>
+        </div>
+        <div class="goal-bar-row fade-up d4">
+            <span class="goal-label"><i data-lucide="flag" style="width:14px;height:14px;"></i> 学习目标</span>
+            <div class="goal-bar"><div class="goal-fill" style="width:100%;"></div></div>
+            <span class="goal-val">5 / 5 知识点 ✓</span>
+        </div>
+    </div></main></div>
+    <div class="stage-badge">第 5 周 · 达成 ✓</div>
+
+<script>
+/* ===== 本页为演示快照（naonao），数据为该成长阶段的静态样例 ===== */
+const STAGE = {
+    year: 2026, month: 6, today: 26,
+    days: [30,40,25,38,52,32,45, 42,55,35,48,62,40,50, 48,60,38,52,68,45,55, 50,65,42,58,72],
+    rings: [['卷积基础',98],['池化层',95],['激活函数',92],['经典网络',90],['注意力机制',86]],
+    bars: [42,55,35,48,62,40,50, 48,60,38,52,68,45,55],
+    forgetting: [],
+    timeline: [['「注意力机制」测验 10/10','30分钟前'],['完成 Transformer 学习文档','2小时前'],['知识图谱全部点亮','今天'],['连续学习达成 20 天','今天'],['学习目标 5/5 完成','今天']],
+};
+renderAll(STAGE);
+
+function renderAll(S){
+    renderHeatmap(S); renderBars(S.bars); renderRings(S.rings); renderForget(S.forgetting); renderTimeline(S.timeline);
+    if (window.lucide) lucide.createIcons();
+}
+function renderHeatmap(S){
+    const grid = document.getElementById('heatmap-cells');
+    const valMap = {};
+    S.days.forEach((m,i)=>{ if(m>0){ const d=String(i+1).padStart(2,'0'); valMap[`${S.year}-${String(S.month).padStart(2,'0')}-${d}`]=m; }});
+    const year=S.year, month=S.month-1;
+    const todayStr=`${S.year}-${String(S.month).padStart(2,'0')}-${String(S.today).padStart(2,'0')}`;
+    const firstDay=new Date(year,month,1); let start=new Date(firstDay);
+    const dow=start.getDay(); start.setDate(start.getDate()+(dow===0?-6:1-dow));
+    let html='';
+    for(let w=0;w<5;w++) for(let d=0;d<7;d++){
+        const date=new Date(start); date.setDate(date.getDate()+w*7+d);
+        const ds=`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+        const inMonth=date.getMonth()===month; const val=valMap[ds]||0;
+        let level=0; if(val>0&&inMonth){ if(val>=60)level=4; else if(val>=30)level=3; else if(val>=15)level=2; else level=1; }
+        const cls=['hm-cell']; if(ds===todayStr)cls.push('today'); if(!inMonth)cls.push('out-of-month');
+        html+= level>0&&inMonth ? `<div class="${cls.join(' ')}" data-level="${level}" title="${ds}: ${val}分钟"></div>` : `<div class="${cls.join(' ')}" title="${ds}"></div>`;
+    }
+    grid.innerHTML=html;
+}
+function renderBars(bars){
+    const c=document.getElementById('trend-bars'); const max=Math.max(...bars,1);
+    c.innerHTML=bars.map((m,i)=>{ const h=Math.max(2,Math.round(m/max*52)); return `<div class="bar-col"><div class="bar-fill" style="height:${h}px;"></div><div class="bar-label">06-${String(i+13).padStart(2,'0')}</div></div>`; }).join('');
+}
+function renderRings(rings){
+    const c=document.getElementById('progress-rings'); const colors=['#C77B3C','#D4954A','#6E9466','#C98A2E','#7A9367']; const circ=2*Math.PI*16;
+    c.innerHTML=rings.map((m,i)=>{ const off=circ*(1-m[1]/100); return `<div class="ring-item"><svg class="ring-svg" viewBox="0 0 40 40"><circle class="ring-bg" cx="20" cy="20" r="16"/><circle class="ring-fg" cx="20" cy="20" r="16" stroke="${colors[i%5]}" stroke-dasharray="${circ}" stroke-dashoffset="${off}" transform="rotate(-90 20 20)"/></svg><div class="ring-val">${m[1]}</div><div class="ring-name">${m[0]}</div></div>`; }).join('');
+}
+function renderForget(items){
+    const c=document.getElementById('forgetting-list');
+    if(!items.length){ c.innerHTML='<div class="empty-state" style="padding:14px 0;">全部在记忆窗口内 ✓</div>'; return; }
+    c.innerHTML=items.map(i=>`<div class="alert-item"><span class="alert-dot ${i[1]}"></span><span class="alert-name">${i[0]}</span><span class="alert-action">${i[2]}</span></div>`).join('');
+}
+function renderTimeline(items){
+    const c=document.getElementById('recent-list');
+    c.innerHTML=items.map(a=>`<div class="tl-item"><div class="tl-dot"></div><span class="tl-text">${a[0]}</span><span class="tl-time">${a[1]}</span></div>`).join('');
+}
+</script>
+</body>
+</html>

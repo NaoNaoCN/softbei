@@ -476,11 +476,14 @@ class Config(BaseModel):
 # ===========================================================
 
 def _resolve_env_vars(value: Any) -> Any:
-    """递归解析 ${ENV_VAR} 格式的环境变量引用"""
+    """递归解析 ${ENV_VAR} 和 ${ENV_VAR-default} 格式的环境变量引用"""
     if isinstance(value, str):
         if value.startswith("${") and value.endswith("}"):
-            env_var = value[2:-1]
-            return os.getenv(env_var, "")
+            inner = value[2:-1]
+            if "-" in inner:
+                env_var, default = inner.split("-", 1)
+                return os.getenv(env_var, default)
+            return os.getenv(inner, "")
         return value
     elif isinstance(value, dict):
         return {k: _resolve_env_vars(v) for k, v in value.items()}

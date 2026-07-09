@@ -296,3 +296,170 @@ async def delete_by_id(
     """
     rows = await delete(session, model, filters={"id": id}, commit=commit)
     return rows > 0
+
+
+async def delete_user_cascade(session: AsyncSession, user_id: int) -> bool:
+    """
+    硬删除用户账号及其全部关联数据（注销账号）。
+
+    背景：除 chat_message→chat_session 外，挂在 user.id 上的外键均未配置
+    ON DELETE CASCADE，故直接删 user 会触发外键约束错误。本函数在单个事务内
+    按「先子表后父表」的依赖顺序逐表清理，任一步失败整体回滚，不留半删脏数据。
+
+    依赖顺序（自底向上）：
+        profile_history → student_profile
+        quiz_attempt / generation_task / learning_record → quiz_item → resource_meta
+        generation_batch
+        learning_path_item → learning_path
+        study_plan_item → study_plan
+        chat_session（chat_message 由 CASCADE 自动删）
+        kg_edge → kg_node
+        kg_build_task / email_verification
+        document_chunk（user_id 为 String 类型，无外键）
+        user
+
+    Args:
+        session: 数据库会话
+        user_id: 要注销的用户 ID
+
+    Returns:
+        是否删除了 user 记录（False 表示用户不存在）
+    """
+    from sqlalchemy import text
+
+    # 延迟导入，避免与 models 形成循环依赖
+    from backend.db.models import (
+        ChatSession,
+        EmailVerification,
+        GenerationBatch,
+        GenerationTask,
+        KGBuildTask,
+        KGEdge,
+        KGNode,
+        LearningPath,
+        LearningPathItem,
+        LearningRecord,
+        ProfileHistory,
+        QuizAttempt,
+        QuizItem,
+        ResourceMeta,
+        StudentProfile,
+        StudyPlan,
+        StudyPlanItem,
+        User,
+    )
+
+    uid_str = str(user_id)
+
+    # ---- student_profile 子树 ----
+    profile_ids = (
+        await session.execute(
+            sa_select(StudentProfile.id).where(StudentProfile.user_id == user_id)
+        )
+    ).scalars().all()
+    if profile_ids:
+        await session.execute(
+            sa_delete(ProfileHistory).where(ProfileHistory.profile_id.in_(profile_ids))
+        )
+    await session.execute(sa_delete(StudentProfile).where(StudentProfile.user_id == user_id))
+
+    # ---- resource_meta 子树（quiz_item / generation_task / learning_record 引用其 id）----
+    resource_ids = (
+        await session.execute(
+            sa_select(ResourceMeta.id).where(ResourceMeta.user_id == user_id)
+        )
+    ).scalars().all()
+
+    # learning_record 既挂 user_id 又挂 resource_id，先按 user_id 全删
+    await session.execute(sa_delete(LearningRecord).where(LearningRecord.user_id == user_id))
+
+    if resource_ids:
+        quiz_item_ids = (
+            await session.execute(
+                sa_select(QuizItem.id).where(QuizItem.resource_id.in_(resource_ids))
+            )
+        ).scalars().all()
+        if quiz_item_ids:
+            await session.execute(
+                sa_delete(QuizAttempt).where(QuizAttempt.quiz_item_id.in_(quiz_item_ids))
+            )
+        # 兜底：清理任何仍以该用户为 user_id 的答题记录
+        await session.execute(sa_delete(QuizAttempt).where(QuizAttempt.user_id == user_id))
+        await session.execute(
+            sa_delete(GenerationTask).where(GenerationTask.resource_id.in_(resource_ids))
+        )
+        await session.execute(
+            sa_delete(QuizItem).where(QuizItem.resource_id.in_(resource_ids))
+        )
+    else:
+        await session.execute(sa_delete(QuizAttempt).where(QuizAttempt.user_id == user_id))
+
+    # generation_batch（其下 generation_task 已随 resource 删除，再兜底清 batch_id 引用）
+    batch_ids = (
+        await session.execute(
+            sa_select(GenerationBatch.id).where(GenerationBatch.user_id == user_id)
+        )
+    ).scalars().all()
+    if batch_ids:
+        await session.execute(
+            sa_delete(GenerationTask).where(GenerationTask.batch_id.in_(batch_ids))
+        )
+    await session.execute(sa_delete(GenerationBatch).where(GenerationBatch.user_id == user_id))
+
+    await session.execute(sa_delete(ResourceMeta).where(ResourceMeta.user_id == user_id))
+
+    # ---- learning_path 子树 ----
+    path_ids = (
+        await session.execute(
+            sa_select(LearningPath.id).where(LearningPath.user_id == user_id)
+        )
+    ).scalars().all()
+    if path_ids:
+        await session.execute(
+            sa_delete(LearningPathItem).where(LearningPathItem.path_id.in_(path_ids))
+        )
+    await session.execute(sa_delete(LearningPath).where(LearningPath.user_id == user_id))
+
+    # ---- study_plan 子树 ----
+    plan_ids = (
+        await session.execute(
+            sa_select(StudyPlan.id).where(StudyPlan.user_id == user_id)
+        )
+    ).scalars().all()
+    if plan_ids:
+        await session.execute(
+            sa_delete(StudyPlanItem).where(StudyPlanItem.plan_id.in_(plan_ids))
+        )
+    await session.execute(sa_delete(StudyPlan).where(StudyPlan.user_id == user_id))
+
+    # ---- chat_session（chat_message 经 ON DELETE CASCADE 自动删除）----
+    await session.execute(sa_delete(ChatSession).where(ChatSession.user_id == user_id))
+
+    # ---- kg_node 子树（kg_edge 的 source_id/target_id 引用 kg_node）----
+    kg_node_ids = (
+        await session.execute(
+            sa_select(KGNode.id).where(KGNode.user_id == user_id)
+        )
+    ).scalars().all()
+    if kg_node_ids:
+        await session.execute(
+            sa_delete(KGEdge).where(
+                KGEdge.source_id.in_(kg_node_ids) | KGEdge.target_id.in_(kg_node_ids)
+            )
+        )
+    await session.execute(sa_delete(KGNode).where(KGNode.user_id == user_id))
+
+    # ---- 其余直接挂 user_id 的表 ----
+    await session.execute(sa_delete(KGBuildTask).where(KGBuildTask.user_id == user_id))
+    await session.execute(sa_delete(EmailVerification).where(EmailVerification.user_id == user_id))
+
+    # document_chunk.user_id 是 String 类型且无外键，用字符串匹配
+    await session.execute(
+        text("DELETE FROM document_chunk WHERE user_id = :uid"), {"uid": uid_str}
+    )
+
+    # ---- 最后删除 user 本身 ----
+    result = await session.execute(sa_delete(User).where(User.id == user_id))
+
+    await session.commit()
+    return result.rowcount > 0

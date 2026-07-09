@@ -288,6 +288,74 @@ async def update_study_plan_item(
     return await _item_to_out(updated, user_id, db)
 
 
+async def get_study_plan_item(
+    plan_id: int,
+    item_id: int,
+    user_id: int,
+    db: AsyncSession,
+) -> Optional[StudyPlanItemOut]:
+    """获取单个计划项（校验归属）。"""
+    item = await select_one(db, StudyPlanItem, filters={"id": item_id, "plan_id": plan_id})
+    if not item:
+        return None
+    plan = await select_one(db, StudyPlan, filters={"id": plan_id, "user_id": user_id})
+    if not plan:
+        return None
+    return await _item_to_out(item, user_id, db)
+
+
+async def generate_resources_for_item(
+    plan_id: int,
+    item_id: int,
+    user_id: int,
+    resource_types: list[str],
+):
+    """后台任务：为计划项生成缺失资源。"""
+    from backend.db.database import _session_factory
+    from backend.services.generation import run_batch_generation
+    from backend.services import resource as resource_svc
+    from backend.models.schemas import BatchGenerateRequest, ResourceType
+
+    kp_id = None
+    async with _session_factory() as db:
+        item = await select_one(db, StudyPlanItem, filters={"id": item_id})
+        if not item:
+            logger.warning("[StudyPlan] generate_resources: item={} 不存在", item_id)
+            return
+        kp_id = item.kp_id
+
+    if not kp_id:
+        logger.warning("[StudyPlan] generate_resources: item={} 无 kp_id", item_id)
+        return
+
+    try:
+        types_enum = [ResourceType(t) for t in resource_types]
+        async with _session_factory() as db:
+            batch_out = await resource_svc.create_batch(user_id, BatchGenerateRequest(
+                kp_id=kp_id,
+                resource_types=types_enum,
+                num_questions=5,
+            ), db)
+
+            task_configs = []
+            for task_item in batch_out.tasks:
+                task_configs.append({
+                    "task_id": task_item.task_id,
+                    "request": {
+                        "kp_id": kp_id,
+                        "resource_type": task_item.resource_type.value,
+                        "num_questions": 5,
+                    },
+                })
+
+            await db.commit()
+
+        await run_batch_generation(batch_out.batch_id, user_id, 0, task_configs)
+        logger.success("[StudyPlan] item={} types={} 资源生成完成", item_id, resource_types)
+    except Exception as e:
+        logger.exception("[StudyPlan] item={} 资源生成失败: {}", item_id, e)
+
+
 # ----------------------------------------------------------
 # 序列化辅助
 # ----------------------------------------------------------

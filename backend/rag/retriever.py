@@ -30,6 +30,19 @@ class RetrievedChunk:
     metadata: dict = field(default_factory=dict)  # 扩展元数据（JSONB，如 language、chunk_type 等）
 
 
+@dataclass
+class CitationSource:
+    """format_context 实际展示的单条参考资料的来源信息。
+
+    index 与 context 字符串中的 [n] 编号严格对应（经多样化排序 + token 截断后定稿），
+    供生成 Agent 在文末程序化追加「参考资料」清单，保证正文编号与清单一一对齐。
+    """
+    index: int                    # 引用编号 n（从 1 开始）
+    source: str                   # 原始文件名/路径
+    page: Optional[int] = None
+    section: Optional[str] = None
+
+
 # ----------------------------------------------------------
 # 公开接口
 # ----------------------------------------------------------
@@ -421,12 +434,28 @@ def format_context(chunks: list[RetrievedChunk], max_tokens: int | None = None) 
     [2] （来源：notes.md, 第一章）
     反向传播算法...
     """
+    context, _ = format_context_with_sources(chunks, max_tokens)
+    return context
+
+
+def format_context_with_sources(
+    chunks: list[RetrievedChunk], max_tokens: int | None = None
+) -> tuple[str, list[CitationSource]]:
+    """
+    与 format_context 相同的格式化逻辑，但额外返回实际展示的来源清单。
+
+    返回的 CitationSource.index 与 context 字符串中的 [n] 编号严格对应
+    （经多样化排序 + token 截断后定稿）。供生成 Agent 在文末程序化追加
+    「参考资料」清单，保证正文 [n] 标记与清单条目一一对齐、不出现悬空编号。
+
+    :return: (context 字符串, CitationSource 列表)
+    """
     from backend.config import config as _cfg
     _max_tokens = max_tokens if max_tokens is not None else _cfg.rag.context_max_tokens
 
     if not chunks:
         logger.warning("[RAG] format_context 收到空 chunks，LLM 将在无参考资料的情况下生成内容。")
-        return "（暂无参考资料）"
+        return "（暂无参考资料）", []
 
     # ---- 多样感知排序 ----
     # 按分数排序后，重新排列：优先保留不同 section 的 chunk
@@ -434,6 +463,7 @@ def format_context(chunks: list[RetrievedChunk], max_tokens: int | None = None) 
     diverse_chunks = _diversify_order(chunks)
 
     parts: list[str] = []
+    sources: list[CitationSource] = []
     estimated_tokens = 0
     shown_count = 0
     for i, chunk in enumerate(diverse_chunks):
@@ -464,6 +494,12 @@ def format_context(chunks: list[RetrievedChunk], max_tokens: int | None = None) 
         if estimated_tokens + entry_tokens > _max_tokens:
             break
         parts.append(entry)
+        sources.append(CitationSource(
+            index=shown_count + 1,
+            source=chunk.source,
+            page=chunk.page,
+            section=chunk.section,
+        ))
         estimated_tokens += entry_tokens
         shown_count += 1
 
@@ -482,7 +518,7 @@ def format_context(chunks: list[RetrievedChunk], max_tokens: int | None = None) 
             f"estimated_tokens={estimated_tokens}/{_max_tokens}"
         )
 
-    return result
+    return result, sources
 
 
 def _diversify_order(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 新用户引导组件
  * - 首次登录时弹出欢迎屏 + 11步高亮引导
  * - 使用 localStorage 按用户 ID 记录引导完成状态
@@ -28,72 +28,72 @@
     marker.style.display = 'none';
     document.body.appendChild(marker);
 
-    // 引导步骤配置
+    // 引导步骤配置（适配 topbar 导航结构）
     const steps = [
         {
-            selector: '.sidebar',
-            title: '🧭 导航栏',
-            desc: '这是侧边栏导航，你可以快速切换到各个功能模块。接下来我们一个个介绍。',
+            selector: '.topbar-nav',
+            title: '导航栏',
+            desc: '这是顶部导航栏，你可以快速切换到各个功能模块。接下来我们一个个介绍。',
+            position: 'bottom'
+        },
+        {
+            selector: '.home-stats',
+            title: '学习数据概览',
+            desc: '这里实时展示你的学习统计：连续学习天数、已掌握知识点、总学习时长。随着你的学习，数据会自动更新。',
+            position: 'bottom'
+        },
+        {
+            selector: '.home-heatmap',
+            title: '学习热力图',
+            desc: '这里以热力图的形式展示你每天的学习情况，颜色越深表示学习时间越长，让你直观感受学习节奏。',
             position: 'right'
         },
         {
-            selector: '.stats-grid',
-            title: '📊 学习数据概览',
-            desc: '这里实时展示你的学习统计：已生成的文档、思维导图、测验数量和学习路径数。随着你的学习，数据会自动更新。',
-            position: 'bottom'
-        },
-        {
-            selector: '.card.animate-fade-in-up.delay-5',
-            title: '🕔 最近学习动态',
-            desc: '这里以时间线的形式展示你最近的学习记录：看了哪些文档、做了哪些测验，让你随时回顾学习轨迹。',
-            position: 'bottom'
-        },
-        {
-            selector: '.card.animate-fade-in-up.delay-6',
-            title: '👤 我的学习画像',
-            desc: '这里展示你的学习画像摘要，包括专业、每日学习时长、已掌握与待提升的知识点。系统会根据画像为你智能推荐学习内容。',
+            selector: '.home-panels',
+            title: '学情分析面板',
+            desc: '这里展示学习活跃度趋势、知识掌握度、遗忘预警和最近动态，帮助你全方位了解学习状况。',
             position: 'left'
         },
         {
-            selector: '.nav-item[href="chat.html"]',
-            title: '💬 智能对话',
+            selector: '.topbar-link[data-key="chat"]',
+            title: '智能对话',
             desc: 'AI 学习伴侣！你可以随时向 AI 提问、讨论知识点、让它帮你解答疑惑或整理笔记。',
-            position: 'right'
+            position: 'bottom'
         },
         {
-            selector: '.nav-item[href="generate.html"]',
-            title: '✨ 资源生成',
+            selector: '.topbar-link[data-key="generate"]',
+            title: '资源生成',
             desc: '核心功能！选择知识点后，系统会为你自动生成学习文档、思维导图、测验题、代码示例等个性化资源。',
-            position: 'right'
+            position: 'bottom'
         },
         {
-            selector: '.nav-item[href="library.html"]',
-            title: '📚 资源库',
+            selector: '.topbar-link[data-key="library"]',
+            title: '资源库',
             desc: '所有生成的学习资源都保存在这里，支持分类浏览、搜索、预览和重新学习。',
-            position: 'right'
+            position: 'bottom'
         },
         {
-            selector: '.nav-item[href="pathway.html"]',
-            title: '🗺️ 学习路径',
+            selector: '.topbar-link[data-key="pathway"]',
+            title: '知识图谱',
             desc: '根据你的知识图谱，系统会规划个性化学习路径，帮你按顺序、有节奏地掌握知识。',
-            position: 'right'
+            position: 'bottom'
         },
         {
-            selector: '.nav-item[href="evaluate.html"]',
-            title: '📋 学习评估',
+            selector: '.topbar-link[data-key="evaluate"]',
+            title: '学习评估',
             desc: '定期评估你的学习效果！系统会分析薄弱知识点，并推荐针对性的复习计划。',
-            position: 'right'
+            position: 'bottom'
         },
         {
-            selector: '.nav-item[href="profile.html"]',
-            title: '📏 个人中心',
+            selector: '.topbar-link[data-key="profile"]',
+            title: '个人中心',
             desc: '在这里完善你的学习画像（专业、每日学习时间、认知风格等），系统会据此为你<strong>个性化推荐</strong>学习内容。',
-            position: 'right'
+            position: 'bottom'
         },
         {
             selector: null, // 居中展示
-            title: '🎉 开始学习之旅！',
-            desc: '引导完成！推荐你的下一步：<br><br>① 前往<strong>个人中心</strong>完善学习画像<br>② 到<strong>资源生成</strong>选择知识点开始学习<br>③ 学习后可到<strong>学习评估</strong>检测效果<br><br>祝你学习愉快！🚀',
+            title: '开始学习之旅！',
+            desc: '引导完成！推荐你的下一步：<br><br>① 前往<strong>个人中心</strong>完善学习画像<br>② 到<strong>资源生成</strong>选择知识点开始学习<br>③ 学习后可到<strong>学习评估</strong>检测效果<br><br>祝你学习愉快！',
             position: 'center'
         }
     ];
@@ -123,10 +123,10 @@
             border-radius: 20px;
             padding: 28px;
             width: 360px;
-            box-shadow: 0 16px 60px rgba(124, 92, 252, 0.18), 0 4px 12px rgba(0,0,0,0.06);
+            box-shadow: 0 16px 60px rgba(199, 123, 60, 0.18), 0 4px 12px rgba(0,0,0,0.06);
             z-index: 2;
             transition: all 0.35s cubic-bezier(0.4,0,0.2,1);
-            border: 1px solid rgba(79, 110, 247, 0.08);
+            border: 1px solid rgba(199, 123, 60, 0.08);
         }
         .guide-tooltip-title {
             font-size: 18px; font-weight: 700; color: #1E1E2E; margin-bottom: 10px;
@@ -135,7 +135,7 @@
             font-size: 14px; color: #4B5563; line-height: 1.7; margin-bottom: 20px;
         }
         .guide-tooltip-desc strong {
-            color: #4F6EF7;
+            color: #C77B3C;
         }
         .guide-tooltip-actions {
             display: flex; gap: 10px; justify-content: flex-end; align-items: center;
@@ -145,12 +145,12 @@
             font-weight: 600; cursor: pointer; border: none; transition: all 0.2s;
         }
         .guide-btn-primary {
-            background: linear-gradient(135deg, #4F6EF7 0%, #7C5CFC 100%);
+            background: linear-gradient(135deg, #C77B3C 0%, #A8652E 100%);
             color: #fff;
-            box-shadow: 0 4px 14px rgba(79, 110, 247, 0.3);
+            box-shadow: 0 4px 14px rgba(199, 123, 60, 0.3);
         }
         .guide-btn-primary:hover {
-            box-shadow: 0 6px 20px rgba(124, 92, 252, 0.4);
+            box-shadow: 0 6px 20px rgba(168, 101, 46, 0.4);
             transform: translateY(-1px);
         }
         .guide-btn-skip { background: transparent; color: #9CA3AF; }
@@ -162,7 +162,7 @@
             width: 8px; height: 8px; border-radius: 50%; background: #E5E7EB;
             transition: all 0.25s;
         }
-        .guide-dot.active { background: linear-gradient(135deg, #4F6EF7, #7C5CFC); transform: scale(1.2); }
+        .guide-dot.active { background: linear-gradient(135deg, #C77B3C, #A8652E); transform: scale(1.2); }
         /* 欢迎屏 */
         .guide-welcome {
             position: fixed; inset: 0; z-index: 100000;
@@ -173,17 +173,17 @@
         .guide-welcome-card {
             background: #fff; border-radius: 24px; padding: 44px 40px;
             text-align: center; max-width: 420px; width: 90%;
-            box-shadow: 0 16px 60px rgba(124, 92, 252, 0.2), 0 4px 12px rgba(0,0,0,0.06);
+            box-shadow: 0 16px 60px rgba(199, 123, 60, 0.2), 0 4px 12px rgba(0,0,0,0.06);
             animation: guidePopIn 0.4s cubic-bezier(0.34,1.56,0.64,1);
         }
         @keyframes guidePopIn {
             from { transform: scale(0.9); opacity: 0; }
             to { transform: scale(1); opacity: 1; }
         }
-        .guide-welcome-icon { font-size: 56px; margin-bottom: 16px; }
+        .guide-welcome-icon { display:flex;align-items:center;justify-content:center;margin-bottom: 16px; }
         .guide-welcome-title {
             font-size: 22px; font-weight: 700; color: #1E1E2E; margin-bottom: 10px;
-            background: linear-gradient(135deg, #4F6EF7, #7C5CFC);
+            background: linear-gradient(135deg, #C77B3C, #A8652E);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -201,7 +201,7 @@
         welcome.id = 'guideWelcome';
         welcome.innerHTML = `
             <div class="guide-welcome-card">
-                <div class="guide-welcome-icon">👋</div>
+                <div class="guide-welcome-icon"><i data-lucide="sparkles" style="width:48px;height:48px;color:#C77B3C;"></i></div>
                 <div class="guide-welcome-title">欢迎使用智能学习助手！</div>
                 <div class="guide-welcome-desc">这是你的专属学习平台，让我花 30 秒带你快速了解各个功能吧～</div>
                 <div style="display:flex;gap:12px;justify-content:center;">
@@ -211,6 +211,9 @@
             </div>
         `;
         document.body.appendChild(welcome);
+
+        // 渲染 Lucide 图标
+        if (typeof lucide !== 'undefined') lucide.createIcons();
 
         document.getElementById('guideStartBtn').onclick = () => {
             welcome.remove();
